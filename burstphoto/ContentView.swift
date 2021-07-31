@@ -95,7 +95,7 @@ struct ProcessingView: View {
         
         ProgressView(progress.int < image_urls.count ? "Processing \(image_urls[progress.int].lastPathComponent)..." : "Merging images...",
                             value: Double(progress.int),
-                            total: Double(image_urls.count + merge_as_num_of_images))
+                            total: Double(image_urls.count - 1 + merge_as_num_of_images))
             .font(.system(size: 16, weight: .medium))
             .opacity(0.8)
             .padding(20)
@@ -169,8 +169,8 @@ struct MyDropDelegate: DropDelegate {
             return false
         }
 
-        let items = info.itemProviders(for: ["public.file-url"])
         var all_file_urls: [URL] = []
+        let items = info.itemProviders(for: ["public.file-url"])
         for item in items {
             _ = item.loadObject(ofClass: URL.self) { url, _ in
                 if let url = url {
@@ -179,12 +179,37 @@ struct MyDropDelegate: DropDelegate {
             }
         }
         
-        print(all_file_urls)
-        image_urls = all_file_urls
-        app_state = .processing
         progress.int = 0
         DispatchQueue.global().async {
-            align_and_merge(image_urls, progress)
+            // wait until all the urls are loaded
+            // - this a a dirty hack to avoid any sync/async handling
+            while all_file_urls.count < items.count {
+                print("sleeping")
+                usleep(1000)
+            }
+            
+            // if a directory was drag-and-dropped, convert it to a list of urls
+            all_file_urls = optionally_convert_dir_to_urls(all_file_urls)
+            
+            print(all_file_urls)
+            image_urls = all_file_urls
+            app_state = .processing
+            print("num. urls: ", all_file_urls.count)
+            
+            do {
+                try align_and_merge(image_urls, progress)
+            } catch AlignmentError.less_than_two_images {
+              print("less_than_two_images")
+            } catch AlignmentError.inconsistent_extensions {
+              print("inconsistent_extensions")
+            } catch AlignmentError.unsupported_image_type {
+                print("unsupported_image_type")
+            } catch AlignmentError.resolutions_dont_match {
+                print("resolutions_dont_match")
+            } catch {
+                print("other error")
+            }
+            app_state = .main
         }
 
         return true
@@ -222,7 +247,7 @@ struct SettingsButton: View {
                     .background(Circle().foregroundColor(Color(NSColor.controlColor)))
                     .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
                     .frame(width: 20, height: 20)
-                Image(systemName: "gearshape.fill").resizable().frame(width: 12, height: 12).opacity(0.8)
+                Image(systemName: "gearshape").resizable().frame(width: 12, height: 12).opacity(0.8)
             }
         })
         .buttonStyle(PlainButtonStyle())
