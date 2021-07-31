@@ -9,6 +9,7 @@ class ProcessingProgress: ObservableObject {
     @Published var int = 0
 }
 
+
 struct ContentView: View {
     @State private var app_state = AppState.main
     @State private var image_urls: [URL] = []
@@ -29,6 +30,7 @@ struct ContentView: View {
     }
 }
 
+
 struct MainView: View {
     @Binding var app_state: AppState
     @Binding var image_urls: [URL]
@@ -39,11 +41,15 @@ struct MainView: View {
         let dropDelegate = MyDropDelegate(app_state: $app_state, image_urls: $image_urls, progress: progress, active: $drop_active)
         
         VStack{
+            Spacer()
+            
             Text("Drag & drop a burst of RAW images")
                 .multilineTextAlignment(.center)
                 .font(.system(size: 18, weight: .medium))
                 .opacity(0.8)
                 .frame(width: 200, height: 100)
+            
+            Spacer()
             
             Image(nsImage: NSImage(named: NSImage.Name("drop_icon"))!)
                 .resizable()
@@ -52,11 +58,21 @@ struct MainView: View {
                 .opacity(drop_active ? 0.5 : 0.4)
                 .frame(width: 160, height: 160)
             
+            Spacer()
+            
             Text("*.DNG, *.ARW, *.CR3, *.NEF...")
                 .font(.system(size: 14, weight: .light))
                 .italic()
                 .opacity(0.8)
-                .frame(width: 200, height: 100)
+                .frame(width: 200, height: 50)
+            
+            Spacer()
+            
+            HStack {
+                SettingsButton().padding(10)
+                Spacer()
+                HelpButton().padding(10)
+            }
         }
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         .onDrop(of: ["public.file-url"], delegate: dropDelegate)
@@ -66,6 +82,7 @@ struct MainView: View {
         .ignoresSafeArea()
     }
 }
+
 
 struct ProcessingView: View {
     @Binding var app_state: AppState
@@ -84,6 +101,49 @@ struct ProcessingView: View {
             .padding(20)
     }
 }
+
+
+struct SettingsView: View {
+    @AppStorage("tile_size") private var tile_size = 16
+    @AppStorage("search_distance") private var search_distance = "Medium"
+    let tile_sizes = [8, 16, 32, 64]
+    let search_distances = ["Low", "Medium", "High"]
+
+    var body: some View {
+        VStack {
+            Spacer()
+            
+            VStack(alignment: .leading) {
+                Text("Tile size").font(.system(size: 14, weight: .medium))
+                Picker(selection: $tile_size, label: EmptyView()) {
+                    ForEach(tile_sizes, id: \.self) {
+                        Text(String($0))
+                    }
+                }.pickerStyle(SegmentedPickerStyle())
+            }.padding(20)
+            
+            Spacer()
+            
+            VStack(alignment: .leading) {
+                Text("Search distance").font(.system(size: 14, weight: .medium))
+                Picker(selection: $search_distance, label: EmptyView()) {
+                    ForEach(search_distances, id: \.self) {
+                        Text($0)
+                    }
+                }.pickerStyle(SegmentedPickerStyle())
+            }.padding(20)
+            
+            Spacer()
+            
+            HStack {
+                Spacer()
+                HelpButton().padding(10)
+            }
+        }
+        .navigationTitle("Preferences")
+    }
+}
+
 
 struct MyDropDelegate: DropDelegate {
     @Binding var app_state: AppState
@@ -130,6 +190,45 @@ struct MyDropDelegate: DropDelegate {
         return true
     }
 }
+
+
+struct HelpButton: View {
+    let action: () -> Void = {NSApp.sendAction(Selector(("showHelpWindow:")), to: nil, from: nil)}
+
+    var body: some View {
+        Button(action: action, label: {
+            ZStack {
+                Circle()
+                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
+                    .background(Circle().foregroundColor(Color(NSColor.controlColor)))
+                    .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
+                    .frame(width: 20, height: 20)
+                Text("?").font(.system(size: 15, weight: .medium)).opacity(0.8)
+            }
+        })
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+
+struct SettingsButton: View {
+    let action: () -> Void = {NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)}
+
+    var body: some View {
+        Button(action: action, label: {
+            ZStack {
+                Circle()
+                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
+                    .background(Circle().foregroundColor(Color(NSColor.controlColor)))
+                    .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
+                    .frame(width: 20, height: 20)
+                Image(systemName: "gearshape.fill").resizable().frame(width: 12, height: 12).opacity(0.8)
+            }
+        })
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
 
 struct TranslucentView: NSViewRepresentable {
     // makes the window translucent
