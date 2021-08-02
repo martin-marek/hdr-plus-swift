@@ -1,6 +1,10 @@
 import Foundation
 import MetalKit
 
+// possible error types during the alignment
+enum LibrawError: Error {
+    case save_error
+}
 
 func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) -> MTLTexture? {
     // keep track of execution time
@@ -53,13 +57,29 @@ func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) -> MTLTexture? 
 }
 
 
-func bayer_texture_to_tiff(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL){
+func bayer_texture_to_tiff(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) throws {
     // create a pointer to the instance of a libraw_data_t structure
     let raw_data = libraw_init(0)
 
     // load image
     var msg = libraw_open_file(raw_data, in_url.path)
+    if (msg != LIBRAW_SUCCESS.rawValue) {
+        libraw_close(raw_data)
+        throw LibrawError.save_error
+    }
+    
+    // unpack image
     msg = libraw_unpack(raw_data)
+    if (msg != LIBRAW_SUCCESS.rawValue) {
+        libraw_close(raw_data)
+        throw LibrawError.save_error
+    }
+    
+    // get image pixels as bytes
+    guard let bayer_matrix_bytes = raw_data!.pointee.rawdata.raw_image else {
+        libraw_close(raw_data)
+        throw LibrawError.save_error
+    }
     
     // convert MTLTexture to a bitmap array
     let width = Int(libraw_get_raw_width(raw_data))
@@ -71,19 +91,34 @@ func bayer_texture_to_tiff(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL)
     texture.getBytes(bytes_pointer, bytesPerRow: bytes_per_row, from: mtl_region, mipmapLevel: 0)
     
     // replace original bayer pixels by the new values
-    UnsafeMutableRawPointer(raw_data!.pointee.rawdata.raw_image!).copyMemory(from: bytes_pointer, byteCount: width*height*bytes_per_pixel)
+    UnsafeMutableRawPointer(bayer_matrix_bytes).copyMemory(from: bytes_pointer, byteCount: width*height*bytes_per_pixel)
     
     // process image
     // raw_data!.pointee.params.no_auto_bright = Int32(1)
     msg = libraw_dcraw_process(raw_data)
+    if (msg != LIBRAW_SUCCESS.rawValue) {
+        libraw_close(raw_data)
+        throw LibrawError.save_error
+    }
     
-    // save processing image
+    // set output params
     // TODO: add settings for this
-    // - output format: 8-bit tiff, 16-bit tiff, jpeg, png
+    // - output format: ppm / tiff (use tiff for better support!)
+    // - output bits per pixel: 8 / 16
     // - auto_exposure: true / false
-    raw_data!.pointee.params.output_tiff = Int32(1) // required for Adobe app support
+    // - use camera white balance
+    raw_data!.pointee.params.output_tiff = Int32(1)
     raw_data!.pointee.params.output_bps = Int32(16)
-    libraw_dcraw_ppm_tiff_writer(raw_data, out_url.path)
+    raw_data!.pointee.params.no_auto_bright = 1
+    raw_data!.pointee.params.use_camera_wb = 1
+    
+    // save processed image
+    msg = libraw_dcraw_ppm_tiff_writer(raw_data, out_url.path)
+    if (msg != LIBRAW_SUCCESS.rawValue) {
+        print(String(cString: strerror(msg)!))
+        libraw_close(raw_data)
+        throw LibrawError.save_error
+    }
     
     // release the raw data buffer
     libraw_free_image(raw_data)

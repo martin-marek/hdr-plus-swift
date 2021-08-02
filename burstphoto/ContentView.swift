@@ -9,24 +9,50 @@ class ProcessingProgress: ObservableObject {
     @Published var int = 0
 }
 
+struct MyAlert {
+    enum ErrorType {
+        case error, image_saved
+    }
+    
+    var show: Bool = false
+    var type: ErrorType?
+    var title: String?
+    var message: String?
+}
+
 
 struct ContentView: View {
     @State private var app_state = AppState.main
     @State private var image_urls: [URL] = []
     @StateObject var progress = ProcessingProgress()
-    
-    // DEBUG
-    // @State private var app_state = AppState.processing
-    // @State private var image_urls: [URL] = [URL(string: "1")!, URL(string: "2")!, URL(string: "3")!]
+    @State private var my_alert = MyAlert()
+    @AppStorage("show_img_saved_alert") private var show_img_saved_alert = true
     
     var body: some View {
         Group {
             if app_state == .main {
-                MainView(app_state: $app_state, image_urls: $image_urls, progress: progress)
+                MainView(app_state: $app_state, image_urls: $image_urls, progress: progress, my_alert: $my_alert, show_img_saved_alert: $show_img_saved_alert)
             } else if app_state == .processing {
                 ProcessingView(app_state: $app_state, image_urls: $image_urls, progress: progress)
             }
         }
+        .alert(isPresented: $my_alert.show, content: {
+            switch my_alert.type! {
+            case .error:
+                return Alert(
+                    title: Text(my_alert.title!),
+                    message: Text(my_alert.message!),
+                    dismissButton: .cancel()
+                )
+            case .image_saved:
+                return Alert(
+                    title: Text(my_alert.title!),
+                    message: Text(my_alert.message!),
+                    primaryButton: .default(Text("OK")) {},
+                    secondaryButton: .default(Text("Don't show again")) {show_img_saved_alert = false}
+                )
+            }
+        })
     }
 }
 
@@ -35,10 +61,12 @@ struct MainView: View {
     @Binding var app_state: AppState
     @Binding var image_urls: [URL]
     @ObservedObject var progress: ProcessingProgress
+    @Binding var my_alert: MyAlert
+    @Binding var show_img_saved_alert: Bool
     @State var drop_active = false
     
     var body: some View {
-        let dropDelegate = MyDropDelegate(app_state: $app_state, image_urls: $image_urls, progress: progress, active: $drop_active)
+        let dropDelegate = MyDropDelegate(app_state: $app_state, image_urls: $image_urls, progress: progress, active: $drop_active, my_alert: $my_alert, show_img_saved_alert: $show_img_saved_alert)
         
         VStack{
             Spacer()
@@ -69,7 +97,7 @@ struct MainView: View {
             Spacer()
             
             HStack {
-                SettingsButton().padding(10)
+                // SettingsButton().padding(10)
                 Spacer()
                 HelpButton().padding(10)
             }
@@ -78,7 +106,7 @@ struct MainView: View {
         .onDrop(of: ["public.file-url"], delegate: dropDelegate)
         // .background(TranslucentView())
         // .border(drop_active ? Color.accentColor : Color.clear, width: 2)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(drop_active ? Color.accentColor : Color.clear, lineWidth: 4))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(drop_active ? Color.accentColor : Color.clear, lineWidth: 5).opacity(0.5))
         .ignoresSafeArea()
     }
 }
@@ -150,6 +178,9 @@ struct MyDropDelegate: DropDelegate {
     @Binding var image_urls: [URL]
     @ObservedObject var progress: ProcessingProgress
     @Binding var active: Bool
+    @Binding var my_alert: MyAlert
+    @Binding var show_img_saved_alert: Bool
+    
     
     func validateDrop(info: DropInfo) -> Bool {
         return info.hasItemsConforming(to: ["public.file-url"])
@@ -184,30 +215,77 @@ struct MyDropDelegate: DropDelegate {
             // wait until all the urls are loaded
             // - this a a dirty hack to avoid any sync/async handling
             while all_file_urls.count < items.count {
-                print("sleeping")
                 usleep(1000)
             }
             
             // if a directory was drag-and-dropped, convert it to a list of urls
             all_file_urls = optionally_convert_dir_to_urls(all_file_urls)
             
-            print(all_file_urls)
+            // update the app's list of urls
             image_urls = all_file_urls
-            app_state = .processing
-            print("num. urls: ", all_file_urls.count)
             
+            // aligna and merge all image
+            app_state = .processing
+            var merge_success = false
             do {
-                try align_and_merge(image_urls, progress)
+                // align and merge the burst
+                let output_texture = try align_and_merge(image_urls, progress)
+                merge_success = true
+                
+                // set output image url
+                let in_url = image_urls[0]
+                let in_dir = in_url.deletingLastPathComponent().path
+                let in_filename = in_url.deletingPathExtension().lastPathComponent
+                let out_filename = in_filename + "_merged"
+                let out_path = in_dir + "/" + out_filename + ".TIFF"
+                let out_url = URL(fileURLWithPath: out_path)
+                
+                // save the output image
+                var image_save_success = false
+                do {
+                    try bayer_texture_to_tiff(output_texture, in_url, out_url)
+                    image_save_success = true
+                } catch {
+                    my_alert.type = .error
+                    my_alert.title = "Image couldn't be saved"
+                    my_alert.message = "The processed image could not be saved for an uknown reason. Sorry."
+                    my_alert.show = true
+                }
+                
+                // inform the user about the saved image
+                if image_save_success {
+                    if show_img_saved_alert {
+                        my_alert.type = .image_saved
+                        my_alert.title = "Image saved"
+                        my_alert.message = "Image saved to \"\(out_url.path)\". Processed images are automatically saved to the same location as the imported images."
+                        my_alert.show = true
+                    }
+                }
             } catch AlignmentError.less_than_two_images {
-              print("less_than_two_images")
+                my_alert.type = .error
+                my_alert.title = "Burst required"
+                my_alert.message = "Please drag-and-drop at least 2 images."
+                my_alert.show = true
             } catch AlignmentError.inconsistent_extensions {
-              print("inconsistent_extensions")
+                my_alert.type = .error
+                my_alert.title = "Inconsistent formats"
+                my_alert.message = "The dropped files heve inconsistent formats. Please make sure that all images are straight-out-of-camera RAW files."
+                my_alert.show = true
             } catch AlignmentError.unsupported_image_type {
-                print("unsupported_image_type")
-            } catch AlignmentError.resolutions_dont_match {
-                print("resolutions_dont_match")
+                my_alert.type = .error
+                my_alert.title = "Unsupported format"
+                my_alert.message = "Image format not supported. Please use RAW images only. If you are using straight-out-of-camera RAW images, your camera model is not supported yet."
+                my_alert.show = true
+            } catch AlignmentError.inconsistent_resolutions {
+                my_alert.type = .error
+                my_alert.title = "Inconsistent resolution"
+                my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are straight-out-of-camera RAW files from a single camera."
+                my_alert.show = true
             } catch {
-                print("other error")
+                my_alert.type = .error
+                my_alert.title = "Unknown error"
+                my_alert.message = "Something went wrong. Sorry."
+                my_alert.show = true
             }
             app_state = .main
         }
@@ -218,6 +296,7 @@ struct MyDropDelegate: DropDelegate {
 
 
 struct HelpButton: View {
+    // https://blog.urtti.com/creating-a-macos-help-button-in-swiftui
     let action: () -> Void = {NSApp.sendAction(Selector(("showHelpWindow:")), to: nil, from: nil)}
 
     var body: some View {
@@ -227,8 +306,8 @@ struct HelpButton: View {
                     .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
                     .background(Circle().foregroundColor(Color(NSColor.controlColor)))
                     .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
-                    .frame(width: 20, height: 20)
-                Text("?").font(.system(size: 15, weight: .medium)).opacity(0.8)
+                    .frame(width: 25, height: 25)
+                Text("?").font(.system(size: 18, weight: .medium)).opacity(0.8)
             }
         })
         .buttonStyle(PlainButtonStyle())
@@ -236,23 +315,24 @@ struct HelpButton: View {
 }
 
 
-struct SettingsButton: View {
-    let action: () -> Void = {NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)}
-
-    var body: some View {
-        Button(action: action, label: {
-            ZStack {
-                Circle()
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
-                    .background(Circle().foregroundColor(Color(NSColor.controlColor)))
-                    .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
-                    .frame(width: 20, height: 20)
-                Image(systemName: "gearshape").resizable().frame(width: 12, height: 12).opacity(0.8)
-            }
-        })
-        .buttonStyle(PlainButtonStyle())
-    }
-}
+// struct SettingsButton: View {
+//     // https://stackoverflow.com/a/65356627/6495494
+//     let action: () -> Void = {NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)}
+//
+//     var body: some View {
+//         Button(action: action, label: {
+//             ZStack {
+//                 Circle()
+//                     .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
+//                     .background(Circle().foregroundColor(Color(NSColor.controlColor)))
+//                     .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
+//                     .frame(width: 25, height: 25)
+//                 Image(systemName: "gearshape").resizable().frame(width: 15, height: 15).opacity(0.8)
+//             }
+//         })
+//         .buttonStyle(PlainButtonStyle())
+//     }
+// }
 
 
 struct TranslucentView: NSViewRepresentable {

@@ -8,7 +8,7 @@ enum AlignmentError: Error {
     case less_than_two_images
     case inconsistent_extensions
     case unsupported_image_type
-    case resolutions_dont_match
+    case inconsistent_resolutions
 }
 
 // alignment params
@@ -241,7 +241,7 @@ func add_textures(_ texture_to_add: MTLTexture, _ output_texture: MTLTexture, _ 
 }
 
 
-func align_and_merge(_ image_urls: [URL], _ progress: ProcessingProgress, ref_idx: Int = 0) throws {
+func align_and_merge(_ image_urls: [URL], _ progress: ProcessingProgress, ref_idx: Int = 0) throws -> MTLTexture {
     // check that 2+ images have been passed
     if image_urls.count < 2 {
         throw AlignmentError.less_than_two_images
@@ -269,7 +269,7 @@ func align_and_merge(_ image_urls: [URL], _ progress: ProcessingProgress, ref_id
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
 
     // iterate over comparison images
-    for comp_idx in 1..<image_urls.count {
+    for comp_idx in 0..<image_urls.count {
         // add the reference texture to the output
         if comp_idx == ref_idx {
             add_textures(ref_texture, output_texture, 1/Float(image_urls.count))
@@ -277,12 +277,18 @@ func align_and_merge(_ image_urls: [URL], _ progress: ProcessingProgress, ref_id
         }
         
         // DEBUGGING
-        print("comp_idx: ", comp_idx)
+        // print("comp_idx: ", comp_idx)
         
         // load comparison image
         guard let comp_texture = image_url_to_bayer_texture(image_urls[comp_idx], device) else {
             throw AlignmentError.unsupported_image_type
         }
+        
+        // check that the comparison image has the same resolution as the reference image
+        if !(ref_texture.width == comp_texture.width) && (ref_texture.height == comp_texture.height) {
+            throw AlignmentError.inconsistent_resolutions
+        }
+        
         let comp_pyramid = build_pyramid(comp_texture, device, command_queue, downscale_factor_array)
 
         // initiazite tile alignments
@@ -345,7 +351,6 @@ func align_and_merge(_ image_urls: [URL], _ progress: ProcessingProgress, ref_id
         }
     }
     
-    // return output_texture
-    // return [ref_texture, output_texture]
+    return output_texture
 }
 
