@@ -44,8 +44,8 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
     int n_pos_1d = 2*search_dist + 1;
     
     // compute tile position if previous alignment were 0
-    int x0 = tile_half_size + int(floor((float(gid.x)/float(n_tiles_x)) * (texture_width - tile_half_size)));
-    int y0 = tile_half_size + int(floor((float(gid.y)/float(n_tiles_y)) * (texture_height - tile_half_size)));
+    int x0 = tile_half_size + int(floor((float(gid.x)/float(n_tiles_x)) * (texture_width - tile_half_size - 1)));
+    int y0 = tile_half_size + int(floor((float(gid.y)/float(n_tiles_y)) * (texture_height - tile_half_size - 1)));
     
     // compute current tile displacement based on thread index
     int dy0 = gid.z / n_pos_1d - search_dist;
@@ -67,13 +67,12 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
             int ref_tile_y = y0 + dy1;
             int comp_tile_x = x0 + dx0 + dx1;
             int comp_tile_y = y0 + dy0 + dy1;
-            // check if the comparison pixels are within frame
-            // if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-            //     diff += 2;
-            // } else {
-            //     diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
-            // }
-            diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+            // if the comparison pixels are outside of the frame, attach a very high loss to them
+            if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                diff += 2;
+            } else {
+                diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+            }
         }
     }
     

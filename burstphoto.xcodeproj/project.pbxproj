@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E140530026BB026000389A9A /* coreimage_utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E14052FF26BB026000389A9A /* coreimage_utils.swift */; };
 		E1451A0626AD79BA000F94BE /* align_dummy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1451A0526AD79BA000F94BE /* align_dummy.swift */; };
 		E15DBBD726B5CA9700186172 /* align.metal in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBD626B5CA9600186172 /* align.metal */; };
 		E15DBBDA26B5CAB300186172 /* libraw_utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBD926B5CAB300186172 /* libraw_utils.swift */; };
@@ -19,6 +20,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		E14052FF26BB026000389A9A /* coreimage_utils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = coreimage_utils.swift; sourceTree = "<group>"; };
 		E1451A0526AD79BA000F94BE /* align_dummy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = align_dummy.swift; sourceTree = "<group>"; };
 		E15DBBD626B5CA9600186172 /* align.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = align.metal; sourceTree = "<group>"; };
 		E15DBBD826B5CAA800186172 /* bridging_header.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bridging_header.h; sourceTree = "<group>"; };
@@ -76,6 +78,7 @@
 				E1451A0526AD79BA000F94BE /* align_dummy.swift */,
 				E15DBBD926B5CAB300186172 /* libraw_utils.swift */,
 				E15DBBDB26B5CAD200186172 /* align.swift */,
+				E14052FF26BB026000389A9A /* coreimage_utils.swift */,
 			);
 			path = burstphoto;
 			sourceTree = "<group>";
@@ -115,7 +118,7 @@
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 1250;
-				LastUpgradeCheck = 1250;
+				LastUpgradeCheck = 1300;
 				TargetAttributes = {
 					E1ACED6526A490A1009B14EB = {
 						CreatedOnToolsVersion = 12.5.1;
@@ -161,6 +164,7 @@
 				E1ACED6C26A490A1009B14EB /* ContentView.swift in Sources */,
 				E1ACED6A26A490A1009B14EB /* burstphotoApp.swift in Sources */,
 				E15DBBDC26B5CAD200186172 /* align.swift in Sources */,
+				E140530026BB026000389A9A /* coreimage_utils.swift in Sources */,
 				E15DBBDA26B5CAB300186172 /* libraw_utils.swift in Sources */,
 				E15DBBD726B5CA9700186172 /* align.metal in Sources */,
 				E15DBBE026B6145200186172 /* utils.swift in Sources */,
@@ -307,6 +311,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = burstphoto/burstphoto.entitlements;
+				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";
@@ -331,6 +336,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = burstphoto/burstphoto.entitlements;
+				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";

@@ -11,12 +11,6 @@ enum AlignmentError: Error {
     case inconsistent_resolutions
 }
 
-// alignment params
-let downscale_factor_array = [2, 2, 4, 4]
-let tile_size_array = [16, 16, 16, 16]
-let search_dist_array = [1, 4, 4, 4]
-let ref_idx = 0
-
 // set up Metal device
 let device = MTLCreateSystemDefaultDevice()!
 let command_queue = device.makeCommandQueue()!
@@ -218,7 +212,7 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ down
 }
 
 
-func add_textures(_ texture_to_add: MTLTexture, _ output_texture: MTLTexture, _ weight: Float) {
+func add_textures(_ texture_to_add: MTLTexture, _ output_texture: MTLTexture, _ weight: Float, _ wait: Bool = false) {
     // t = DispatchTime.now().uptimeNanoseconds
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -236,12 +230,14 @@ func add_textures(_ texture_to_add: MTLTexture, _ output_texture: MTLTexture, _ 
     command_encoder.dispatchThreads(threads_per_grid2, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
+    if wait {command_buffer.waitUntilCompleted()}
+    
     // command_buffer.waitUntilCompleted()
     // print("time to add aligned texture: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
 }
 
 
-func align_and_merge(_ image_urls: [URL], _ progress: ProcessingProgress, ref_idx: Int = 0) throws -> MTLTexture {
+func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 32) throws -> MTLTexture {
     // check that 2+ images have been passed
     if image_urls.count < 2 {
         throw AlignmentError.less_than_two_images
@@ -256,9 +252,35 @@ func align_and_merge(_ image_urls: [URL], _ progress: ProcessingProgress, ref_id
         }
     }
     
+    // set alignment params
+    var downscale_factor_array: [Int]
+    switch search_distance {
+    case "Low":
+        downscale_factor_array = [2, 2, 2, 2]
+    case "Medium":
+        downscale_factor_array = [2, 2, 2, 4]
+    case "High":
+        downscale_factor_array = [2, 2, 4, 4]
+    default:
+        downscale_factor_array = [2, 2, 2, 4]
+    }
+    var tile_size_array: [Int]
+    switch tile_size {
+    case 16:
+        tile_size_array = [16, 16, 16, 16]
+    case 32:
+        tile_size_array = [32, 16, 16, 16]
+    case 64:
+        tile_size_array = [64, 32, 16, 16]
+    default:
+        tile_size_array = [32, 16, 16, 16]
+    }
+    let search_dist_array = [1, 4, 4, 4]
+    
     // load reference image
     // print("loading", image_dir+image_names[ref_idx])
     guard let ref_texture = image_url_to_bayer_texture(image_urls[ref_idx], device) else {
+    // guard let ref_texture = image_url_to_rgb_texture(image_urls[ref_idx], device, command_queue) else {
         throw AlignmentError.unsupported_image_type
     }
     let ref_pyramid = build_pyramid(ref_texture, device, command_queue, downscale_factor_array)
@@ -281,6 +303,7 @@ func align_and_merge(_ image_urls: [URL], _ progress: ProcessingProgress, ref_id
         
         // load comparison image
         guard let comp_texture = image_url_to_bayer_texture(image_urls[comp_idx], device) else {
+        // guard let comp_texture = image_url_to_rgb_texture(image_urls[comp_idx], device, command_queue) else {
             throw AlignmentError.unsupported_image_type
         }
         
@@ -339,11 +362,9 @@ func align_and_merge(_ image_urls: [URL], _ progress: ProcessingProgress, ref_id
         let aligned_texture = warp_texture(comp_texture, current_alignment, downscale_factor_array[0])
         
         // add aligned texture to the output image
-        add_textures(aligned_texture, output_texture, 1/Float(image_urls.count))
-        
-        // if this is the last iteration of the alignment loop, make sure the alignment gets finished before doing anythig else
-        // TODO: I think this is not necessary
-        // if comp_idx == image_names.count - 1 {command_buffer.waitUntilCompleted()}
+        // - if this is the last iteration of the alignment loop, make sure the output image is processed before saving it
+        let wait_until_completed = comp_idx == image_urls.count - 1
+        add_textures(aligned_texture, output_texture, 1/Float(image_urls.count), wait_until_completed)
         
         // set progress info to the GUI
         DispatchQueue.main.async {

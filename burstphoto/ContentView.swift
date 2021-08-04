@@ -2,11 +2,17 @@ import SwiftUI
 
 
 enum AppState {
-    case main, processing, settings, info
+    case main, processing, AppSettings, info
 }
 
 class ProcessingProgress: ObservableObject {
     @Published var int = 0
+}
+
+class AppSettings: ObservableObject {
+    @AppStorage("tile_size") static var tile_size = 32
+    @AppStorage("search_distance") static var search_distance = "Medium"
+    @AppStorage("show_img_saved_alert") static var show_img_saved_alert = true
 }
 
 struct MyAlert {
@@ -26,12 +32,11 @@ struct ContentView: View {
     @State private var image_urls: [URL] = []
     @StateObject var progress = ProcessingProgress()
     @State private var my_alert = MyAlert()
-    @AppStorage("show_img_saved_alert") private var show_img_saved_alert = true
     
     var body: some View {
         Group {
             if app_state == .main {
-                MainView(app_state: $app_state, image_urls: $image_urls, progress: progress, my_alert: $my_alert, show_img_saved_alert: $show_img_saved_alert)
+                MainView(app_state: $app_state, image_urls: $image_urls, progress: progress, my_alert: $my_alert)
             } else if app_state == .processing {
                 ProcessingView(app_state: $app_state, image_urls: $image_urls, progress: progress)
             }
@@ -49,7 +54,7 @@ struct ContentView: View {
                     title: Text(my_alert.title!),
                     message: Text(my_alert.message!),
                     primaryButton: .default(Text("OK")) {},
-                    secondaryButton: .default(Text("Don't show again")) {show_img_saved_alert = false}
+                    secondaryButton: .default(Text("Don't show again")) {AppSettings.show_img_saved_alert = false}
                 )
             }
         })
@@ -62,11 +67,10 @@ struct MainView: View {
     @Binding var image_urls: [URL]
     @ObservedObject var progress: ProcessingProgress
     @Binding var my_alert: MyAlert
-    @Binding var show_img_saved_alert: Bool
     @State var drop_active = false
     
     var body: some View {
-        let dropDelegate = MyDropDelegate(app_state: $app_state, image_urls: $image_urls, progress: progress, active: $drop_active, my_alert: $my_alert, show_img_saved_alert: $show_img_saved_alert)
+        let dropDelegate = MyDropDelegate(app_state: $app_state, image_urls: $image_urls, progress: progress, active: $drop_active, my_alert: $my_alert)
         
         VStack{
             Spacer()
@@ -97,7 +101,7 @@ struct MainView: View {
             Spacer()
             
             HStack {
-                // SettingsButton().padding(10)
+                AppSettingsButton().padding(10)
                 Spacer()
                 HelpButton().padding(10)
             }
@@ -132,9 +136,7 @@ struct ProcessingView: View {
 
 
 struct SettingsView: View {
-    @AppStorage("tile_size") private var tile_size = 16
-    @AppStorage("search_distance") private var search_distance = "Medium"
-    let tile_sizes = [8, 16, 32, 64]
+    let tile_sizes = [16, 32, 64]
     let search_distances = ["Low", "Medium", "High"]
 
     var body: some View {
@@ -143,7 +145,7 @@ struct SettingsView: View {
             
             VStack(alignment: .leading) {
                 Text("Tile size").font(.system(size: 14, weight: .medium))
-                Picker(selection: $tile_size, label: EmptyView()) {
+                Picker(selection: AppSettings.$tile_size, label: EmptyView()) {
                     ForEach(tile_sizes, id: \.self) {
                         Text(String($0))
                     }
@@ -154,7 +156,7 @@ struct SettingsView: View {
             
             VStack(alignment: .leading) {
                 Text("Search distance").font(.system(size: 14, weight: .medium))
-                Picker(selection: $search_distance, label: EmptyView()) {
+                Picker(selection: AppSettings.$search_distance, label: EmptyView()) {
                     ForEach(search_distances, id: \.self) {
                         Text($0)
                     }
@@ -179,7 +181,6 @@ struct MyDropDelegate: DropDelegate {
     @ObservedObject var progress: ProcessingProgress
     @Binding var active: Bool
     @Binding var my_alert: MyAlert
-    @Binding var show_img_saved_alert: Bool
     
     
     func validateDrop(info: DropInfo) -> Bool {
@@ -230,11 +231,14 @@ struct MyDropDelegate: DropDelegate {
             // aligna and merge all image
             app_state = .processing
             do {
+                // compute reference index (use the middle image)
+                let ref_idx = image_urls.count / 2
+                
                 // align and merge the burst
-                let output_texture = try align_and_merge(image_urls, progress)
+                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size)
 
                 // set output image url
-                let in_url = image_urls[0]
+                let in_url = image_urls[ref_idx]
                 let in_dir = in_url.deletingLastPathComponent().path
                 let in_filename = in_url.deletingPathExtension().lastPathComponent
                 let out_filename = in_filename + "_merged"
@@ -245,6 +249,8 @@ struct MyDropDelegate: DropDelegate {
                 var image_save_success = false
                 do {
                     try bayer_texture_to_tiff(output_texture, in_url, out_url)
+                    // try rgb_texture_to_tiff(output_texture, out_url)
+    
                     image_save_success = true
                 } catch {
                     my_alert.type = .error
@@ -255,8 +261,8 @@ struct MyDropDelegate: DropDelegate {
                 
                 // inform the user about the saved image
                 if image_save_success {
-                    // show_img_saved_alert = true
-                    if show_img_saved_alert {
+                    // AppSettings.show_img_saved_alert = true
+                    if AppSettings.show_img_saved_alert {
                         my_alert.type = .image_saved
                         my_alert.title = "Image saved"
                         my_alert.message = "Image saved to \"\(out_url.path)\". Processed images are automatically saved to the same location as the imported images."
@@ -317,24 +323,24 @@ struct HelpButton: View {
 }
 
 
-// struct SettingsButton: View {
-//     // https://stackoverflow.com/a/65356627/6495494
-//     let action: () -> Void = {NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)}
-//
-//     var body: some View {
-//         Button(action: action, label: {
-//             ZStack {
-//                 Circle()
-//                     .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
-//                     .background(Circle().foregroundColor(Color(NSColor.controlColor)))
-//                     .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
-//                     .frame(width: 25, height: 25)
-//                 Image(systemName: "gearshape").resizable().frame(width: 15, height: 15).opacity(0.8)
-//             }
-//         })
-//         .buttonStyle(PlainButtonStyle())
-//     }
-// }
+struct AppSettingsButton: View {
+    // https://stackoverflow.com/a/65356627/6495494
+    let action: () -> Void = {NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)}
+    
+    var body: some View {
+        Button(action: action, label: {
+            ZStack {
+                Circle()
+                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
+                    .background(Circle().foregroundColor(Color(NSColor.controlColor)))
+                    .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
+                    .frame(width: 25, height: 25)
+                Image(systemName: "gearshape").resizable().frame(width: 15, height: 15).opacity(0.8)
+            }
+        })
+        .buttonStyle(PlainButtonStyle())
+    }
+}
 
 
 struct TranslucentView: NSViewRepresentable {

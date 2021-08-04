@@ -34,10 +34,10 @@ struct burstphotoApp: App {
         .commands {
             CommandGroup(replacing: .newItem, addition: {}) // disables creating any new windows
         }
-        // Settings {
-        //     SettingsView()
-        //         .frame(width: 350, height: 250)
-        // }
+        Settings {
+            SettingsView()
+                .frame(width: 350, height: 250)
+        }
     }
     
     func disable_window_resizing() {
