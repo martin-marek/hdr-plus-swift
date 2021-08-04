@@ -107,10 +107,20 @@ func bayer_texture_to_tiff(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL)
     // - output bits per pixel: 8 / 16
     // - auto_exposure: true / false
     // - use camera white balance
-    raw_data!.pointee.params.output_tiff = Int32(1)
-    raw_data!.pointee.params.output_bps = Int32(16)
-    raw_data!.pointee.params.no_auto_bright = 1
-    raw_data!.pointee.params.use_camera_wb = 1
+    raw_data!.pointee.params.output_tiff = 1 // write a tiff image
+    raw_data!.pointee.params.output_bps = 16 // write a 16-bit image
+    raw_data!.pointee.params.no_auto_bright = 1 // do not adjust brightness
+    raw_data!.pointee.params.output_color = 1 // sRGB color space
+    raw_data!.pointee.params.use_camera_wb = 1 // if possible, use camera white balance
+    raw_data!.pointee.params.use_camera_matrix = 3 // use embedded color profile regardless of white balance
+    raw_data!.pointee.params.adjust_maximum_thr = 0 // no maximum adjustment
+    raw_data!.pointee.params.threshold = 0 // no noise reduction after demosaicing
+    raw_data!.pointee.params.user_qual = 0 // linear interpolation
+    raw_data!.pointee.params.fbdd_noiserd = 0 // no noise reduction before demosaicing
+    raw_data!.pointee.params.highlight = 0 // clip highlights
+    raw_data!.pointee.params.user_sat = 0 // saturation adjustment
+    // raw_data!.pointee.params.use_dng_sdk = 2 TODO // use Adobe DNG SDK
+    
     
     // save processed image
     msg = libraw_dcraw_ppm_tiff_writer(raw_data, out_url.path)

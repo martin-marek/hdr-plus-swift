@@ -221,17 +221,18 @@ struct MyDropDelegate: DropDelegate {
             // if a directory was drag-and-dropped, convert it to a list of urls
             all_file_urls = optionally_convert_dir_to_urls(all_file_urls)
             
+            // sort the urls alphabetically
+            all_file_urls.sort(by: {$0.path < $1.path})
+            
             // update the app's list of urls
             image_urls = all_file_urls
             
             // aligna and merge all image
             app_state = .processing
-            var merge_success = false
             do {
                 // align and merge the burst
                 let output_texture = try align_and_merge(image_urls, progress)
-                merge_success = true
-                
+
                 // set output image url
                 let in_url = image_urls[0]
                 let in_dir = in_url.deletingLastPathComponent().path
@@ -254,6 +255,7 @@ struct MyDropDelegate: DropDelegate {
                 
                 // inform the user about the saved image
                 if image_save_success {
+                    // show_img_saved_alert = true
                     if show_img_saved_alert {
                         my_alert.type = .image_saved
                         my_alert.title = "Image saved"
