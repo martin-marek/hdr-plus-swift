@@ -163,12 +163,12 @@ struct SettingsView: View {
                 }.pickerStyle(SegmentedPickerStyle())
             }.padding(20)
             
-            Spacer()
-            
-            HStack {
-                Spacer()
-                HelpButton().padding(10)
-            }
+            // Spacer()
+            // 
+            // HStack {
+            //     Spacer()
+            //     HelpButton().padding(10)
+            // }
         }
         .navigationTitle("Preferences")
     }

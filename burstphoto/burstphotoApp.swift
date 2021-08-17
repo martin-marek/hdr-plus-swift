@@ -36,7 +36,7 @@ struct burstphotoApp: App {
         }
         Settings {
             SettingsView()
-                .frame(width: 350, height: 250)
+                .frame(width: 350, height: 200)
         }
     }
     
