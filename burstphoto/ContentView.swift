@@ -252,7 +252,6 @@ struct MyDropDelegate: DropDelegate {
                 var image_save_success = false
                 do {
                     try bayer_texture_to_dng(output_texture, in_url, out_url)
-                    // try rgb_texture_to_tiff(output_texture, out_url)
     
                     image_save_success = true
                 } catch {

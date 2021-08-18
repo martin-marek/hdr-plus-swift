@@ -130,7 +130,6 @@
 		E1ACED6C26A490A1009B14EB /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1ACED6B26A490A1009B14EB /* ContentView.swift */; };
 		E1ACED6E26A490A2009B14EB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1ACED6D26A490A2009B14EB /* Assets.xcassets */; };
 		E1ACED7126A490A2009B14EB /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1ACED7026A490A2009B14EB /* Preview Assets.xcassets */; };
-		E1EB341726CC8A180094C717 /* my_utils.h in Sources */ = {isa = PBXBuildFile; fileRef = E14152C626CC0006006806D3 /* my_utils.h */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -703,7 +702,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E1EB341726CC8A180094C717 /* my_utils.h in Sources */,
 				E14153C826CC000D006806D3 /* jfdctflt.c in Sources */,
 				E14153C126CC000D006806D3 /* jdtrans.c in Sources */,
 				E141536F26CC0006006806D3 /* dng_globals.cpp in Sources */,
@@ -834,6 +832,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = x86_64;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++0x";
@@ -912,6 +911,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = x86_64;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++0x";
@@ -972,6 +972,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "$(XMP_LIB_FLAGS)";
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;

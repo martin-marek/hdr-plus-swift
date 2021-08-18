@@ -239,9 +239,10 @@ func add_textures(_ texture_to_add: MTLTexture, _ output_texture: MTLTexture, _ 
 
 func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 32) throws -> MTLTexture {
     // check that 2+ images have been passed
-    if image_urls.count < 2 {
-        throw AlignmentError.less_than_two_images
-    }
+    // DEBUG: this check is disabled
+    // if image_urls.count < 2 {
+    //     throw AlignmentError.less_than_two_images
+    // }
     
     // check that all images are of the same extension
     let ref_ext = image_urls[0].pathExtension
