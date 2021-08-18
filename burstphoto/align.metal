@@ -1,8 +1,8 @@
 #include <metal_stdlib>
 using namespace metal;
 
-
 // constant uint SINT16_MAX_VAL = 32767.0;
+// constant uint UINT32_MAX_VAL = 4294967295;
 
 
 kernel void add_texture(texture2d<uint, access::read> new_texture [[texture(0)]],
@@ -15,11 +15,11 @@ kernel void add_texture(texture2d<uint, access::read> new_texture [[texture(0)]]
 
 kernel void resize_nearest_uint(texture2d<uint, access::read> in_texture [[texture(0)]],
                             texture2d<uint, access::write> out_texture [[texture(1)]],
-                            constant uint *params [[buffer(0)]],
+                            constant float* params [[buffer(0)]],
                             uint2 gid [[thread_position_in_grid]]) {
     float scale = params[0];
-    int x = int(floor(float(gid.x) / scale));
-    int y = int(floor(float(gid.y) / scale));
+    int x = int(round(float(gid.x) / scale));
+    int y = int(round(float(gid.y) / scale));
     uint4 out_color = in_texture.read(uint2(x, y));
     out_texture.write(out_color, gid);
 }
@@ -27,11 +27,11 @@ kernel void resize_nearest_uint(texture2d<uint, access::read> in_texture [[textu
 
 kernel void resize_nearest_int(texture2d<int, access::read> in_texture [[texture(0)]],
                             texture2d<int, access::write> out_texture [[texture(1)]],
-                            constant float *params [[buffer(0)]],
+                            constant float* params [[buffer(0)]],
                             uint2 gid [[thread_position_in_grid]]) {
     float scale = params[0];
-    int x = int(floor(float(gid.x) / scale));
-    int y = int(floor(float(gid.y) / scale));
+    int x = int(round(float(gid.x) / scale));
+    int y = int(round(float(gid.y) / scale));
     int4 out_color = in_texture.read(uint2(x, y));
     out_texture.write(out_color, gid);
 }
@@ -39,7 +39,7 @@ kernel void resize_nearest_int(texture2d<int, access::read> in_texture [[texture
 
 kernel void average_texture_sums(texture2d<uint, access::read> in_texture [[texture(0)]],
                                  texture2d<uint, access::write> out_texture [[texture(1)]],
-                                 constant float *params [[buffer(0)]],
+                                 constant int* params [[buffer(0)]],
                                  uint2 gid [[thread_position_in_grid]]) {
     int divisor = params[0];
     uint4 pixel_color = in_texture.read(gid);
@@ -52,7 +52,7 @@ kernel void compute_tile_differences(texture2d<uint, access::read> ref_texture [
                                      texture2d<uint, access::read> comp_texture [[texture(1)]],
                                      texture2d<int, access::read> prev_alignment [[texture(2)]],
                                      texture3d<uint, access::write> tile_diff [[texture(3)]],
-                                     constant int *params [[buffer(0)]],
+                                     constant int* params [[buffer(0)]],
                                      uint3 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -76,10 +76,8 @@ kernel void compute_tile_differences(texture2d<uint, access::read> ref_texture [
     
     // factor in previous alignmnet
     int4 prev_align = prev_alignment.read(uint2(gid.x, gid.y));
-    int prev_align_x = prev_align.x;
-    int prev_align_y = prev_align.y;
-    dx0 += downscale_factor * prev_align_x;
-    dy0 += downscale_factor * prev_align_y;
+    dx0 += downscale_factor * prev_align.x;
+    dy0 += downscale_factor * prev_align.y;
     
     // compute tile difference
     uint diff = 0;
@@ -94,16 +92,14 @@ kernel void compute_tile_differences(texture2d<uint, access::read> ref_texture [
             // if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
             //     diff += 2;
             // } else {
-            //     diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+            //     diff += abs(int(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r) - int(comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r));
             // }
-            diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+            diff += abs(int(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r) - int(comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r));
         }
     }
     
     // store tile difference
-    // - ints have to be converted to normalized uints
-    uint diff_nuint = diff / uint(tile_size * tile_size);
-    uint4 out = uint4(diff_nuint, 0, 0, 0);
+    uint4 out = uint4(diff, 0, 0, 0);
     tile_diff.write(out, gid);
 }
 
@@ -111,7 +107,7 @@ kernel void compute_tile_differences(texture2d<uint, access::read> ref_texture [
 kernel void compute_tile_alignments(texture3d<uint, access::read> tile_diff [[texture(0)]],
                                     texture2d<int, access::read> prev_alignment [[texture(1)]],
                                     texture2d<int, access::write> current_alignment [[texture(2)]],
-                                    constant int *params [[buffer(0)]],
+                                    constant int* params [[buffer(0)]],
                                     uint2 gid [[thread_position_in_grid]]) {
     // load args
     int downscale_factor = params[0];
@@ -120,8 +116,8 @@ kernel void compute_tile_alignments(texture3d<uint, access::read> tile_diff [[te
     int n_pos_2d = n_pos_1d * n_pos_1d;
     
     // find tile position with the lowest pixel difference
-    uint current_diff = 0;
-    uint min_diff_val = 1;
+    uint current_diff;
+    uint min_diff_val = tile_diff.read(uint3(gid.x, gid.y, 0)).r;
     int min_diff_idx = 0;
     for (int i = 0; i < n_pos_2d; i++) {
         current_diff = tile_diff.read(uint3(gid.x, gid.y, i)).r;
@@ -137,16 +133,11 @@ kernel void compute_tile_alignments(texture3d<uint, access::read> tile_diff [[te
     
     // factor in previous alignmnet
     int4 prev_align = prev_alignment.read(gid);
-    int prev_align_x = prev_align.x;
-    int prev_align_y = prev_align.y;
-    dx += downscale_factor * prev_align_x;
-    dy += downscale_factor * prev_align_y;
+    dx += downscale_factor * prev_align.x;
+    dy += downscale_factor * prev_align.y;
     
     // store alignment
-    // - ints have to be converted to normalized uints
-    int dx_uint = int(dx);
-    int dy_uint = int(dy);
-    int4 out = int4(dx_uint, dy_uint, 0, 0);
+    int4 out = int4(dx, dy, 0, 0);
     current_alignment.write(out, gid);
 }
 
@@ -154,7 +145,7 @@ kernel void compute_tile_alignments(texture3d<uint, access::read> tile_diff [[te
 kernel void warp_texture(texture2d<uint, access::read> in_texture [[texture(0)]],
                          texture2d<int, access::read> alignment [[texture(1)]],
                          texture2d<uint, access::write> out_texture [[texture(2)]],
-                         constant int *params [[buffer(0)]],
+                         constant int* params [[buffer(0)]],
                          uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -165,12 +156,9 @@ kernel void warp_texture(texture2d<uint, access::read> in_texture [[texture(0)]]
     int y = gid.y;
     
     // factor in alignment
-    // - normalized uints have to be converted to ints
     int4 prev_align = alignment.read(gid);
-    int prev_align_x = prev_align.x;
-    int prev_align_y = prev_align.y;
-    x += downscale_factor * prev_align_x;
-    y += downscale_factor * prev_align_y;
+    x += downscale_factor * prev_align.x;
+    y += downscale_factor * prev_align.y;
     
     // sample the aligned pixel
     uint4 pixel = in_texture.read(uint2(x, y));

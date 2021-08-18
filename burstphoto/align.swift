@@ -11,12 +11,8 @@ enum AlignmentError: Error {
     case inconsistent_resolutions
 }
 
-// set up Metal device
-let device = MTLCreateSystemDefaultDevice()!
-let command_queue = device.makeCommandQueue()!
-let metal_function_library = device.makeDefaultLibrary()!
 
-
+// all the relevant information about image tiles in a single struct
 struct TileInfo {
     let tile_size: Int
     let search_dist: Int
@@ -27,9 +23,15 @@ struct TileInfo {
 }
 
 
+// set up Metal device
+let device = MTLCreateSystemDefaultDevice()!
+let command_queue = device.makeCommandQueue()!
+let metal_function_library = device.makeDefaultLibrary()!
+
+
 func resize_texture(_ input_texture: MTLTexture, scale: Double = 0, width: Int = 0, height: Int = 0, signed: Bool) -> MTLTexture {
     // Metal has a built-in function for texture resizing but it desn't support uint pixels
-    // hence I had to write this function, which support *only* uint pixels
+    // hence I wrote this function, which support *only* int/uint pixels
     
     // convert args
     var out_width = 0
@@ -98,7 +100,7 @@ func average_texture_sums(_ input_texture: MTLTexture, _ n: Int) -> MTLTexture {
     let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
     command_encoder.setTexture(input_texture, index: 0)
     command_encoder.setTexture(output_texture, index: 1)
-    let params_array = [Float32(n)]
+    let params_array = [Int32(n)]
     let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Float32>.size, options: .storageModeShared)
     command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
@@ -394,4 +396,3 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     
     return output_texture_uint16
 }
-
