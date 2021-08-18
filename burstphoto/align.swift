@@ -279,6 +279,8 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     
     // load reference image
     // print("loading", image_dir+image_names[ref_idx])
+    
+    
     guard let ref_texture = image_url_to_bayer_texture(image_urls[ref_idx], device) else {
     // guard let ref_texture = image_url_to_rgb_texture(image_urls[ref_idx], device, command_queue) else {
         throw AlignmentError.unsupported_image_type

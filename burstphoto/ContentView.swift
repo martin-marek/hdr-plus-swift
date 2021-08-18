@@ -228,7 +228,10 @@ struct MyDropDelegate: DropDelegate {
             // update the app's list of urls
             image_urls = all_file_urls
             
-            // aligna and merge all image
+            // initialize dng sdk
+            // dng_xmp_sdk::InitializeSDK()
+            
+            // align and merge all image
             app_state = .processing
             do {
                 // compute reference index (use the middle image)
@@ -242,13 +245,13 @@ struct MyDropDelegate: DropDelegate {
                 let in_dir = in_url.deletingLastPathComponent().path
                 let in_filename = in_url.deletingPathExtension().lastPathComponent
                 let out_filename = in_filename + "_merged"
-                let out_path = in_dir + "/" + out_filename + ".TIFF"
+                let out_path = in_dir + "/" + out_filename + ".dng"
                 let out_url = URL(fileURLWithPath: out_path)
                 
                 // save the output image
                 var image_save_success = false
                 do {
-                    try bayer_texture_to_tiff(output_texture, in_url, out_url)
+                    try bayer_texture_to_dng(output_texture, in_url, out_url)
                     // try rgb_texture_to_tiff(output_texture, out_url)
     
                     image_save_success = true
@@ -297,6 +300,9 @@ struct MyDropDelegate: DropDelegate {
             }
             app_state = .main
         }
+        
+        // terminate the sdk
+        // dng_xmp_sdk::TerminateSDK()
 
         return true
     }
