@@ -21,7 +21,7 @@ func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) -> MTLTexture? 
     // conver image bitmap to MTLTexture
     let bytes_per_pixel = 2
     let bytes_per_row = bytes_per_pixel * Int(width)
-    let texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Unorm, width: Int(width), height: Int(height), mipmapped: false)
+    let texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: Int(width), height: Int(height), mipmapped: false)
     texture_descriptor.usage = [.shaderRead, .shaderWrite]
     guard let texture = device.makeTexture(descriptor: texture_descriptor) else {return nil}
     let mtl_region = MTLRegionMake2D(0, 0, Int(width), Int(height))

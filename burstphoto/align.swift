@@ -27,7 +27,10 @@ struct TileInfo {
 }
 
 
-func resize_texture(_ input_texture: MTLTexture, _ device: MTLDevice, _ command_queue: MTLCommandQueue, scale: Double = 0, width: Int = 0, height: Int = 0) -> MTLTexture {
+func resize_texture(_ input_texture: MTLTexture, scale: Double = 0, width: Int = 0, height: Int = 0, signed: Bool) -> MTLTexture {
+    // Metal has a built-in function for texture resizing but it desn't support uint pixels
+    // hence I had to write this function, which support *only* uint pixels
+    
     // convert args
     var out_width = 0
     var out_height = 0
@@ -50,19 +53,27 @@ func resize_texture(_ input_texture: MTLTexture, _ device: MTLDevice, _ command_
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
     
-    // create scaling filter
-    let translate_x = Double(0)
-    let translate_y = Double(0)
-    let filter = MPSImageBilinearScale(device: device)
-    var transform = MPSScaleTransform(scaleX: scale_x, scaleY: scale_y, translateX: translate_x, translateY: translate_y)
-    
-    // apply filter
+    // run the metal kernel
     let command_buffer = command_queue.makeCommandBuffer()!
-    withUnsafePointer(to: &transform) { (transformPtr: UnsafePointer<MPSScaleTransform>) -> () in
-        filter.scaleTransform = transformPtr
-        filter.edgeMode = MPSImageEdgeMode.clamp
-        filter.encode(commandBuffer: command_buffer, sourceTexture: input_texture, destinationTexture: output_texture)
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let mtl_func: MTLFunction
+    if signed {
+        mtl_func = metal_function_library.makeFunction(name: "resize_nearest_int")!
+    } else {
+        mtl_func = metal_function_library.makeFunction(name: "resize_nearest_uint")!
     }
+    let state = try! device.makeComputePipelineState(function: mtl_func)
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)
+    let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
+    let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
+    command_encoder.setTexture(input_texture, index: 0)
+    command_encoder.setTexture(output_texture, index: 1)
+    let params_array = [Float32(scale)]
+    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Float32>.size, options: .storageModeShared)
+    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
     command_buffer.commit()
     // command_buffer.waitUntilCompleted()
     
@@ -70,36 +81,44 @@ func resize_texture(_ input_texture: MTLTexture, _ device: MTLDevice, _ command_
 }
 
 
-func build_pyramid(_ input_texture: MTLTexture, _ device: MTLDevice, _ command_queue: MTLCommandQueue, _ downscale_factor_list: Array<Int>) -> Array<MTLTexture> {
-    // let t = DispatchTime.now().uptimeNanoseconds
-    
-    // conver input from rbg to b&w
-    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Unorm, width: input_texture.width, height: input_texture.height, mipmapped: false)
+func average_texture_sums(_ input_texture: MTLTexture, _ n: Int) -> MTLTexture {
+    // create output texture
+    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: input_texture.width, height: input_texture.height, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let in_texture_bw = device.makeTexture(descriptor: output_texture_descriptor)!
+    let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
+    
+    // run the metal kernel
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let rgb_to_bw = metal_function_library.makeFunction(name: "rgb_to_bw")!
-    let rgb_to_bw_state = try! device.makeComputePipelineState(function: rgb_to_bw)
-    command_encoder.setComputePipelineState(rgb_to_bw_state)
-    let threads_per_grid = MTLSize(width: input_texture.width, height: input_texture.height, depth: 1)
-    let max_threads_per_thread_group = rgb_to_bw_state.maxTotalThreadsPerThreadgroup
+    let mtl_func = metal_function_library.makeFunction(name: "average_texture_sums")!
+    let state = try! device.makeComputePipelineState(function: mtl_func)
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)
+    let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
     let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
     command_encoder.setTexture(input_texture, index: 0)
-    command_encoder.setTexture(in_texture_bw, index: 1)
+    command_encoder.setTexture(output_texture, index: 1)
+    let params_array = [Float32(n)]
+    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Float32>.size, options: .storageModeShared)
+    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
     // command_buffer.waitUntilCompleted()
-    // print("time to build pyramid: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     
+    return output_texture
+}
+
+
+func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<Int>) -> Array<MTLTexture> {
+
     // iteratively resize the current layer in the pyramid
     var pyramid: Array<MTLTexture> = []
     for (i, downscale_factor) in downscale_factor_list.enumerated() {
         if i == 0 {
-            pyramid.append(resize_texture(in_texture_bw, device, command_queue, scale: 1/Double(downscale_factor)))
+            pyramid.append(resize_texture(input_texture, scale: 1/Double(downscale_factor), signed: false))
         } else {
-            pyramid.append(resize_texture(pyramid.last!, device, command_queue, scale: 1/Double(downscale_factor)))
+            pyramid.append(resize_texture(pyramid.last!, scale: 1/Double(downscale_factor), signed: false))
         }
         // print("layer.shape: ", pyramid.last!.width, pyramid.last!.height)
     }
@@ -107,7 +126,7 @@ func build_pyramid(_ input_texture: MTLTexture, _ device: MTLDevice, _ command_q
 }
 
 
-func texture_like(_ input_texture: MTLTexture, _ device: MTLDevice) -> MTLTexture {
+func texture_like(_ input_texture: MTLTexture) -> MTLTexture {
     let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: input_texture.width, height: input_texture.height, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
@@ -121,7 +140,7 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     // let t = DispatchTime.now().uptimeNanoseconds
     let texture_descriptor = MTLTextureDescriptor()
     texture_descriptor.textureType = .type3D
-    texture_descriptor.pixelFormat = .r16Unorm
+    texture_descriptor.pixelFormat = .r32Uint
     texture_descriptor.width = tile_info.n_tiles_x
     texture_descriptor.height = tile_info.n_tiles_y
     texture_descriptor.depth = tile_info.n_pos_2d
@@ -164,7 +183,7 @@ func compute_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLTextur
     let compute_tile_alignments = metal_function_library.makeFunction(name: "compute_tile_alignments")!
     let compute_tile_alignments_state = try! device.makeComputePipelineState(function: compute_tile_alignments)
     command_encoder.setComputePipelineState(compute_tile_alignments_state)
-    let threads_per_grid2 = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
+    let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
     let max_threads_per_thread_group = compute_tile_alignments_state.maxTotalThreadsPerThreadgroup
     let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
     let params_array = [Int32(downscale_factor), Int32(tile_info.search_dist)]
@@ -173,7 +192,7 @@ func compute_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLTextur
     command_encoder.setTexture(prev_alignment, index: 1)
     command_encoder.setTexture(current_alignment, index: 2)
     command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
-    command_encoder.dispatchThreads(threads_per_grid2, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
     // command_buffer.waitUntilCompleted()
@@ -185,7 +204,7 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ down
     // let t = DispatchTime.now().uptimeNanoseconds
     
     // create the output texture
-    let warped_texture = texture_like(texture_to_warp, device)
+    let warped_texture = texture_like(texture_to_warp)
     
     // warp the texture
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -212,28 +231,20 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ down
 }
 
 
-func add_textures(_ texture_to_add: MTLTexture, _ output_texture: MTLTexture, _ weight: Float, _ wait: Bool = false) {
-    // t = DispatchTime.now().uptimeNanoseconds
+func add_textures(_ texture_to_add: MTLTexture, _ output_texture: MTLTexture) {
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let mtl_func = metal_function_library.makeFunction(name: "add_texture")!
     let state = try! device.makeComputePipelineState(function: mtl_func)
     command_encoder.setComputePipelineState(state)
-    let threads_per_grid2 = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)
+    let threads_per_grid = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)
     let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
     let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
     command_encoder.setTexture(texture_to_add, index: 0)
     command_encoder.setTexture(output_texture, index: 1)
-    let params_array = [Float32(weight)]
-    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Float32>.size, options: .storageModeShared)
-    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
-    command_encoder.dispatchThreads(threads_per_grid2, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
-    if wait {command_buffer.waitUntilCompleted()}
-    
-    // command_buffer.waitUntilCompleted()
-    // print("time to add aligned texture: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
 }
 
 
@@ -281,15 +292,14 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     // load reference image
     // print("loading", image_dir+image_names[ref_idx])
     
-    
     guard let ref_texture = image_url_to_bayer_texture(image_urls[ref_idx], device) else {
     // guard let ref_texture = image_url_to_rgb_texture(image_urls[ref_idx], device, command_queue) else {
         throw AlignmentError.unsupported_image_type
     }
-    let ref_pyramid = build_pyramid(ref_texture, device, command_queue, downscale_factor_array)
+    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array)
     
     // create an empty output texture
-    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: ref_texture.pixelFormat, width: ref_texture.width, height: ref_texture.height, mipmapped: false)
+    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Uint, width: ref_texture.width, height: ref_texture.height, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
 
@@ -297,7 +307,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     for comp_idx in 0..<image_urls.count {
         // add the reference texture to the output
         if comp_idx == ref_idx {
-            add_textures(ref_texture, output_texture, 1/Float(image_urls.count))
+            add_textures(ref_texture, output_texture)
             continue
         }
         
@@ -315,10 +325,10 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
             throw AlignmentError.inconsistent_resolutions
         }
         
-        let comp_pyramid = build_pyramid(comp_texture, device, command_queue, downscale_factor_array)
+        let comp_pyramid = build_pyramid(comp_texture, downscale_factor_array)
 
         // initiazite tile alignments
-        let alignment_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg16Snorm, width: 1, height: 1, mipmapped: false)
+        let alignment_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg16Sint, width: 1, height: 1, mipmapped: false)
         alignment_descriptor.usage = [.shaderRead, .shaderWrite]
         var prev_alignment = device.makeTexture(descriptor: alignment_descriptor)!
         var current_alignment = device.makeTexture(descriptor: alignment_descriptor)!
@@ -348,8 +358,8 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
             } else {
                 downscale_factor = 0
             }
-            prev_alignment = resize_texture(current_alignment, device, command_queue, width: n_tiles_x, height: n_tiles_y)
-            current_alignment = texture_like(prev_alignment, device)
+            prev_alignment = resize_texture(current_alignment, width: n_tiles_x, height: n_tiles_y, signed: true)
+            current_alignment = texture_like(prev_alignment)
             
             // compute tile differences
             let tile_diff = compute_tile_diff(ref_layer, comp_layer, prev_alignment, downscale_factor, tile_info)
@@ -359,15 +369,13 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
         }
 
         // resize alignment to image shape
-        current_alignment = resize_texture(current_alignment, device, command_queue, width: ref_texture.width, height: ref_texture.height)
+        current_alignment = resize_texture(current_alignment, width: ref_texture.width, height: ref_texture.height, signed: true)
 
         // warp the aligned layer
         let aligned_texture = warp_texture(comp_texture, current_alignment, downscale_factor_array[0])
         
         // add aligned texture to the output image
-        // - if this is the last iteration of the alignment loop, make sure the output image is processed before saving it
-        let wait_until_completed = comp_idx == image_urls.count - 1
-        add_textures(aligned_texture, output_texture, 1/Float(image_urls.count), wait_until_completed)
+        add_textures(aligned_texture, output_texture)
         
         // set progress info to the GUI
         DispatchQueue.main.async {
@@ -375,6 +383,15 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
         }
     }
     
-    return output_texture
+    // rescale output texture
+    let output_texture_uint16 = average_texture_sums(output_texture, image_urls.count)
+    
+    // ensure that all metal processing is finished
+    // TODO: is there a cleaner way to do this?
+    let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.commit()
+    command_buffer.waitUntilCompleted()
+    
+    return output_texture_uint16
 }
 
