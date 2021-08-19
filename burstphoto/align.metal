@@ -13,27 +13,34 @@ kernel void add_texture(texture2d<uint, access::read> new_texture [[texture(0)]]
 }
 
 
-kernel void resize_nearest_uint(texture2d<uint, access::read> in_texture [[texture(0)]],
-                            texture2d<uint, access::write> out_texture [[texture(1)]],
-                            constant float* params [[buffer(0)]],
-                            uint2 gid [[thread_position_in_grid]]) {
-    float scale = params[0];
-    int x = int(round(float(gid.x) / scale));
-    int y = int(round(float(gid.y) / scale));
-    uint4 out_color = in_texture.read(uint2(x, y));
+kernel void upsample_nearest(texture2d<int, access::read> in_texture [[texture(0)]],
+                             texture2d<int, access::write> out_texture [[texture(1)]],
+                             constant float* params [[buffer(0)]],
+                             uint2 gid [[thread_position_in_grid]]) {
+    float scale_x = params[0];
+    float scale_y = params[1];
+    int x = int(round(float(gid.x) / scale_x));
+    int y = int(round(float(gid.y) / scale_y));
+    int4 out_color = in_texture.read(uint2(x, y));
     out_texture.write(out_color, gid);
 }
 
 
-kernel void resize_nearest_int(texture2d<int, access::read> in_texture [[texture(0)]],
-                            texture2d<int, access::write> out_texture [[texture(1)]],
-                            constant float* params [[buffer(0)]],
-                            uint2 gid [[thread_position_in_grid]]) {
-    float scale = params[0];
-    int x = int(round(float(gid.x) / scale));
-    int y = int(round(float(gid.y) / scale));
-    int4 out_color = in_texture.read(uint2(x, y));
-    out_texture.write(out_color, gid);
+kernel void avg_pool(texture2d<uint, access::read> in_texture [[texture(0)]],
+                     texture2d<uint, access::write> out_texture [[texture(1)]],
+                     uint2 gid [[thread_position_in_grid]]) {
+    uint out_pixel = 0;
+    int x0 = gid.x * 2;
+    int y0 = gid.y * 2;
+    for (int dx = 0; dx <= 1; dx++) {
+        for (int dy = 0; dy <= 1; dy++) {
+            int x = x0 + dx;
+            int y = y0 + dy;
+            out_pixel += in_texture.read(uint2(x, y)).r;
+        }
+    }
+    out_pixel /= 4;
+    out_texture.write(out_pixel, gid);
 }
 
 
