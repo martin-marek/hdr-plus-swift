@@ -75,7 +75,7 @@ struct MainView: View {
         VStack{
             Spacer()
             
-            Text("Drag & drop a burst of RAW images")
+            Text("Drag & drop a burst of DNG images")
                 .multilineTextAlignment(.center)
                 .font(.system(size: 18, weight: .medium))
                 .opacity(0.8)
@@ -92,7 +92,7 @@ struct MainView: View {
             
             Spacer()
             
-            Text("*.DNG, *.ARW, *.CR3, *.NEF...")
+            Text("*.dng, *.DNG")
                 .font(.system(size: 14, weight: .light))
                 .italic()
                 .opacity(0.8)
@@ -279,17 +279,17 @@ struct MyDropDelegate: DropDelegate {
             } catch AlignmentError.inconsistent_extensions {
                 my_alert.type = .error
                 my_alert.title = "Inconsistent formats"
-                my_alert.message = "The dropped files heve inconsistent formats. Please make sure that all images are straight-out-of-camera RAW files."
+                my_alert.message = "The dropped files heve inconsistent formats. Please make sure that all images are DNG files."
                 my_alert.show = true
             } catch AlignmentError.unsupported_image_type {
                 my_alert.type = .error
                 my_alert.title = "Unsupported format"
-                my_alert.message = "Image format not supported. Please use RAW images only. If you are using straight-out-of-camera RAW images, your camera model is not supported yet."
+                my_alert.message = "Image format not supported. Please use DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Convert. Avoid using DNG files generated from edited images."
                 my_alert.show = true
             } catch AlignmentError.inconsistent_resolutions {
                 my_alert.type = .error
                 my_alert.title = "Inconsistent resolution"
-                my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are straight-out-of-camera RAW files from a single camera."
+                my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Convert."
                 my_alert.show = true
             } catch {
                 my_alert.type = .error
