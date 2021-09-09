@@ -26,9 +26,6 @@ struct burstphotoApp: App {
             ContentView()
                 .frame(width: 350, height: 400)
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willUpdateNotification), perform: { _ in disable_window_resizing()})
-                // open an image in the app
-                // .onOpenURL { (url) in
-                // }
         }
         .windowStyle(HiddenTitleBarWindowStyle())
         .commands {
@@ -36,7 +33,7 @@ struct burstphotoApp: App {
         }
         Settings {
             SettingsView()
-                .frame(width: 350, height: 200)
+                .frame(width: 350, height: 300)
         }
     }
     

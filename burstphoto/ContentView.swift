@@ -5,14 +5,11 @@ enum AppState {
     case main, processing, AppSettings, info
 }
 
-class ProcessingProgress: ObservableObject {
-    @Published var int = 0
-}
-
 class AppSettings: ObservableObject {
-    @AppStorage("tile_size") static var tile_size = 32
-    @AppStorage("search_distance") static var search_distance = "Medium"
-    @AppStorage("show_img_saved_alert") static var show_img_saved_alert = true
+    @AppStorage("tile_size") static var tile_size: Int = 16
+    @AppStorage("search_distance") static var search_distance: String = "High"
+    @AppStorage("robustness") static var robustness: Double = 1
+    @AppStorage("show_img_saved_alert") static var show_img_saved_alert: Bool = true
 }
 
 struct MyAlert {
@@ -136,8 +133,8 @@ struct ProcessingView: View {
 
 
 struct SettingsView: View {
-    let tile_sizes = [16, 32, 64]
-    let search_distances = ["Low", "Medium", "High"]
+    let tile_sizes = [8, 16, 32, 64]
+    let search_distances = ["Low", "Medium", "High", "Highest"]
 
     var body: some View {
         VStack {
@@ -163,12 +160,16 @@ struct SettingsView: View {
                 }.pickerStyle(SegmentedPickerStyle())
             }.padding(20)
             
-            // Spacer()
-            // 
-            // HStack {
-            //     Spacer()
-            //     HelpButton().padding(10)
-            // }
+            Spacer()
+            
+            VStack(alignment: .leading) {
+                Text("Robustness").font(.system(size: 14, weight: .medium))
+                HStack {
+                    Text("Low")
+                    Slider(value: AppSettings.$robustness, in: 0...3, step: 0.2)
+                    Text("High")
+                }
+            }.padding(20)
         }
         .navigationTitle("Preferences")
     }
@@ -228,24 +229,20 @@ struct MyDropDelegate: DropDelegate {
             // update the app's list of urls
             image_urls = all_file_urls
             
-            // initialize dng sdk
-            // dng_xmp_sdk::InitializeSDK()
-            
-            // align and merge all image
+            // align and merge all images
             app_state = .processing
             do {
                 // compute reference index (use the middle image)
                 let ref_idx = image_urls.count / 2
                 
                 // align and merge the burst
-                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size)
+                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
 
                 // set output image url
                 let in_url = image_urls[ref_idx]
-                let in_dir = in_url.deletingLastPathComponent().path
                 let in_filename = in_url.deletingPathExtension().lastPathComponent
                 let out_filename = in_filename + "_merged"
-                let out_path = in_dir + "/" + out_filename + ".dng"
+                let out_path = NSHomeDirectory() + "/Downloads/" + out_filename + ".dng"
                 let out_url = URL(fileURLWithPath: out_path)
                 
                 // save the output image
@@ -267,7 +264,7 @@ struct MyDropDelegate: DropDelegate {
                     if AppSettings.show_img_saved_alert {
                         my_alert.type = .image_saved
                         my_alert.title = "Image saved"
-                        my_alert.message = "Image saved to \"\(out_url.path)\". Processed images are automatically saved to the same location as the imported images."
+                        my_alert.message = "Image saved to \"\(out_url.path)\". Processed images are automatically saved to Downloads."
                         my_alert.show = true
                     }
                 }
@@ -291,6 +288,11 @@ struct MyDropDelegate: DropDelegate {
                 my_alert.title = "Inconsistent resolution"
                 my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Convert."
                 my_alert.show = true
+            } catch AlignmentError.search_distance_too_large {
+                my_alert.type = .error
+                my_alert.title = "Search distance too large"
+                my_alert.message = "The search distance is too large for the given image. Please use a higher-resolution image or select a smaller search distance in settings."
+                my_alert.show = true
             } catch {
                 my_alert.type = .error
                 my_alert.title = "Unknown error"
@@ -299,9 +301,6 @@ struct MyDropDelegate: DropDelegate {
             }
             app_state = .main
         }
-        
-        // terminate the sdk
-        // dng_xmp_sdk::TerminateSDK()
 
         return true
     }
