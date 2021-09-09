@@ -444,10 +444,9 @@ func robust_merge(_ ref_texture: MTLTexture, _ comp_texture: MTLTexture, _ kerne
 
 func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 32, kernel_size: Int = 10, robustness: Double = 1) throws -> MTLTexture {
     // check that 2+ images have been passed
-    // DEBUG: this check is disabled
-    // if image_urls.count < 2 {
-    //     throw AlignmentError.less_than_two_images
-    // }
+    if image_urls.count < 2 {
+        throw AlignmentError.less_than_two_images
+    }
     
     // check that all images are of the same extension
     let ref_ext = image_urls[0].pathExtension
