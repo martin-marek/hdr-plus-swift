@@ -309,7 +309,7 @@ struct MyDropDelegate: DropDelegate {
 
 struct HelpButton: View {
     // https://blog.urtti.com/creating-a-macos-help-button-in-swiftui
-    let action: () -> Void = {NSApp.sendAction(Selector(("showHelpWindow:")), to: nil, from: nil)}
+    let action: () -> Void = {NSWorkspace.shared.open(URL(string: "https://burst.photo/help/")!)}
 
     var body: some View {
         Button(action: action, label: {
