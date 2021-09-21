@@ -95,7 +95,6 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
         
         // store modified pixel buffer to the negative
         negative->fStage1Image.Reset(image_pointer.Release());
-        printf("negative reset!\n");
         
         // validate the modified image
         // - this resets some of the image stats like md5 checksums

@@ -7,8 +7,8 @@ enum AppState {
 
 class AppSettings: ObservableObject {
     @AppStorage("tile_size") static var tile_size: Int = 16
-    @AppStorage("search_distance") static var search_distance: String = "High"
-    @AppStorage("robustness") static var robustness: Double = 1
+    @AppStorage("search_distance") static var search_distance: String = "Medium"
+    @AppStorage("robustness") static var robustness: Double = 0.5
     @AppStorage("show_img_saved_alert") static var show_img_saved_alert: Bool = true
 }
 
@@ -118,23 +118,32 @@ struct ProcessingView: View {
     @Binding var image_urls: [URL]
     @ObservedObject var progress: ProcessingProgress
     @State private var text = ""
-    let merge_as_num_of_images = 0
+    let saving_as_num_of_images = 0
+    
+    func progress_int_to_str(_ int: Int) -> String {
+        if progress.int < image_urls.count {
+            return "Loading \(image_urls[progress.int].lastPathComponent)..."
+        } else if progress.int < 2*image_urls.count {
+            return "Processing \(image_urls[progress.int - image_urls.count].lastPathComponent)..."
+        } else {
+            return "Saving processed image..."
+        }
+    }
     
     var body: some View {
         
-        ProgressView(progress.int < image_urls.count ? "Processing \(image_urls[progress.int].lastPathComponent)..." : "Merging images...",
-                            value: Double(progress.int),
-                            total: Double(image_urls.count - 1 + merge_as_num_of_images))
+        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double(2*image_urls.count + saving_as_num_of_images))
             .font(.system(size: 16, weight: .medium))
             .opacity(0.8)
             .padding(20)
+        
     }
 }
 
 
 struct SettingsView: View {
     let tile_sizes = [8, 16, 32, 64]
-    let search_distances = ["Low", "Medium", "High", "Highest"]
+    let search_distances = ["Low", "Medium", "High"]
 
     var body: some View {
         VStack {
@@ -166,7 +175,7 @@ struct SettingsView: View {
                 Text("Robustness").font(.system(size: 14, weight: .medium))
                 HStack {
                     Text("Low")
-                    Slider(value: AppSettings.$robustness, in: 0...3, step: 0.2)
+                    Slider(value: AppSettings.$robustness, in: 0...1, step: 0.1)
                     Text("High")
                 }
             }.padding(20)
@@ -212,31 +221,32 @@ struct MyDropDelegate: DropDelegate {
             }
         }
         
-        progress.int = 0
-        DispatchQueue.global().async {
-            // wait until all the urls are loaded
-            // - this a a dirty hack to avoid any sync/async handling
-            while all_file_urls.count < items.count {
-                usleep(1000)
-            }
-            
-            // if a directory was drag-and-dropped, convert it to a list of urls
-            all_file_urls = optionally_convert_dir_to_urls(all_file_urls)
-            
-            // sort the urls alphabetically
-            all_file_urls.sort(by: {$0.path < $1.path})
-            
-            // update the app's list of urls
-            image_urls = all_file_urls
+        // wait until all the urls are loaded
+        // - this a a dirty hack to avoid any sync/async handling
+        while all_file_urls.count < items.count {
+            usleep(1000)
+        }
+        
+        // if a directory was drag-and-dropped, convert it to a list of urls
+        all_file_urls = optionally_convert_dir_to_urls(all_file_urls)
+        
+        // sort the urls alphabetically
+        all_file_urls.sort(by: {$0.path < $1.path})
+        
+        // update the app's list of urls
+        image_urls = all_file_urls
+         
+        Task {
             
             // align and merge all images
+            progress.int = 0
             app_state = .processing
             do {
                 // compute reference index (use the middle image)
                 let ref_idx = image_urls.count / 2
                 
                 // align and merge the burst
-                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
+                let output_texture = try await align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
 
                 // set output image url
                 let in_url = image_urls[ref_idx]
@@ -264,7 +274,7 @@ struct MyDropDelegate: DropDelegate {
                     if AppSettings.show_img_saved_alert {
                         my_alert.type = .image_saved
                         my_alert.title = "Image saved"
-                        my_alert.message = "Image saved to \"\(out_url.path)\". Processed images are automatically saved to Downloads."
+                        my_alert.message = "Image saved to \"Downloads/\(out_filename).dng\". Processed images are automatically saved to Downloads."
                         my_alert.show = true
                     }
                 }
@@ -287,11 +297,6 @@ struct MyDropDelegate: DropDelegate {
                 my_alert.type = .error
                 my_alert.title = "Inconsistent resolution"
                 my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Convert."
-                my_alert.show = true
-            } catch AlignmentError.search_distance_too_large {
-                my_alert.type = .error
-                my_alert.title = "Search distance too large"
-                my_alert.message = "The search distance is too large for the given image. Please use a higher-resolution image or select a smaller search distance in settings."
                 my_alert.show = true
             } catch {
                 my_alert.type = .error
