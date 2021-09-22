@@ -28,7 +28,7 @@ func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) throws -> MTLTe
     texture.replace(region: mtl_region, mipmapLevel: 0, withBytes: pixel_bytes!, bytesPerRow: bytes_per_row)
     
     // free memory
-    free(pixel_bytes)
+    free(pixel_bytes!)
 
     return texture
 }
@@ -49,5 +49,5 @@ func bayer_texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) 
     if (error_code != 0) {throw ImageIOError.save_error}
     
     // free memory
-    free(bytes_pointer)
+    free(bytes_pointer!)
 }
