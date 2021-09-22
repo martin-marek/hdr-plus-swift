@@ -221,32 +221,34 @@ struct MyDropDelegate: DropDelegate {
             }
         }
         
-        // wait until all the urls are loaded
-        // - this a a dirty hack to avoid any sync/async handling
-        while all_file_urls.count < items.count {
-            usleep(1000)
-        }
-        
-        // if a directory was drag-and-dropped, convert it to a list of urls
-        all_file_urls = optionally_convert_dir_to_urls(all_file_urls)
-        
-        // sort the urls alphabetically
-        all_file_urls.sort(by: {$0.path < $1.path})
-        
-        // update the app's list of urls
-        image_urls = all_file_urls
-         
-        Task {
+        DispatchQueue.global().async {
+            // wait until all the urls are loaded
+            // - this a a dirty hack to avoid any sync/async handling
+            while all_file_urls.count < items.count {
+                usleep(1000)
+            }
             
-            // align and merge all images
-            progress.int = 0
-            app_state = .processing
+            // if a directory was drag-and-dropped, convert it to a list of urls
+            all_file_urls = optionally_convert_dir_to_urls(all_file_urls)
+            
+            // sort the urls alphabetically
+            all_file_urls.sort(by: {$0.path < $1.path})
+            
+            // update the app's list of urls
+            image_urls = all_file_urls
+            
+            // sync GUI
+            DispatchQueue.main.async {
+                progress.int = 0
+                app_state = .processing
+            }
+            
             do {
                 // compute reference index (use the middle image)
                 let ref_idx = image_urls.count / 2
                 
                 // align and merge the burst
-                let output_texture = try await align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
+                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
 
                 // set output image url
                 let in_url = image_urls[ref_idx]
@@ -256,28 +258,25 @@ struct MyDropDelegate: DropDelegate {
                 let out_url = URL(fileURLWithPath: out_path)
                 
                 // save the output image
-                var image_save_success = false
-                do {
-                    try bayer_texture_to_dng(output_texture, in_url, out_url)
-    
-                    image_save_success = true
-                } catch {
-                    my_alert.type = .error
-                    my_alert.title = "Image couldn't be saved"
-                    my_alert.message = "The processed image could not be saved for an uknown reason. Sorry."
+                try bayer_texture_to_dng(output_texture, in_url, out_url)
+
+                // inform the user about the saved image
+                if AppSettings.show_img_saved_alert {
+                    my_alert.type = .image_saved
+                    my_alert.title = "Image saved"
+                    my_alert.message = "Image saved to \"Downloads/\(out_filename).dng\". Processed images are automatically saved to Downloads."
                     my_alert.show = true
                 }
-                
-                // inform the user about the saved image
-                if image_save_success {
-                    // AppSettings.show_img_saved_alert = true
-                    if AppSettings.show_img_saved_alert {
-                        my_alert.type = .image_saved
-                        my_alert.title = "Image saved"
-                        my_alert.message = "Image saved to \"Downloads/\(out_filename).dng\". Processed images are automatically saved to Downloads."
-                        my_alert.show = true
-                    }
-                }
+            } catch ImageIOError.load_error {
+                my_alert.type = .error
+                my_alert.title = "Unsupported format"
+                my_alert.message = "Image format not supported. Please use DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Convert. Avoid using DNG files generated from edited images."
+                my_alert.show = true
+            } catch ImageIOError.save_error {
+                my_alert.type = .error
+                my_alert.title = "Image couldn't be saved"
+                my_alert.message = "The processed image could not be saved for an uknown reason. Sorry."
+                my_alert.show = true
             } catch AlignmentError.less_than_two_images {
                 my_alert.type = .error
                 my_alert.title = "Burst required"
@@ -287,11 +286,6 @@ struct MyDropDelegate: DropDelegate {
                 my_alert.type = .error
                 my_alert.title = "Inconsistent formats"
                 my_alert.message = "The dropped files heve inconsistent formats. Please make sure that all images are DNG files."
-                my_alert.show = true
-            } catch AlignmentError.unsupported_image_type {
-                my_alert.type = .error
-                my_alert.title = "Unsupported format"
-                my_alert.message = "Image format not supported. Please use DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Convert. Avoid using DNG files generated from edited images."
                 my_alert.show = true
             } catch AlignmentError.inconsistent_resolutions {
                 my_alert.type = .error
@@ -304,7 +298,11 @@ struct MyDropDelegate: DropDelegate {
                 my_alert.message = "Something went wrong. Sorry."
                 my_alert.show = true
             }
-            app_state = .main
+            
+            // sync GUI
+            DispatchQueue.main.async {
+                app_state = .main
+            }
         }
 
         return true

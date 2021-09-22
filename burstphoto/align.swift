@@ -7,7 +7,6 @@ import MetalPerformanceShaders
 enum AlignmentError: Error {
     case less_than_two_images
     case inconsistent_extensions
-    case unsupported_image_type
     case inconsistent_resolutions
 }
 
@@ -497,37 +496,52 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
 }
 
 
-func load_images(_ image_urls: [URL], _ progress: ProcessingProgress) async throws -> [MTLTexture] {
+func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> [MTLTexture] {
     
     var textures_dict: [Int: MTLTexture] = [:]
-    try await withThrowingTaskGroup(of: (Int, MTLTexture).self) { group in
-        // start loading all images concurrently
-        for i in 0..<image_urls.count {
-            group.addTask {
-                let texture = try image_url_to_bayer_texture(image_urls[i], device)
-                DispatchQueue.main.async {
-                    progress.int += 1
-                }
-                return (i, texture)
+    let compute_group = DispatchGroup()
+    let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
+    let access_queue = DispatchQueue(label: "") // this is a serial queue to read/save data thread-safely
+
+    for i in 0..<urls.count {
+        compute_queue.async(group: compute_group) {
+    
+            // asynchronously load texture
+            if let texture = try? image_url_to_bayer_texture(urls[i], device) {
+    
+                // sync GUI progress
+                DispatchQueue.main.async { progress.int += 1 }
+    
+                // thread-safely save the texture
+                access_queue.sync { textures_dict[i] = texture }
             }
         }
-        
-        // collect loaded texures
-        for try await (i, texture) in group {
-            textures_dict[i] = texture
-        }
     }
+    
+    // wait until all the images are loaded
+    compute_group.wait()
+    
     // convert dict to list
     var textures_list: [MTLTexture] = []
-    for i in 0..<image_urls.count {
-        textures_list.append(textures_dict[i]!)
+    for i in 0..<urls.count {
+        
+        // ensure thread-safety
+        try access_queue.sync {
+            
+            // check whether the images have been loaded successfully
+            if let texture = textures_dict[i] {
+                textures_list.append(texture)
+            } else {
+                throw ImageIOError.load_error
+            }
+        }
     }
     
     return textures_list
 }
 
 
-func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 1) async throws -> MTLTexture {
+func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 1) throws -> MTLTexture {
     // DEBUGGING
     // check that 2+ images have been passed
     if image_urls.count < 2 {
@@ -545,7 +559,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     
     // load images
     var t = DispatchTime.now().uptimeNanoseconds
-    let textures = try await load_images(image_urls, progress)
+    let textures = try load_images(image_urls, progress)
     let ref_texture = textures[ref_idx]
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -594,7 +608,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
         }
         
         // check that the comparison image has the same resolution as the reference image
-        if !(ref_texture.width == textures[comp_idx].width) && (ref_texture.height == textures[comp_idx].height) {
+        if (ref_texture.width != textures[comp_idx].width) || (ref_texture.height != textures[comp_idx].height) {
             throw AlignmentError.inconsistent_resolutions
         }
         
@@ -656,7 +670,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
         // add robust-merged texture to the output image
         output_texture = add_textures(merged_texture, output_texture)
         
-        // set progress info to the GUI
+        // sync GUI progress
         DispatchQueue.main.async { progress.int += 1 }
     }
     
