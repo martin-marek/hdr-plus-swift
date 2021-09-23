@@ -343,7 +343,7 @@
 		E15DBBD826B5CAA800186172 /* bridging_header.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bridging_header.h; sourceTree = "<group>"; };
 		E15DBBDB26B5CAD200186172 /* align.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = align.swift; sourceTree = "<group>"; };
 		E15DBBDF26B6145200186172 /* utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = utils.swift; sourceTree = "<group>"; };
-		E1ACED6626A490A1009B14EB /* burstphoto.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = burstphoto.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1ACED6626A490A1009B14EB /* Burst Photo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Burst Photo.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1ACED6926A490A1009B14EB /* burstphotoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = burstphotoApp.swift; sourceTree = "<group>"; };
 		E1ACED6B26A490A1009B14EB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E1ACED6D26A490A2009B14EB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -606,7 +606,7 @@
 		E1ACED6726A490A1009B14EB /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				E1ACED6626A490A1009B14EB /* burstphoto.app */,
+				E1ACED6626A490A1009B14EB /* Burst Photo.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -654,7 +654,7 @@
 			);
 			name = burstphoto;
 			productName = burstphoto;
-			productReference = E1ACED6626A490A1009B14EB /* burstphoto.app */;
+			productReference = E1ACED6626A490A1009B14EB /* Burst Photo.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -901,6 +901,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "$(XMP_LIB_FLAGS)";
+				PRODUCT_NAME = "";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/bridging_header.h;
@@ -978,6 +979,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "$(XMP_LIB_FLAGS)";
+				PRODUCT_NAME = "";
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/bridging_header.h;
@@ -997,7 +999,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";
 				DEVELOPMENT_TEAM = H3NRAX7BS4;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1009,7 +1011,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Burst Photo";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -1023,7 +1025,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";
 				DEVELOPMENT_TEAM = H3NRAX7BS4;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1035,7 +1037,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Burst Photo";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
