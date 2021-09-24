@@ -21,6 +21,7 @@ struct MyAlert {
     var type: ErrorType?
     var title: String?
     var message: String?
+    var image_url: URL?
 }
 
 
@@ -50,7 +51,7 @@ struct ContentView: View {
                 return Alert(
                     title: Text(my_alert.title!),
                     message: Text(my_alert.message!),
-                    primaryButton: .default(Text("OK")) {},
+                    primaryButton: .default(Text("Open in Finder")) {NSWorkspace.shared.activateFileViewerSelecting([my_alert.image_url!])},
                     secondaryButton: .default(Text("Don't show again")) {AppSettings.show_img_saved_alert = false}
                 )
             }
@@ -254,8 +255,14 @@ struct MyDropDelegate: DropDelegate {
                 let in_url = image_urls[ref_idx]
                 let in_filename = in_url.deletingPathExtension().lastPathComponent
                 let out_filename = in_filename + "_merged"
-                let out_path = NSHomeDirectory() + "/Downloads/" + out_filename + ".dng"
+                let out_dir = NSHomeDirectory() + "/Pictures/Burst Photo/"
+                let out_path = out_dir + out_filename + ".dng"
                 let out_url = URL(fileURLWithPath: out_path)
+                
+                // create output directory
+                if !FileManager.default.fileExists(atPath: out_dir) {
+                    try FileManager.default.createDirectory(atPath: out_dir, withIntermediateDirectories: true, attributes: nil)
+                }
                 
                 // save the output image
                 try bayer_texture_to_dng(output_texture, in_url, out_url)
@@ -263,8 +270,9 @@ struct MyDropDelegate: DropDelegate {
                 // inform the user about the saved image
                 if AppSettings.show_img_saved_alert {
                     my_alert.type = .image_saved
+                    my_alert.image_url = out_url
                     my_alert.title = "Image saved"
-                    my_alert.message = "Image saved to \"Downloads/\(out_filename).dng\". Processed images are automatically saved to Downloads."
+                    my_alert.message = "Image saved to \"Pictures/Burst Photo/\(out_filename).dng\". Processed images are automatically saved in this location."
                     my_alert.show = true
                 }
             } catch ImageIOError.load_error {

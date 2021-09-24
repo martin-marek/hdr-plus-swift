@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string></string>
 	<key>CFBundleDocumentTypes</key>
 	<array/>
 	<key>CFBundleExecutable</key>
@@ -26,8 +28,6 @@
 	<string>public.app-category.photography</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<key>NSDownloadsFolderUsageDescription</key>
-	<string>Processed images are automatically saved to Downloads.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Martin Marek</string>
 </dict>
