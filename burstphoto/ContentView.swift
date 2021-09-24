@@ -270,7 +270,7 @@ struct MyDropDelegate: DropDelegate {
             } catch ImageIOError.load_error {
                 my_alert.type = .error
                 my_alert.title = "Unsupported format"
-                my_alert.message = "Image format not supported. Please use DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Convert. Avoid using DNG files generated from edited images."
+                my_alert.message = "Image format not supported. Please use DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Converter. Avoid using DNG files generated from edited images."
                 my_alert.show = true
             } catch ImageIOError.save_error {
                 my_alert.type = .error
@@ -290,7 +290,7 @@ struct MyDropDelegate: DropDelegate {
             } catch AlignmentError.inconsistent_resolutions {
                 my_alert.type = .error
                 my_alert.title = "Inconsistent resolution"
-                my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Convert."
+                my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Converter."
                 my_alert.show = true
             } catch {
                 my_alert.type = .error
