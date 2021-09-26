@@ -35,6 +35,14 @@ func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) throws -> MTLTe
 
 
 func bayer_texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) throws {
+    // synchronize GPU and CPU memory
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let blit_encoder = command_buffer.makeBlitCommandEncoder()!
+    blit_encoder.synchronize(resource: texture)
+    blit_encoder.endEncoding()
+    command_buffer.commit()
+    command_buffer.waitUntilCompleted()
+    
     // convert MTLTexture to a bitmap array
     let width = texture.width
     let height = texture.height

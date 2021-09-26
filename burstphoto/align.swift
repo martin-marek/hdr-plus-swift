@@ -127,6 +127,7 @@ func average_texture_sums(_ input_texture: MTLTexture, _ n: Int) -> MTLTexture {
     // create output texture
     let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: input_texture.width, height: input_texture.height, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    print(output_texture_descriptor.storageMode)
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
     
     // run the metal kernel
@@ -676,12 +677,6 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     
     // rescale output texture
     let output_texture_uint16 = average_texture_sums(output_texture, image_urls.count)
-    
-    // ensure that all metal processing is finished
-    // - is there a cleaner way to do this?
-    let command_buffer = command_queue.makeCommandBuffer()!
-    command_buffer.commit()
-    command_buffer.waitUntilCompleted()
     
     print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
     
