@@ -53,3 +53,29 @@ struct GridCell: View {
             .frame(width: 150, height: 150)
     }
 }
+
+
+struct TranslucentView: NSViewRepresentable {
+    // makes the window translucent
+    // https://stackoverflow.com/a/63669868/6495494
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.isEmphasized = true
+        view.material = .sidebar
+        return view
+    }
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+    }
+}
+
+
+struct MyButtonStyle: ButtonStyle {
+    func makeBody(configuration: Self.Configuration) -> some View {
+        configuration.label
+            .foregroundColor(configuration.isPressed ? Color.accentColor : Color.white)
+            .background(configuration.isPressed ? Color.white : Color.accentColor)
+            .cornerRadius(6.0)
+            .padding()
+    }
+}

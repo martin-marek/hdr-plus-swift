@@ -2,7 +2,7 @@ import SwiftUI
 
 
 enum AppState {
-    case main, processing, AppSettings, info
+    case main, processing, image_saved
 }
 
 class AppSettings: ObservableObject {
@@ -13,12 +13,7 @@ class AppSettings: ObservableObject {
 }
 
 struct MyAlert {
-    enum ErrorType {
-        case error, image_saved
-    }
-    
     var show: Bool = false
-    var type: ErrorType?
     var title: String?
     var message: String?
     var image_url: URL?
@@ -30,46 +25,46 @@ struct ContentView: View {
     @State private var image_urls: [URL] = []
     @StateObject var progress = ProcessingProgress()
     @State private var my_alert = MyAlert()
+    @State private var out_url = URL(fileURLWithPath: "")
+    @State var drop_active = false
     
     var body: some View {
+        let drop_delegate = MyDropDelegate(app_state: $app_state, image_urls: $image_urls, progress: progress, active: $drop_active, my_alert: $my_alert, out_url: $out_url)
+        
         Group {
-            if app_state == .main {
-                MainView(app_state: $app_state, image_urls: $image_urls, progress: progress, my_alert: $my_alert)
-            } else if app_state == .processing {
-                ProcessingView(app_state: $app_state, image_urls: $image_urls, progress: progress)
+            switch app_state {
+            case .main:
+                MainView(drop_active: $drop_active)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    .onDrop(of: ["public.file-url"], delegate: drop_delegate)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(drop_active ? Color.accentColor : Color.clear, lineWidth: 5).opacity(0.5))
+                    .ignoresSafeArea()
+            case .processing:
+                ProcessingView(image_urls: $image_urls, progress: progress)
+            case .image_saved:
+                ImageSavedView(out_url: $out_url, drop_active: $drop_active)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    .onDrop(of: ["public.file-url"], delegate: drop_delegate)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(drop_active ? Color.accentColor : Color.clear, lineWidth: 5).opacity(0.5))
+                    .ignoresSafeArea()
             }
         }
         .alert(isPresented: $my_alert.show, content: {
-            switch my_alert.type! {
-            case .error:
-                return Alert(
-                    title: Text(my_alert.title!),
-                    message: Text(my_alert.message!),
-                    dismissButton: .cancel()
-                )
-            case .image_saved:
-                return Alert(
-                    title: Text(my_alert.title!),
-                    message: Text(my_alert.message!),
-                    primaryButton: .default(Text("Open in Finder")) {NSWorkspace.shared.activateFileViewerSelecting([my_alert.image_url!])},
-                    secondaryButton: .default(Text("Don't show again")) {AppSettings.show_img_saved_alert = false}
-                )
-            }
+            return Alert(
+                title: Text(my_alert.title!),
+                message: Text(my_alert.message!),
+                dismissButton: .cancel()
+            )
         })
+        .frame(width: 350, height: 400)
     }
 }
 
 
 struct MainView: View {
-    @Binding var app_state: AppState
-    @Binding var image_urls: [URL]
-    @ObservedObject var progress: ProcessingProgress
-    @Binding var my_alert: MyAlert
-    @State var drop_active = false
+    @Binding var drop_active: Bool
     
     var body: some View {
-        let dropDelegate = MyDropDelegate(app_state: $app_state, image_urls: $image_urls, progress: progress, active: $drop_active, my_alert: $my_alert)
-        
         VStack{
             Spacer()
             
@@ -99,26 +94,18 @@ struct MainView: View {
             Spacer()
             
             HStack {
-                AppSettingsButton().padding(10)
+                SettingsButton().padding(10)
                 Spacer()
                 HelpButton().padding(10)
             }
         }
-        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-        .onDrop(of: ["public.file-url"], delegate: dropDelegate)
-        // .background(TranslucentView())
-        // .border(drop_active ? Color.accentColor : Color.clear, width: 2)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(drop_active ? Color.accentColor : Color.clear, lineWidth: 5).opacity(0.5))
-        .ignoresSafeArea()
     }
 }
 
 
 struct ProcessingView: View {
-    @Binding var app_state: AppState
     @Binding var image_urls: [URL]
     @ObservedObject var progress: ProcessingProgress
-    @State private var text = ""
     let saving_as_num_of_images = 0
     
     func progress_int_to_str(_ int: Int) -> String {
@@ -132,12 +119,53 @@ struct ProcessingView: View {
     }
     
     var body: some View {
-        
         ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double(2*image_urls.count + saving_as_num_of_images))
             .font(.system(size: 16, weight: .medium))
             .opacity(0.8)
             .padding(20)
         
+    }
+}
+
+
+struct ImageSavedView: View {
+    @Binding var out_url: URL
+    @Binding var drop_active: Bool
+    
+    var body: some View {
+        VStack{
+            Spacer()
+            
+            Text("Image saved")
+                .multilineTextAlignment(.center)
+                .font(.system(size: 24, weight: .medium))
+                .opacity(0.8)
+                .frame(width: 200, height: 100)
+            
+            Spacer()
+            
+            Image(nsImage: NSImage(named: NSImage.Name("check_mark_icon"))!)
+                .resizable()
+                .renderingMode(.template)
+                .foregroundColor(.primary)
+                .opacity(drop_active ? 0.5 : 0.4)
+                .frame(width: 100, height: 100)
+                .frame(width: 160, height: 160)
+            
+            Spacer()
+            
+            Button(action: {NSWorkspace.shared.activateFileViewerSelecting([out_url])},
+                   label: {Text("Open in Finder")})
+                .frame(width: 200, height: 50)
+            
+            Spacer()
+            
+            HStack {
+                SettingsButton().padding(10)
+                Spacer()
+                HelpButton().padding(10)
+            }
+        }
     }
 }
 
@@ -181,6 +209,7 @@ struct SettingsView: View {
                 }
             }.padding(20)
         }
+        .frame(width: 350, height: 300)
         .navigationTitle("Preferences")
     }
 }
@@ -192,6 +221,7 @@ struct MyDropDelegate: DropDelegate {
     @ObservedObject var progress: ProcessingProgress
     @Binding var active: Bool
     @Binding var my_alert: MyAlert
+    @Binding var out_url: URL
     
     
     func validateDrop(info: DropInfo) -> Bool {
@@ -257,7 +287,7 @@ struct MyDropDelegate: DropDelegate {
                 let out_filename = in_filename + "_merged"
                 let out_dir = NSHomeDirectory() + "/Pictures/Burst Photo/"
                 let out_path = out_dir + out_filename + ".dng"
-                let out_url = URL(fileURLWithPath: out_path)
+                out_url = URL(fileURLWithPath: out_path)
                 
                 // create output directory
                 if !FileManager.default.fileExists(atPath: out_dir) {
@@ -268,47 +298,37 @@ struct MyDropDelegate: DropDelegate {
                 try bayer_texture_to_dng(output_texture, in_url, out_url)
 
                 // inform the user about the saved image
-                if AppSettings.show_img_saved_alert {
-                    my_alert.type = .image_saved
-                    my_alert.image_url = out_url
-                    my_alert.title = "Image saved"
-                    my_alert.message = "Image saved to \"Pictures/Burst Photo/\(out_filename).dng\". Processed images are automatically saved in this location."
-                    my_alert.show = true
-                }
+                app_state = .image_saved
+
             } catch ImageIOError.load_error {
-                my_alert.type = .error
                 my_alert.title = "Unsupported format"
                 my_alert.message = "Image format not supported. Please use DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Converter. Avoid using DNG files generated from edited images."
                 my_alert.show = true
+                app_state = .main
             } catch ImageIOError.save_error {
-                my_alert.type = .error
                 my_alert.title = "Image couldn't be saved"
                 my_alert.message = "The processed image could not be saved for an uknown reason. Sorry."
                 my_alert.show = true
+                app_state = .main
             } catch AlignmentError.less_than_two_images {
-                my_alert.type = .error
                 my_alert.title = "Burst required"
                 my_alert.message = "Please drag-and-drop at least 2 images."
                 my_alert.show = true
+                app_state = .main
             } catch AlignmentError.inconsistent_extensions {
-                my_alert.type = .error
                 my_alert.title = "Inconsistent formats"
                 my_alert.message = "The dropped files heve inconsistent formats. Please make sure that all images are DNG files."
                 my_alert.show = true
+                app_state = .main
             } catch AlignmentError.inconsistent_resolutions {
-                my_alert.type = .error
                 my_alert.title = "Inconsistent resolution"
                 my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Converter."
                 my_alert.show = true
+                app_state = .main
             } catch {
-                my_alert.type = .error
                 my_alert.title = "Unknown error"
                 my_alert.message = "Something went wrong. Sorry."
                 my_alert.show = true
-            }
-            
-            // sync GUI
-            DispatchQueue.main.async {
                 app_state = .main
             }
         }
@@ -338,7 +358,7 @@ struct HelpButton: View {
 }
 
 
-struct AppSettingsButton: View {
+struct SettingsButton: View {
     // https://stackoverflow.com/a/65356627/6495494
     let action: () -> Void = {NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)}
     
@@ -358,17 +378,8 @@ struct AppSettingsButton: View {
 }
 
 
-struct TranslucentView: NSViewRepresentable {
-    // makes the window translucent
-    // https://stackoverflow.com/a/63669868/6495494
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.blendingMode = .behindWindow
-        view.isEmphasized = true
-        view.material = .sidebar
-        return view
-    }
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
     }
 }
-

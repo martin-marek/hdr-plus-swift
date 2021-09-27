@@ -24,7 +24,6 @@ struct burstphotoApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(width: 350, height: 400)
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willUpdateNotification), perform: { _ in disable_window_resizing()})
         }
         .windowStyle(HiddenTitleBarWindowStyle())
@@ -33,7 +32,6 @@ struct burstphotoApp: App {
         }
         Settings {
             SettingsView()
-                .frame(width: 350, height: 300)
         }
     }
     
