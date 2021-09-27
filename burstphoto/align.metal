@@ -4,6 +4,13 @@ using namespace metal;
 constant uint UINT16_MAX_VAL = 65535;
 constant float pi = 3.141592;
 
+
+kernel void fill_with_zeros(texture2d<uint, access::write> texture [[texture(0)]],
+                            uint2 gid [[thread_position_in_grid]]) {
+    texture.write(0, gid);
+}
+
+
 kernel void add_textures(texture2d<uint, access::read> texture1 [[texture(0)]],
                          texture2d<uint, access::read> texture2 [[texture(1)]],
                          texture2d<uint, access::write> out_texture [[texture(2)]],

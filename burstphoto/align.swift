@@ -497,6 +497,25 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
 }
 
 
+func fill_with_zeros(_ texture: MTLTexture) {
+    // a new MTLTexture *should* be initialized with zeros...
+    // but testing build 1.0.5 on Majka's macbook revelead that this
+    // may fail when repeatedly drag-and-dropping the same burst
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let mtl_func = metal_function_library.makeFunction(name: "fill_with_zeros")!
+    let mtl_state = try! device.makeComputePipelineState(function: mtl_func)
+    command_encoder.setComputePipelineState(mtl_state)
+    let threads_per_grid = MTLSize(width: texture.width, height: texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(mtl_state, threads_per_grid)
+    command_encoder.setTexture(texture, index: 0)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    // command_buffer.waitUntilCompleted()
+}
+
+
 func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> [MTLTexture] {
     
     var textures_dict: [Int: MTLTexture] = [:]
@@ -598,6 +617,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Uint, width: ref_texture.width, height: ref_texture.height, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     var output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
+    fill_with_zeros(output_texture)
 
     // iterate over comparison images
     for comp_idx in 0..<image_urls.count {
