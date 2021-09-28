@@ -307,32 +307,32 @@ struct MyDropDelegate: DropDelegate {
                 my_alert.title = "Unsupported format"
                 my_alert.message = "Image format not supported. Please use DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Converter. Avoid using DNG files generated from edited images."
                 my_alert.show = true
-                app_state = .main
+                DispatchQueue.main.async { app_state = .main }
             } catch ImageIOError.save_error {
                 my_alert.title = "Image couldn't be saved"
                 my_alert.message = "The processed image could not be saved for an uknown reason. Sorry."
                 my_alert.show = true
-                app_state = .main
+                DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.less_than_two_images {
                 my_alert.title = "Burst required"
-                my_alert.message = "Please drag-and-drop at least 2 images."
+                my_alert.message = "Please drag & drop at least 2 images."
                 my_alert.show = true
-                app_state = .main
+                DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_extensions {
                 my_alert.title = "Inconsistent formats"
                 my_alert.message = "The dropped files heve inconsistent formats. Please make sure that all images are DNG files."
                 my_alert.show = true
-                app_state = .main
+                DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_resolutions {
                 my_alert.title = "Inconsistent resolution"
                 my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Converter."
                 my_alert.show = true
-                app_state = .main
+                DispatchQueue.main.async { app_state = .main }
             } catch {
                 my_alert.title = "Unknown error"
                 my_alert.message = "Something went wrong. Sorry."
                 my_alert.show = true
-                app_state = .main
+                DispatchQueue.main.async { app_state = .main }
             }
         }
 
