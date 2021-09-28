@@ -29,6 +29,7 @@ struct burstphotoApp: App {
         .windowStyle(HiddenTitleBarWindowStyle())
         .commands {
             CommandGroup(replacing: .newItem, addition: {}) // disables creating any new windows
+            CommandGroup(replacing: .help, addition: {}) // disables help menu
         }
         Settings {
             SettingsView()
