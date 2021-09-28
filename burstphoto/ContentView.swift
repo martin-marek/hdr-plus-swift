@@ -9,7 +9,6 @@ class AppSettings: ObservableObject {
     @AppStorage("tile_size") static var tile_size: Int = 16
     @AppStorage("search_distance") static var search_distance: String = "Medium"
     @AppStorage("robustness") static var robustness: Double = 0.5
-    @AppStorage("show_img_saved_alert") static var show_img_saved_alert: Bool = true
 }
 
 struct MyAlert {
@@ -21,7 +20,7 @@ struct MyAlert {
 
 
 struct ContentView: View {
-    @State private var app_state = AppState.main
+    @State private var app_state = AppState.main // DEBUG
     @State private var image_urls: [URL] = []
     @StateObject var progress = ProcessingProgress()
     @State private var my_alert = MyAlert()
@@ -35,7 +34,6 @@ struct ContentView: View {
             switch app_state {
             case .main:
                 MainView(drop_active: $drop_active)
-                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .onDrop(of: ["public.file-url"], delegate: drop_delegate)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(drop_active ? Color.accentColor : Color.clear, lineWidth: 5).opacity(0.5))
                     .ignoresSafeArea()
@@ -43,7 +41,6 @@ struct ContentView: View {
                 ProcessingView(image_urls: $image_urls, progress: progress)
             case .image_saved:
                 ImageSavedView(out_url: $out_url, drop_active: $drop_active)
-                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .onDrop(of: ["public.file-url"], delegate: drop_delegate)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(drop_active ? Color.accentColor : Color.clear, lineWidth: 5).opacity(0.5))
                     .ignoresSafeArea()
@@ -61,6 +58,20 @@ struct ContentView: View {
 }
 
 
+struct DropIcon: View {
+    @Binding var drop_active: Bool
+    
+    var body: some View {
+        Image(nsImage: NSImage(named: NSImage.Name("drop_icon"))!)
+            .resizable()
+            .renderingMode(.template)
+            .foregroundColor(.primary)
+            .opacity(drop_active ? 0.5 : 0.4)
+            .frame(width: 160, height: 160)
+    }
+}
+
+
 struct MainView: View {
     @Binding var drop_active: Bool
     
@@ -70,18 +81,14 @@ struct MainView: View {
             
             Text("Drag & drop a burst of DNG images")
                 .multilineTextAlignment(.center)
-                .font(.system(size: 18, weight: .medium))
+                .font(.system(size: 20, weight: .medium))
                 .opacity(0.8)
-                .frame(width: 200, height: 100)
+                .frame(width: 200)
+                .padding()
             
             Spacer()
             
-            Image(nsImage: NSImage(named: NSImage.Name("drop_icon"))!)
-                .resizable()
-                .renderingMode(.template)
-                .foregroundColor(.primary)
-                .opacity(drop_active ? 0.5 : 0.4)
-                .frame(width: 160, height: 160)
+            DropIcon(drop_active: $drop_active)
             
             Spacer()
             
@@ -90,6 +97,44 @@ struct MainView: View {
                 .italic()
                 .opacity(0.8)
                 .frame(width: 200, height: 50)
+            
+            HStack {
+                SettingsButton().padding(10)
+                Spacer()
+                HelpButton().padding(10)
+            }
+        }
+    }
+}
+
+
+struct ImageSavedView: View {
+    @Binding var out_url: URL
+    @Binding var drop_active: Bool
+    
+    var body: some View {
+        VStack{
+            Spacer()
+            
+            VStack{
+                Text("Image saved")
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 26, weight: .medium))
+                    .opacity(0.8)
+                
+                Text("Open the image using the button below or drag & drop a new burst.")
+                    .multilineTextAlignment(.center)
+                    .opacity(0.8)
+                    .frame(width: 250)
+                    .padding(1)
+                
+                Button(action: {NSWorkspace.shared.activateFileViewerSelecting([out_url])},
+                       label: {Text("Show in Finder")})
+            }
+            
+            Spacer()
+            
+            DropIcon(drop_active: $drop_active)
             
             Spacer()
             
@@ -124,48 +169,6 @@ struct ProcessingView: View {
             .opacity(0.8)
             .padding(20)
         
-    }
-}
-
-
-struct ImageSavedView: View {
-    @Binding var out_url: URL
-    @Binding var drop_active: Bool
-    
-    var body: some View {
-        VStack{
-            Spacer()
-            
-            Text("Image saved")
-                .multilineTextAlignment(.center)
-                .font(.system(size: 24, weight: .medium))
-                .opacity(0.8)
-                .frame(width: 200, height: 100)
-            
-            Spacer()
-            
-            Image(nsImage: NSImage(named: NSImage.Name("check_mark_icon"))!)
-                .resizable()
-                .renderingMode(.template)
-                .foregroundColor(.primary)
-                .opacity(drop_active ? 0.5 : 0.4)
-                .frame(width: 100, height: 100)
-                .frame(width: 160, height: 160)
-            
-            Spacer()
-            
-            Button(action: {NSWorkspace.shared.activateFileViewerSelecting([out_url])},
-                   label: {Text("Open in Finder")})
-                .frame(width: 200, height: 50)
-            
-            Spacer()
-            
-            HStack {
-                SettingsButton().padding(10)
-                Spacer()
-                HelpButton().padding(10)
-            }
-        }
     }
 }
 
