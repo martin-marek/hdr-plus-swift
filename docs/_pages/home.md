@@ -7,7 +7,7 @@ header:
   actions:
     - url: "/download/"
 excerpt: >-
-  Night mode on any camera. 
+  Night mode on any camera. Open-source.
 feature_row:
   - title: "Reduces noise"
     excerpt: "By stacking multiple images, random noise mostly gets cancelled out, resulting in a cleaner output image. Reducing noise also fixes the magenta / green tint present in high-ISO images."
