@@ -1,0 +1,1 @@
+This product includes DNG technology under license by Adobe.
