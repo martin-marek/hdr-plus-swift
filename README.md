@@ -2,8 +2,6 @@
 
 This is macOS app written in Swift / SwiftUI / Metal that implements a simplified version of HDR+, the computational photography pipeline in Google Pixel phones. You can read more about HDR+ in Google's paper [Burst photography for high dynamic range and low-light imaging on mobile cameras](http://static.googleusercontent.com/media/www.hdrplusdata.org/en//hdrplus.pdf).
 
-You can download it from the [Mac App Store](https://burst.photo/download/) or as a [GitHub release](https://github.com/martin-marek/hdr-plus-swift/releases).
-
 # Example
 
 I took a burst of 35 images at ISO 12,800 on Sony RX100-V and boosted it by +2EV. Here's a comparison of a single image from the burst vs. a merge of all the images.
@@ -21,6 +19,10 @@ For more examples, please visit [burst.photo/gallery/](https://burst.photo/galle
 To process a burst of DNG images, simply drag-and-drop them into the app. You can read more at [burst.photo/help/](https://burst.photo/help/).
 
 ![alt text](docs/assets/images/help/drag-and-drop.jpg)
+
+# Download
+
+You can download the app from the [Mac App Store](https://burst.photo/download/) or as a [GitHub release](https://github.com/martin-marek/hdr-plus-swift/releases).
 
 # Features
 - [x] DNG support
