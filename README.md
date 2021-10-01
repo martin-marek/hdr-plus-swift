@@ -4,8 +4,6 @@ This is macOS app written in Swift / SwiftUI / Metal that implements a simplifie
 
 You can download it from the [Mac App Store](https://burst.photo/download/) or as a [GitHub release](https://github.com/martin-marek/hdr-plus-swift/releases).
 
-[![Download on the Mac App Store](https://tools.applemediaservices.com/api/badges/download-on-the-mac-app-store/black/en-us?size=250x83&amp;releaseDate=1632787200&h=e21be504be3b33956ae127d70c1c2cc4)](https://burst.photo/download/)
- 
 # Example
 
 I took a burst of 35 images at ISO 12,800 on Sony RX100-V and boosted it by +2EV. Here's a comparison of a single image from the burst vs. a merge of all the images.
