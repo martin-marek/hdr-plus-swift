@@ -1,6 +1,8 @@
 # Burst Photo
 
-This is a simplified Swift/Metal implementation of HDR+, the backbone of computational photography in Google Pixel phones, described in [Burst photography for high dynamic range and low-light imaging on mobile cameras](http://static.googleusercontent.com/media/www.hdrplusdata.org/en//hdrplus.pdf).
+This is macOS app written in Swift / SwiftUI / Metal that implements a simplified version of HDR+, the computational photography pipeline in Google Pixel phones. You can read more about HDR+ in Google's paper [Burst photography for high dynamic range and low-light imaging on mobile cameras](http://static.googleusercontent.com/media/www.hdrplusdata.org/en//hdrplus.pdf).
+
+You can download it from the [Mac App Store](https://burst.photo/download/) or as a [GitHub release](https://github.com/martin-marek/hdr-plus-swift/releases).
 
 [![Download on the Mac App Store](https://tools.applemediaservices.com/api/badges/download-on-the-mac-app-store/black/en-us?size=250x83&amp;releaseDate=1632787200&h=e21be504be3b33956ae127d70c1c2cc4)](https://burst.photo/download/)
  
@@ -39,18 +41,3 @@ Please feel free to contribute to any of these features or suggest other feature
 # Acknowledgements
 
 This product includes DNG technology under license by Adobe.
-
-# Citation
-
-```bibtex
-@article{hasinoff2016burst,
-  title={Burst photography for high dynamic range and low-light imaging on mobile cameras},
-  author={Hasinoff, Samuel W and Sharlet, Dillon and Geiss, Ryan and Adams, Andrew and Barron, Jonathan T and Kainz, Florian and Chen, Jiawen and Levoy, Marc},
-  journal={ACM Transactions on Graphics (ToG)},
-  volume={35},
-  number={6},
-  pages={1--12},
-  year={2016},
-  publisher={ACM New York, NY, USA}
-}
-```
