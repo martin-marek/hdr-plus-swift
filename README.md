@@ -27,10 +27,10 @@ To process a burst of DNG images, simply drag-and-drop them into the app. You ca
 - [x] align+merge running in pure Metal
 
 # TODO
-- [] Fix progressbar getting stuck loading the first image
-- [] ARM support – requires recompiling Adobe DNG SDK
-- [] 32-bit output - how can this be achieved in Adobe DNG SDK?
-- [] super-resolution
+- [ ] Fix progressbar getting stuck loading the first image
+- [ ] ARM support – requires recompiling Adobe DNG SDK
+- [ ] 32-bit output - how can this be achieved in Adobe DNG SDK?
+- [ ] super-resolution
 
 Please feel free to contribute to any of these features or suggest other features.
 
