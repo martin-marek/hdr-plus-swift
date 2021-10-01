@@ -1,6 +1,8 @@
 # Burst Photo
 
 This is a simplified Swift/Metal implementation of HDR+, the backbone of computational photography in Google Pixel phones, described in [Burst photography for high dynamic range and low-light imaging on mobile cameras](http://static.googleusercontent.com/media/www.hdrplusdata.org/en//hdrplus.pdf).
+
+[![Download on the Mac App Store](https://tools.applemediaservices.com/api/badges/download-on-the-mac-app-store/black/en-us?size=250x83&amp;releaseDate=1632787200&h=e21be504be3b33956ae127d70c1c2cc4)](https://burst.photo/download/)
  
 # Example
 

@@ -28,6 +28,9 @@ plugins:
 
 footer:
   links:
+    - label: "GitHub"
+      icon: "fab fa-fw fa-github"
+      url: "https://github.com/martin-marek/hdr-plus-swift"
     - label: "Twitter"
       icon: "fab fa-fw fa-twitter-square"
       url: "https://twitter.com/martinmarek1999"
