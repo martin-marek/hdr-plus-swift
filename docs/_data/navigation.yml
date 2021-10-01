@@ -1,0 +1,7 @@
+main:
+  - title: "Gallery"
+    url: /gallery/
+  - title: "Tech"
+    url: /tech/
+  - title: "Help"
+    url: /help/
