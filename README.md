@@ -2,6 +2,8 @@
 
 This is a macOS app written in Swift / SwiftUI / Metal that implements a simplified version of HDR+, the computational photography pipeline in Google Pixel phones. You can read more about HDR+ in Google's paper [Burst photography for high dynamic range and low-light imaging on mobile cameras](http://static.googleusercontent.com/media/www.hdrplusdata.org/en//hdrplus.pdf).
 
+If you are a researcher or you prefer Python/PyTorch, I suggest you check out [hdr-plus-pytorch](https://github.com/martin-marek/hdr-plus-pytorch).
+
 # Example
 
 I took a burst of 35 images at ISO 12,800 on Sony RX100-V and boosted it by +2EV. Here's a comparison of a single image from the burst vs. a merge of all the images.
