@@ -3,5 +3,5 @@ main:
     url: /gallery/
   - title: "Tech"
     url: /tech/
-  - title: "Help"
-    url: /help/
+  - title: "Guide"
+    url: /guide/
