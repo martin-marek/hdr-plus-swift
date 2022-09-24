@@ -36,7 +36,7 @@ footer:
       url: "https://twitter.com/martinmarek1999"
     - label: "Instagram"
       icon: "fab fa-fw fa-instagram"
-      url: "https://www.instagram.com/burst.photo.app/"
+      url: "https://www.instagram.com/burst.photo/"
   email: "martin.marek1999@gmail.com"
 
 defaults:
