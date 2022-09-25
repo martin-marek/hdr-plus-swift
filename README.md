@@ -6,7 +6,7 @@ If you are a researcher or you prefer Python/PyTorch, I suggest you check out [h
 
 # Example
 
-I took a burst of 51 images at ISO 51,200 on Sony A7S III and boosted it by +1.35EV. Here's a comparison of a single image from the burst vs. a merge of all the images.
+I took a burst of 51 images at ISO 51,200 on Sony A7S III and boosted it by +1.35EV. Here's a [comparison](https://burst.photo/assets/images/gallery/monika_stars.jpg) of a single image from the burst vs. a merge of all the images.
 
 ![alt text](docs/assets/images/home/monika_stars.jpg)
 
