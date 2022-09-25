@@ -6,9 +6,9 @@ If you are a researcher or you prefer Python/PyTorch, I suggest you check out [h
 
 # Example
 
-I took a burst of 35 images at ISO 12,800 on Sony RX100-V and boosted it by +2EV. Here's a comparison of a single image from the burst vs. a merge of all the images.
+I took a burst of 51 images at ISO 51,200 on Sony A7S III and boosted it by +1.35EV. Here's a comparison of a single image from the burst vs. a merge of all the images.
 
-![alt text](docs/assets/images/home/monika_comparison.jpg)
+![alt text](docs/assets/images/home/monika_stars.jpg)
 
 To test motion-robustness, I compared a raw image, output from the app using `Robustness` set to `High`, and output from the app using `Robustness` set to `Low`. You can compare my results to Google's by opening Figure 6 in their [paper](http://static.googleusercontent.com/media/www.hdrplusdata.org/en//hdrplus.pdf). Image taken from Google's [HDR+ dataset](https://hdrplusdata.org/dataset.html) licensed under [CC BY-SA](https://creativecommons.org/licenses/by-sa/4.0/).
 
