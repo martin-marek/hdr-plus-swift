@@ -417,6 +417,7 @@ func texture_mean(_ in_texture: MTLTexture) -> Float {
     command_encoder2.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder2.endEncoding()
     command_buffer2.commit()
+    command_buffer2.waitUntilCompleted()
     
     // copy data from MTLBuffer back to the local variable 'sum'
     let nsData = NSData(bytesNoCopy: params_buffer!.contents(), length: params_buffer!.length, freeWhenDone: false)
