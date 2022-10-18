@@ -341,21 +341,17 @@ func blur_bayer_texture(_ in_texture: MTLTexture, _ kernel_size: Int) -> MTLText
     command_encoder.setTexture(blur_x, index: 1)
     command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
 
     // blur the texture along the y-axis
-    let command_buffer2 = command_queue.makeCommandBuffer()!
-    let command_encoder2 = command_buffer2.makeComputeCommandEncoder()!
     let state2 = blur_bayer_y_state
-    command_encoder2.setComputePipelineState(state2)
-    command_encoder2.setTexture(blur_x, index: 0)
-    command_encoder2.setTexture(blur_xy, index: 1)
-    command_encoder2.setBuffer(params_buffer, offset: 0, index: 0)
-    command_encoder2.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder2.endEncoding()
-    command_buffer2.commit()
+    command_encoder.setComputePipelineState(state2)
+    command_encoder.setTexture(blur_x, index: 0)
+    command_encoder.setTexture(blur_xy, index: 1)
+    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     
+    command_encoder.endEncoding()
+    command_buffer.commit()
     return blur_xy
 }
 
