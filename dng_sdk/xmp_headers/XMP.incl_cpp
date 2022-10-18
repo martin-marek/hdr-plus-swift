@@ -1,0 +1,126 @@
+#ifndef __XMP_incl_cpp__
+#define __XMP_incl_cpp__ 1
+
+// =================================================================================================
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2002 Adobe Systems Incorporated
+// All Rights Reserved
+//
+// NOTICE: Adobe permits you to use, modify, and distribute this file in accordance with the terms
+// of the Adobe license agreement accompanying it.
+// =================================================================================================
+
+#if AdobePrivate
+// =================================================================================================
+// Change history
+// ==============
+//
+// Writers:
+//  AWL Alan Lillich
+//  FNO Frank Nocke
+//  ANS Ankita Sharma
+//  ADC	Amandeep Chawla
+//
+// mm/dd/yy who Description of changes, most recent on top.
+//
+// 07-10-14 ADC 5.6-c015 Refactoring, partial documentation and bug fixes of XMPCommon and XMPCore C++ APIs.
+// 05-19-14 ADC 5.6-c012 Refactoring XMPCommon code and appropriate changes in XMPCore and XMPCompareAndMerge.
+// 05-19-14 ADC 1.0-m020 Refactoring XMPCommon code and appropriate changes in XMPCore and XMPCompareAndMerge.
+// 04-11-14 ADC 1.0-m019 [3739647] Find a Strategy to resolve the issues of "multiple definitions" faced
+//						 by clients while integrating the new builds containing Compare and Merge.
+// 02-25-14 ADC 1.0-m010 Porting XMPCompareAndMerge to Mac Environment.
+// 02-24-14 ADC 5.6-c002 Fixing issues with Linux build.
+// 02-24-14 ADC 5.6-c001 XMPCommon Framework and XMPCore new APIs ported to Mac Environment.
+//
+// 02-19-14 ADC 1.0-m007 Public Header files were referring to couple of private header files.
+// 02-19-14 ADC 5.5-c035 Public Header files were referring to couple of private header files.
+// 02-13-14 ADC 5.5-c031 Refactoring XMPCore, implementing few APIs and fixing issues.
+// 02-10-14 ANS 5.5-c027 Added missing header include for TAllocator.incl_cpp in XMP.incl_cpp
+// 02-05-14 ADC 5.5-c024 Added a new API to the XMPCore to return pointer to interface
+//						 IXMPDOMFactory
+// 05-19-09 AWL 5.0-c031-f039 First part of threading improvements. Force full rebuilds.
+// 04-23-09 FNO 5.0-c025 Supress Windows C4127 warnings (as otherwise created by i.e. samples)
+//
+// 10-31-07 AWL 4.2-c023 Add new class XMPDocOps.
+//
+// 03-24-06 AWL 4.0 Adapt for move to ham-perforce, integrate XMPFiles, bump version to 4.
+//
+// 04-19-05 AWL Improve Doxygen comments for SDK.
+// 01-28-05 AWL Remove BIB.
+// 01-17-04 AWL Move into new Perforce depot, cosmetic cleanup.
+// 03-05-03 AWL Add Doxygen comments
+// 09-11-02 AWL Started first draft.
+//
+// =================================================================================================
+#endif /* AdobePrivate */
+
+
+//  ================================================================================================
+/// \file XMP.incl_cpp
+/// \brief Overall client glue file for the XMP toolkit.
+///
+/// This is an overall client source file of XMP toolkit glue, the only XMP-specific one that
+/// clients should build in projects. This ensures that all of the client-side glue code for the
+/// XMP toolkit gets compiled.
+///
+/// You cannot compile this file directly, because the template's string type must be declared and 
+/// only the client can do that. Instead, include this in some other source file. For example, 
+/// to use <tt>std::string</tt> you only need these two lines:
+///
+/// \code
+///  #include <string>
+///  #include "XMP.incl_cpp"
+/// \endcode
+
+
+#include "XMP.hpp" // ! This must be the first include!
+
+#define XMP_ClientBuild 1
+
+#if XMP_WinBuild
+    #if XMP_DebugBuild
+        #pragma warning ( push, 4 )
+    #else
+        #pragma warning ( push, 3 )
+    #endif
+
+   	#pragma warning ( disable : 4127 ) // conditional expression is constant
+    #pragma warning ( disable : 4189 ) // local variable is initialized but not referenced
+    #pragma warning ( disable : 4702 ) // unreachable code
+    #pragma warning ( disable : 4800 ) // forcing value to bool 'true' or 'false' (performance warning)
+#endif
+
+#if defined ( TXMP_STRING_TYPE ) && (! TXMP_EXPAND_INLINE)
+
+    // We're using a single out of line instantiation. Do it here.
+
+    #include "client-glue/TXMPMeta.incl_cpp"
+    #include "client-glue/TXMPIterator.incl_cpp"
+    #include "client-glue/TXMPUtils.incl_cpp"
+#if AdobePrivate
+    #include "client-glue/TXMPDocOps.incl_cpp"
+#endif
+
+    template class TXMPMeta <TXMP_STRING_TYPE>;
+    template class TXMPIterator <TXMP_STRING_TYPE>;
+    template class TXMPUtils <TXMP_STRING_TYPE>;
+#if AdobePrivate
+    template class TXMPDocOps <TXMP_STRING_TYPE>;
+#endif
+
+	#if XMP_INCLUDE_XMPFILES
+#if AdobePrivate
+		#include "client-glue/TXMPAlbumArt.incl_cpp"
+		template class TXMPAlbumArt <TXMP_STRING_TYPE>;
+#endif
+	    #include "client-glue/TXMPFiles.incl_cpp"
+	    template class TXMPFiles <TXMP_STRING_TYPE>;
+   #endif
+
+#endif
+
+#if XMP_WinBuild
+    #pragma warning ( pop )
+#endif
+
+#endif // __XMP_incl_cpp__

@@ -1,0 +1,700 @@
+// =================================================================================================
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2002 Adobe Systems Incorporated
+// All Rights Reserved
+//
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in accordance with the terms
+// of the Adobe license agreement accompanying it.
+// =================================================================================================
+
+#if AdobePrivate
+// =================================================================================================
+// Change history
+// ==============
+//
+// Writers:
+// AWL Alan Lillich
+//
+// mm-dd-yy who Description of changes, most recent on top
+//
+// 03-26-15 AJ  5.6-c065 Disabling the code for linux for integrating into green as shared_ptr is not available on gcc 4.4.4
+// 03-26-15 AJ  5.6-c064 Minimizing risk of shared_ptr usage across dlls by changing glue code
+// 03-18-15 AJ  5-6-c053 Removing std:: for accessing shared pointers for Mac
+// 03-18-15 AJ  5.6-c052 Adding shared ptr for the private data in the marker structure
+// 03-16-15 AJ  5.6-c047 Completing Rework of Get/SetBulkMarkers()
+// 12-03-15 AJ  5.6-c045 Reworking glue code for Get/SetBulkMarkers()
+// 03-02-15 AJ  5.6-c039 Marker Extensibility - Backward compatibility for extensions in GetBulkMarkers() and SetBulkMarkers()
+// 07-21-09 AWL 5.0-c047 Add XMPUtils::ApplyTemplate.
+// 05-21-09 AWL 5.0-c032 Revamp glue again to pass SetClientString with each function.
+// 05-19-09 AWL 5.0-c031 First part of threading improvements, revamp the client glue.
+// 01-23-09 AWL 5.0-c005 [2261961] Fix Get/SetBulkMarkers to tolerate varying size of cuePointParams vector.
+//
+// 10-13-08 AWL 4.4-c009 Add support for zone-less times. Get rid of old XMPUtils forms of DocOps.
+//
+// 05-05-08 AWL 4.2.2-c055 [1768777] Add private callbacks for CuePointParams storage in Get/SetBulkMarkers.
+// 04-29-08 AWL 4.2.2-c052 [1768777,1768782] Add private performance enhancements for temporal metadata.
+//
+// 05-16-06 AWL 4.0-c006 Add SXMPUtils::PackageForJPEG and SXMPUtils::MergeFromJPEG.
+// 03-24-06 AWL 4.0 Adapt for move to ham-perforce, integrate XMPFiles, bump version to 4.
+//
+// 02-21-06 AWL 3.3-015 Expose some of the "File Info" utils. The Adobe Labs build of XMPFiles needs
+//				SXMPUtils::RemoveProperties and SXMPUtils::AppendProperties.
+// 07-15-05 AWL 3.3-001 [1214033] Bump version to 3.3, the SDK is out. Put back missing multi-file utils.
+//
+// 05-16-05 AWL 3.2-100 Complete the deBIBification, integrate the internal and SDK source.
+// 04-11-05 AWL 3.2-016 Add AdobePrivate conditionals where appropriate.
+// 02-11-05 AWL 3.2-002 Add client reference counting.
+// 01-28-05 AWL 3.2-001 Remove BIB.
+//
+// 11-04-04 AWL 3.1.1-090 [1014853] Add XMPUtils::RemoveMultiValueInfo.
+//
+// 08-18-04 AWL 3.1-075 Add HasContainedDoc.
+//
+// 06-08-04 AWL Add CanUpdateMainPacket and overloads for GetMainPacket and UpdateMainPacket. These
+//				are local, not going through to the DLL, and partial hacks for now. Final resolution
+//				depends on what happens with FileMetadata.hpp or derivatives. See bug 1010355.
+// 03-29-04 AWL Add Q&D versions of GetMainPacket and UpdateMainPacket.
+// 03-04-04 AWL Include <stdexcept> for uses of std::logic_error.
+// 02-17-04 AWL Add multi-file utilities. Rename CreateXyzDocument to InitializeXyzDocument.
+// 02-14-04 AWL Remove all default parameters from the CXMP* classes.
+// 02-09-04 AWL Start adding the new Document Operation utilities.
+// 01-30-04 AWL Add overloads for set-like functions to take a tStringObj value.
+// 01-17-04 AWL Move into new Perforce depot, cosmetic cleanup.
+// 03-05-03 AWL Add implementation guidelines.
+// 10-29-02 AWL Started first draft.
+//
+// =================================================================================================
+#endif // AdobePrivate
+
+//	================================================================================================
+/// \file TXMPUtils.incl_cpp
+/// \brief The implementation of the TXMPUtils template class.
+
+#include "XMP.hpp"
+#include "client-glue/WXMP_Common.hpp"
+#include "client-glue/WXMPUtils.hpp"
+
+// =================================================================================================
+// Implementation Guidelines
+// =========================
+//
+// The implementations of the template functions are very stylized. ...
+//
+// =================================================================================================
+
+XMP_MethodIntro(TXMPUtils,void)::
+SetClientString ( void * clientPtr, XMP_StringPtr valuePtr, XMP_StringLen valueLen )
+{
+	tStringObj * clientStr = (tStringObj*) clientPtr;
+	clientStr->assign ( valuePtr, valueLen );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ComposeArrayItemPath ( XMP_StringPtr schemaNS,
+					   XMP_StringPtr arrayName,
+					   XMP_Index	 itemIndex,
+					   tStringObj *  fullPath )
+{
+	WrapCheckVoid ( zXMPUtils_ComposeArrayItemPath_1 ( schemaNS, arrayName, itemIndex, fullPath, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ComposeStructFieldPath ( XMP_StringPtr schemaNS,
+						 XMP_StringPtr structName,
+						 XMP_StringPtr fieldNS,
+						 XMP_StringPtr fieldName,
+						 tStringObj *  fullPath )
+{
+	WrapCheckVoid ( zXMPUtils_ComposeStructFieldPath_1 ( schemaNS, structName, fieldNS, fieldName, fullPath, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ComposeQualifierPath ( XMP_StringPtr schemaNS,
+					   XMP_StringPtr propName,
+					   XMP_StringPtr qualNS,
+					   XMP_StringPtr qualName,
+					   tStringObj *	 fullPath )
+{
+	WrapCheckVoid ( zXMPUtils_ComposeQualifierPath_1 ( schemaNS, propName, qualNS, qualName, fullPath, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ComposeLangSelector ( XMP_StringPtr schemaNS,
+					  XMP_StringPtr arrayName,
+					  XMP_StringPtr langName,
+					  tStringObj *	fullPath )
+{
+	WrapCheckVoid ( zXMPUtils_ComposeLangSelector_1 ( schemaNS, arrayName, langName, fullPath, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ComposeLangSelector ( XMP_StringPtr		 schemaNS,
+					  XMP_StringPtr		 arrayName,
+					  const tStringObj & langName,
+					  tStringObj *		 fullPath )
+{
+	TXMPUtils::ComposeLangSelector ( schemaNS, arrayName, langName.c_str(), fullPath );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ComposeFieldSelector ( XMP_StringPtr schemaNS,
+					   XMP_StringPtr arrayName,
+					   XMP_StringPtr fieldNS,
+					   XMP_StringPtr fieldName,
+					   XMP_StringPtr fieldValue,
+					   tStringObj *	 fullPath )
+{
+	WrapCheckVoid ( zXMPUtils_ComposeFieldSelector_1 ( schemaNS, arrayName, fieldNS, fieldName, fieldValue, fullPath, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ComposeFieldSelector ( XMP_StringPtr	  schemaNS,
+					   XMP_StringPtr	  arrayName,
+					   XMP_StringPtr	  fieldNS,
+					   XMP_StringPtr	  fieldName,
+					   const tStringObj & fieldValue,
+					   tStringObj *		  fullPath )
+{
+	TXMPUtils::ComposeFieldSelector ( schemaNS, arrayName, fieldNS, fieldName, fieldValue.c_str(), fullPath );
+}
+
+// -------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ConvertFromBool ( bool		   binValue,
+				  tStringObj * strValue )
+{
+	WrapCheckVoid ( zXMPUtils_ConvertFromBool_1 ( binValue, strValue, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ConvertFromInt ( long		   binValue,
+				 XMP_StringPtr format,
+				 tStringObj *  strValue )
+{
+	#if (XMP_MacBuild || XMP_iOSBuild) & XMP_64	// This is checked because on Mac 64 bit environment, long is of 64 bit and hence gives a warning during implicit
+								// typecasting to XMP_Int32. Now doing it explicitly in that case. Doing the same for iOS.
+		WrapCheckVoid ( zXMPUtils_ConvertFromInt_1 ( (XMP_Int32)binValue, format, strValue, SetClientString ) );
+	#else
+		WrapCheckVoid ( zXMPUtils_ConvertFromInt_1 ( binValue, format, strValue, SetClientString ) );
+	#endif
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ConvertFromInt64 ( long long 	 binValue,
+				   XMP_StringPtr format,
+				   tStringObj *  strValue )
+{
+	WrapCheckVoid ( zXMPUtils_ConvertFromInt64_1 ( binValue, format, strValue, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ConvertFromFloat ( double		 binValue,
+				   XMP_StringPtr format,
+				   tStringObj *	 strValue )
+{
+	WrapCheckVoid ( zXMPUtils_ConvertFromFloat_1 ( binValue, format, strValue, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ConvertFromDate ( const XMP_DateTime & binValue,
+				  tStringObj *		   strValue )
+{
+	WrapCheckVoid ( zXMPUtils_ConvertFromDate_1 ( binValue, strValue, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,bool)::
+ConvertToBool ( XMP_StringPtr strValue )
+{
+	WrapCheckBool ( value, zXMPUtils_ConvertToBool_1 ( strValue ) );
+	return value;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,bool)::
+ConvertToBool ( const tStringObj & strValue )
+{
+	return TXMPUtils::ConvertToBool ( strValue.c_str() );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,long)::
+ConvertToInt ( XMP_StringPtr strValue )
+{
+	WrapCheckInt32 ( value, zXMPUtils_ConvertToInt_1 ( strValue ) );
+	return value;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,long)::
+ConvertToInt ( const tStringObj & strValue )
+{
+	return TXMPUtils::ConvertToInt ( strValue.c_str() );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,long long)::
+ConvertToInt64 ( XMP_StringPtr strValue )
+{
+	WrapCheckInt64 ( value, zXMPUtils_ConvertToInt64_1 ( strValue ) );
+	return value;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,long long)::
+ConvertToInt64 ( const tStringObj & strValue )
+{
+	return TXMPUtils::ConvertToInt64 ( strValue.c_str() );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,double)::
+ConvertToFloat ( XMP_StringPtr strValue )
+{
+	WrapCheckFloat ( value, zXMPUtils_ConvertToFloat_1 ( strValue ) );
+	return value;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,double)::
+ConvertToFloat ( const tStringObj & strValue )
+{
+	return TXMPUtils::ConvertToFloat ( strValue.c_str() );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ConvertToDate ( XMP_StringPtr  strValue,
+				XMP_DateTime * binValue )
+{
+	WrapCheckVoid ( zXMPUtils_ConvertToDate_1 ( strValue, binValue ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ConvertToDate ( const tStringObj & strValue,
+				XMP_DateTime *	   binValue )
+{
+	TXMPUtils::ConvertToDate ( strValue.c_str(), binValue );
+}
+
+// -------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+CurrentDateTime ( XMP_DateTime * time )
+{
+	WrapCheckVoid ( zXMPUtils_CurrentDateTime_1 ( time ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+SetTimeZone ( XMP_DateTime * time )
+{
+	WrapCheckVoid ( zXMPUtils_SetTimeZone_1 ( time ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ConvertToUTCTime ( XMP_DateTime * time )
+{
+	WrapCheckVoid ( zXMPUtils_ConvertToUTCTime_1 ( time ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ConvertToLocalTime ( XMP_DateTime * time )
+{
+	WrapCheckVoid ( zXMPUtils_ConvertToLocalTime_1 ( time ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,int)::
+CompareDateTime ( const XMP_DateTime & left,
+				  const XMP_DateTime & right )
+{
+	WrapCheckInt32 ( result, zXMPUtils_CompareDateTime_1 ( left, right ) );
+	return result;
+}
+
+// -------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+EncodeToBase64 ( XMP_StringPtr rawStr,
+				 XMP_StringLen rawLen,
+				 tStringObj *  encodedStr )
+{
+	WrapCheckVoid ( zXMPUtils_EncodeToBase64_1 ( rawStr, rawLen, encodedStr, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+EncodeToBase64 ( const tStringObj & rawStr,
+				 tStringObj *		encodedStr )
+{
+	TXMPUtils::EncodeToBase64 ( rawStr.c_str(), (XMP_StringLen)rawStr.size(), encodedStr );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+DecodeFromBase64 ( XMP_StringPtr encodedStr,
+				   XMP_StringLen encodedLen,
+				   tStringObj *	 rawStr )
+{
+	WrapCheckVoid ( zXMPUtils_DecodeFromBase64_1 ( encodedStr, encodedLen, rawStr, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+DecodeFromBase64 ( const tStringObj & encodedStr,
+				   tStringObj *		  rawStr )
+{
+	TXMPUtils::DecodeFromBase64 ( encodedStr.c_str(), (XMP_StringLen)encodedStr.size(), rawStr );
+}
+
+// -------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+PackageForJPEG ( const TXMPMeta<tStringObj> & xmpObj,
+                 tStringObj * standardXMP,
+                 tStringObj * extendedXMP,
+                 tStringObj * extendedDigest )
+{
+	WrapCheckVoid ( zXMPUtils_PackageForJPEG_1 ( xmpObj.GetInternalRef(), standardXMP, extendedXMP, extendedDigest, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+MergeFromJPEG ( TXMPMeta<tStringObj> * fullXMP,
+                const TXMPMeta<tStringObj> & extendedXMP )
+{
+	WrapCheckVoid ( zXMPUtils_MergeFromJPEG_1 ( fullXMP->GetInternalRef(), extendedXMP.GetInternalRef() ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+CatenateArrayItems ( const TXMPMeta<tStringObj> & xmpObj,
+					 XMP_StringPtr	schemaNS,
+					 XMP_StringPtr	arrayName,
+					 XMP_StringPtr	separator,
+					 XMP_StringPtr	quotes,
+					 XMP_OptionBits options,
+					 tStringObj *	catedStr )
+{
+	WrapCheckVoid ( zXMPUtils_CatenateArrayItems_1 ( xmpObj.GetInternalRef(), schemaNS, arrayName, 
+													 separator, quotes, options, catedStr, SetClientString ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+SeparateArrayItems ( TXMPMeta<tStringObj> * xmpObj,
+					 XMP_StringPtr	schemaNS,
+					 XMP_StringPtr	arrayName,
+					 XMP_OptionBits options,
+					 XMP_StringPtr	catedStr )
+{
+	if ( xmpObj == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null output SXMPMeta pointer" );
+	WrapCheckVoid ( zXMPUtils_SeparateArrayItems_1 ( xmpObj->GetInternalRef(), schemaNS, arrayName, options, catedStr ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+SeparateArrayItems ( TXMPMeta<tStringObj> * xmpObj,
+					 XMP_StringPtr		schemaNS,
+					 XMP_StringPtr		arrayName,
+					 XMP_OptionBits		options,
+					 const tStringObj & catedStr )
+{
+	TXMPUtils::SeparateArrayItems ( xmpObj, schemaNS, arrayName, options, catedStr.c_str() );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+ApplyTemplate ( TXMPMeta<tStringObj> *       workingXMP,
+				const TXMPMeta<tStringObj> & templateXMP,
+				XMP_OptionBits               actions )
+{
+	if ( workingXMP == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null working SXMPMeta pointer" );
+	WrapCheckVoid ( zXMPUtils_ApplyTemplate_1 ( workingXMP->GetInternalRef(), templateXMP.GetInternalRef(), actions ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+RemoveProperties ( TXMPMeta<tStringObj> * xmpObj,
+				   XMP_StringPtr  schemaNS /* = 0 */,
+				   XMP_StringPtr  propName /* = 0 */,
+				   XMP_OptionBits options /* = 0 */ )
+{
+	if ( xmpObj == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null output SXMPMeta pointer" );
+	WrapCheckVoid ( zXMPUtils_RemoveProperties_1 ( xmpObj->GetInternalRef(), schemaNS, propName, options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+#if AdobePrivate
+XMP_MethodIntro(TXMPUtils,void)::
+AppendProperties ( const TXMPMeta<tStringObj> & source,
+				   TXMPMeta<tStringObj> *		dest,
+				   XMP_OptionBits options /* = 0 */ )
+{
+	if ( dest == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null output SXMPMeta pointer" );
+	WrapCheckVoid ( zXMPUtils_AppendProperties_1 ( source.GetInternalRef(), dest->GetInternalRef(), options ) );
+}
+#endif
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+DuplicateSubtree ( const TXMPMeta<tStringObj> & source,
+				   TXMPMeta<tStringObj> *		dest,
+				   XMP_StringPtr  sourceNS,
+				   XMP_StringPtr  sourceRoot,
+				   XMP_StringPtr  destNS /*= 0 */,
+				   XMP_StringPtr  destRoot /* = 0 */,
+				   XMP_OptionBits options /* = 0 */ )
+{
+	if ( dest == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null output SXMPMeta pointer" );
+	WrapCheckVoid ( zXMPUtils_DuplicateSubtree_1 ( source.GetInternalRef(), dest->GetInternalRef(),
+												   sourceNS, sourceRoot, destNS, destRoot, options ) );
+}
+
+#if AdobePrivate
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+	CollectMultiFileXMP ( const TXMPMeta<tStringObj> & inputXMP,
+	                      TXMPMeta<tStringObj> *       multiXMP,
+	                      XMP_OptionBits options /* = 0 */ )
+{
+	if ( multiXMP == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null output SXMPMeta pointer" );
+	WrapCheckVoid ( zCollectMultiFileXMP_1 ( inputXMP.GetInternalRef(), multiXMP->GetInternalRef(), options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+	DistributeMultiFileXMP ( const TXMPMeta<tStringObj> & multiXMP,
+		                     TXMPMeta<tStringObj> *       outputXMP,
+		                     XMP_OptionBits options /* = 0*/ )
+{
+	if ( outputXMP == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null output SXMPMeta pointer" );
+	WrapCheckVoid ( zDistributeMultiFileXMP_1 ( multiXMP.GetInternalRef(), outputXMP->GetInternalRef(), options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,bool)::
+	IsPropertyMultiValued ( const TXMPMeta<tStringObj> & multiXMP,
+	                        XMP_StringPtr propNS,
+	                        XMP_StringPtr propName )
+{
+	WrapCheckBool ( found, zIsPropertyMultiValued_1 ( multiXMP.GetInternalRef(), propNS, propName ) );
+	return found;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,bool)::
+	GetDateRange ( const TXMPMeta<tStringObj> & multiXMP,
+	               XMP_StringPtr  propNS,
+	               XMP_StringPtr  propName,
+	               XMP_DateTime * oldest,
+	               XMP_DateTime * newest )
+{
+	WrapCheckBool ( found, zGetDateRange_1 ( multiXMP.GetInternalRef(), propNS, propName, oldest, newest ) );
+	return found;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,bool)::
+	GetMergedListPath ( const TXMPMeta<tStringObj> & multiXMP,
+	                    XMP_StringPtr propNS,
+	                    XMP_StringPtr propName,
+	                    tStringObj *  mergedPath )
+{
+	WrapCheckBool ( found, zGetMergedListPath_1 ( multiXMP.GetInternalRef(), propNS, propName, mergedPath, SetClientString ) );
+	return found;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+	RemoveMultiValueInfo ( TXMPMeta<tStringObj> * multiXMP,
+	                       XMP_StringPtr propNS,
+	                       XMP_StringPtr propName )
+{
+	if ( multiXMP == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null output SXMPMeta pointer" );
+	WrapCheckVoid ( zRemoveMultiValueInfo_1 ( multiXMP->GetInternalRef(), propNS, propName ) );
+}
+
+#endif	// AdobePrivate
+
+// =================================================================================================
+
+#if AdobePrivate
+
+// Private utilities for performance optimization of the marker handling for temporal metadata.
+
+// -------------------------------------------------------------------------------------------------
+
+static void *
+AllocClientMarkers ( void * clientPtr, XMP_Index count )
+{
+	void * clientArray = 0;
+	
+	try {
+		std::vector<XMPDMO_MarkerInfo> * clientMarkers = (std::vector<XMPDMO_MarkerInfo> *) clientPtr;
+		XMPDMO_MarkerInfo emptyMarker;
+		clientMarkers->insert ( clientMarkers->end(), count, emptyMarker );
+		clientArray = &((*clientMarkers)[0]);
+	} catch ( ... ) {
+		clientArray = 0;
+	}
+	
+	return clientArray;
+	
+}
+
+// -------------------------------------------------------------------------------------------------
+
+static void *
+AllocClientCuePoints ( XMPDMO_MarkerInfo * clientMarker, XMP_Index count )
+{
+	void * clientArray = 0;
+	
+	try {
+		XMPDMO_CuePointInfo emptyCuePoint;
+		clientMarker->cuePointParams.insert ( clientMarker->cuePointParams.end(), count, emptyCuePoint );
+		clientArray = &(clientMarker->cuePointParams[0]);
+	} catch ( ... ) {
+		clientArray = 0;
+	}
+	
+	return clientArray;
+	
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,bool)::
+GetBulkMarkers ( const TXMPMeta<tStringObj> & xmp,
+				 XMP_StringPtr ns, XMP_StringPtr path,
+				 std::vector<XMPDMO_MarkerInfo> * clientMarkers )
+{
+	if ( clientMarkers == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null output DMO_MarkerInfo pointer" );
+	
+	clientMarkers->clear();
+	if ( ! xmp.DoesPropertyExist ( ns, path ) ) return false;
+	
+	WrapCheckBool ( found, zXMPUtils_GetBulkMarkers_1 ( xmp.GetInternalRef(), ns, path,
+														clientMarkers, sizeof(XMPDMO_MarkerInfo),
+														AllocClientMarkers, AllocClientCuePoints ) );
+
+	#if XMP_MARKER_EXTENSIBILITY_BACKWARD_COMPATIBILITY
+	if ( found && clientMarkers ) {
+		for ( size_t index = 0, endIndex = clientMarkers->size(); index < endIndex; index++ ) {
+			XMPDMO_MarkerInfo & markerRef = (*clientMarkers)[index];
+			if ( markerRef.extension && markerRef.extensionReleaseProc ) {
+				markerRef.spExtension = AdobeXMPCore::shared_ptr< void >( markerRef.extension, markerRef.extensionReleaseProc );
+			}
+		}
+	}
+	#endif
+
+	return found;
+
+}
+
+// -------------------------------------------------------------------------------------------------
+
+static void 
+GetCuePointParams ( const XMPDMO_MarkerInfo * marker,
+					const XMPDMO_CuePointInfo ** cpInfo,
+					XMP_Index * cpCount )
+{
+	*cpCount = (XMP_Index)marker->cuePointParams.size();
+	if ( *cpCount > 0 ) *cpInfo  = &(marker->cuePointParams[0]);
+}
+
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPUtils,void)::
+SetBulkMarkers ( TXMPMeta<tStringObj> * xmp,
+				 XMP_StringPtr ns, XMP_StringPtr path,
+				 const std::vector<XMPDMO_MarkerInfo> & markers )
+{
+	if ( xmp == 0 ) throw XMP_Error ( kXMPErr_BadParam, "Null output SXMPMeta pointer" );
+	XMP_Index count = (XMP_Index)markers.size();
+	if ( count > 0 ) {
+	    #if XMP_MARKER_EXTENSIBILITY_BACKWARD_COMPATIBILITY
+		for ( size_t index = 0, endIndex = markers.size(); index < endIndex; index++ ) {
+			XMPDMO_MarkerInfo & markerRef = const_cast <XMPDMO_MarkerInfo &>( markers[index] );
+			markerRef.extension = markerRef.spExtension.get(); 
+		}
+		#endif
+		WrapCheckVoid ( zXMPUtils_SetBulkMarkers_1 ( xmp->GetInternalRef(), ns, path, count,
+													 &markers[0], sizeof(XMPDMO_MarkerInfo), GetCuePointParams ) );
+	}
+}
+
+
+// -------------------------------------------------------------------------------------------------
+
+#endif	// AdobePrivate
+
+// =================================================================================================

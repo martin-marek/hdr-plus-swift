@@ -1,0 +1,148 @@
+// =================================================================================================
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2016 Adobe Systems Incorporated
+// All Rights Reserved
+//
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in accordance with the terms
+// of the Adobe license agreement accompanying it.
+// =================================================================================================
+
+//	================================================================================================
+/// \file TXMPAlbumArt.incl_cpp
+/// \brief The implementation of the TXMPAlbumArt template class.
+
+#include "XMP.hpp"
+#include "client-glue/WXMP_Common.hpp"
+#include <string.h>
+
+XMP_CTorDTorIntro(TXMPAlbumArt)::
+TXMPAlbumArt (  XMP_Uns8 _usageType /* = kXMPFiles_AlbumArt_Use_None */,
+				XMP_Uns8 _formatType /* = kXMPFiles_AlbumArt_NoFormat */,
+				tStringObj _description /* = tStringObj() */,
+				XMP_Uns8 _encodingType /* = kXMPFiles_AlbumArt_Enc_UTF8 */ )
+{
+	this->imageLength = 0;
+	this->usageType = _usageType;
+	this->formatType = _formatType;
+	this->description = _description;
+	this->encodingType = _encodingType;
+	this->imageData = NULL;
+	this->isLocalCopy = false;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_CTorDTorIntro(TXMPAlbumArt)::
+TXMPAlbumArt (  XMP_Uns32 _imageLength,
+				XMP_BinaryData _imageData,
+				XMP_Bool createCopy /* = false */,
+				XMP_Uns8 _usageType /* = kXMPFiles_AlbumArt_Use_None */,
+				XMP_Uns8 _formatType /* = kXMPFiles_AlbumArt_NoFormat */,
+				tStringObj _description /* = tStringObj() */,
+				XMP_Uns8 _encodingType /* = kXMPFiles_AlbumArt_Enc_UTF8 */ )
+{
+	this->usageType = _usageType;
+	this->formatType = _formatType;
+	this->description = _description;
+	this->encodingType = _encodingType;
+	this->isLocalCopy = false;
+	this->SetImageData( _imageLength, _imageData , createCopy );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPAlbumArt,XMP_Uns32)::
+GetImageData ( XMP_BinaryData * data /* = NULL */ )
+{
+	if ( data != NULL )
+		*data = this->imageData;
+	return this->imageLength; 
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPAlbumArt,void)::
+SetImageData ( const XMP_Uns32 & length ,XMP_BinaryData data , bool createCopy /* = false */ )
+{
+	// Deallocating the already allocated memory for image data
+	if( this->isLocalCopy && this->imageData != NULL )
+	{
+		delete [] this->imageData;
+		this->imageData = NULL;
+		this->imageLength = 0;
+	}
+	
+	this->isLocalCopy = false;
+
+	if ( length != 0 && data != NULL)
+	{
+		if( createCopy )
+		{
+			this->imageLength = length;
+			this->imageData = new XMP_Uns8[imageLength];
+			memcpy( this->imageData, data, imageLength );
+			this->isLocalCopy = true;
+		}
+		else
+		{
+			this->imageData = data;
+			this->imageLength = length;
+		}
+	}
+	else
+	{
+		this->imageData = NULL;
+		this->imageLength = 0;
+		if( createCopy )
+			throw XMP_Error ( kXMPErr_BadParam, "Invalid required arguments" );
+	}
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_CTorDTorIntro(TXMPAlbumArt)::
+TXMPAlbumArt ( const TXMPAlbumArt<tStringObj> & original )
+{
+	this->usageType = original.usageType;
+	this->formatType = original.formatType;
+	this->description = original.description;
+	this->encodingType = original.encodingType;
+	this->isLocalCopy = false;
+	if(original.imageLength != 0 && original.imageData != NULL)
+		this->SetImageData( original.imageLength, original.imageData, true );
+	else
+		this->SetImageData( original.imageLength, original.imageData, false );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPAlbumArt,void)::
+operator= ( const TXMPAlbumArt<tStringObj> & rhs )
+{
+	this->usageType = rhs.usageType;
+	this->formatType = rhs.formatType;
+	this->description = rhs.description;
+	this->encodingType = rhs.encodingType;
+	this->isLocalCopy = false;
+	if(rhs.imageLength != 0 && rhs.imageData != NULL)
+		this->SetImageData( rhs.imageLength, rhs.imageData, true );
+	else
+		this->SetImageData( rhs.imageLength, rhs.imageData, false );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_CTorDTorIntro(TXMPAlbumArt)::
+~TXMPAlbumArt ( )
+{
+	if ( isLocalCopy && this->imageData != NULL )
+	{
+		delete[] this->imageData;
+		this->imageData = 0;
+	}
+}
+
+// -------------------------------------------------------------------------------------------------
+
+
+// =================================================================================================

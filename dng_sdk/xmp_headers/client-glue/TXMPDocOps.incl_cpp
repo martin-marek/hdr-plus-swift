@@ -1,0 +1,400 @@
+#if AdobePrivate	// The whole class is private for now.
+
+// =================================================================================================
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2002 Adobe Systems Incorporated
+// All Rights Reserved
+//
+// NOTICE: Adobe permits you to use, modify, and distribute this file in accordance with the terms
+// of the Adobe license agreement accompanying it.
+// =================================================================================================
+
+#if AdobePrivate
+// =================================================================================================
+// Change history
+// ==============
+//
+// Writers:
+// AWL Alan Lillich
+//
+// mm-dd-yy who Description of changes, most recent on top
+//
+// 07-22-09 AWL 5.0-c048 [2381643] Properly fix memory leaks from XMPDocOps::Clone.
+// 07-17-09 AWL [2381643] Fix memory leaks from XMPDocOps::Clone (client-only fix).
+// 05-21-09 AWL 5.0-c032 Revamp glue again to pass SetClientString with each function.
+// 05-19-09 AWL 5.0-c031 First part of threading improvements, revamp the client glue.
+//
+// 04-24-08 AWL 4.2.2-c051 [1765983] Add SXMPDocOps::IsDirty overload to return reason mask.
+//
+// 02-22-08 AWL 4.2-c041 Add routines to SXMPDocOps - EnsureIDsExist, IsDirty, Clone, and GetMetaRef.
+// 12-10-07 AWL Change name of fileType params to mimeType.
+// 12-03-07 AWL 4.2-c028 Change file type parameters in XMPDocOps from XMP_FileFormat enum to a MIME string.
+// 11-12-07 AWL 4.2-c026 More progress implementing XMPDocOps.
+// 11-07-07 AWL 4.2-c025 More progress implementing XMPDocOps.
+// 11-05-07 AWL Add type casts to avoid client compiler warnings.
+// 10-31-07 AWL 4.2-c023 Add new class XMPDocOps.
+//
+// =================================================================================================
+#endif // AdobePrivate
+
+// =================================================================================================
+/// \file TXMPDocOps.hpp
+/// \brief Services to support application "document operations".
+///
+/// @details \c TXMPDocOps is the template class providing services in support of common operations to
+/// application documents. These services implement XMP policy that needs to be consistent across
+/// applications. The template must be instantiated with a string class such as \c std::string. See
+/// the instructions in XMP.hpp, and the Overview for a discussion of the overall architecture of
+/// the XMP API.
+// =================================================================================================
+
+// =================================================================================================
+/// \file TXMPDocOps.incl_cpp
+/// \brief The implementation of the TXMPDocOps template class.
+
+#if XMP_WinBuild
+	#pragma warning ( disable : 4003 )	// not enough actual parameters for macro
+	#pragma warning ( disable : 4800 )	// forcing value to bool 'true' or 'false' (performance warning)
+#endif
+
+#include "client-glue/WXMP_Common.hpp"
+#include "client-glue/WXMPDocOps.hpp"
+
+// =================================================================================================
+// Implementation Guidelines
+// =========================
+//
+// The implementations of the template functions are very stylized. ...
+//
+// =================================================================================================
+
+#ifndef XMPDocOps_TraceCTorDTor
+	#define XMPDocOps_TraceCTorDTor 0
+#endif
+
+#if XMPDocOps_TraceCTorDTor
+	class XFPeek {	// Hack to peek at the client ref count in the internal object.
+	public:
+		XFPeek();
+		virtual ~XFPeek();
+		XMP_Int32 clientRefs;
+	};
+#endif
+
+// =================================================================================================
+
+static XMPDocOpsRef DocOps_CTor()
+{
+	WrapCheckDocOpsRef ( newRef, zXMPDocOps_CTor_1() );
+	return newRef;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+SetClientString ( void * clientPtr, XMP_StringPtr valuePtr, XMP_StringLen valueLen )
+{
+	tStringObj * clientStr = (tStringObj*) clientPtr;
+	clientStr->assign ( valuePtr, valueLen );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_CTorDTorIntro(TXMPDocOps)::
+TXMPDocOps() : xmpDocRef(DocOps_CTor())
+{
+	#if XMPDocOps_TraceCTorDTor
+		XFPeek* xfPtr = (XFPeek*)this->xmpDocRef;
+		printf ( "Default construct TXMPDocOps @ %.8X, ref = %.8X, count = %d\n", this, xfPtr, xfPtr->clientRefs );
+	#endif
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_CTorDTorIntro(TXMPDocOps)::
+TXMPDocOps ( const TXMPDocOps<tStringObj> & original ) : xmpDocRef(original.xmpDocRef)
+{
+	WXMPDocOps_IncrementRefCount_1 ( this->xmpDocRef );
+	#if XMPDocOps_TraceCTorDTor
+		XFPeek* xfPtr = (XFPeek*)this->xmpDocRef;
+		printf ( "Copy construct TXMPDocOps @ %.8X, ref = %.8X, count = %d\n", this, xfPtr, xfPtr->clientRefs );
+	#endif
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_CTorDTorIntro(TXMPDocOps)::
+TXMPDocOps ( XMPDocOpsRef _xmpDocRef ) : xmpDocRef(_xmpDocRef)
+{
+	WXMPDocOps_IncrementRefCount_1 ( this->xmpDocRef );
+	#if XMPDocOps_TraceCTorDTor
+		XFPeek* xfPtr = (XFPeek*)this->xmpDocRef;
+		printf ( "Ref construct TXMPDocOps @ %.8X, ref = %.8X, count = %d\n", this, xfPtr, xfPtr->clientRefs );
+	#endif
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_CTorDTorIntro(TXMPDocOps)::
+~TXMPDocOps () throw()
+{
+	#if XMPDocOps_TraceCTorDTor
+		XFPeek* xfPtr = (XFPeek*)this->xmpDocRef;
+		printf ( "Destruct TXMPDocOps @ %.8X, ref= %.8X, count = %d\n", this, xfPtr, xfPtr->clientRefs );
+	#endif
+	WXMPDocOps_DecrementRefCount_1 ( this->xmpDocRef );
+	this->xmpDocRef = 0;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+operator= ( const TXMPDocOps<tStringObj> & rhs )
+{
+	#if XMPDocOps_TraceCTorDTor
+		XFPeek* xfLHS = (XFPeek*)this->xmpDocRef;
+		XFPeek* xfRHS = (XFPeek*)rhs.xmpDocRef;
+		printf ( "Assign TXMPDocOps, lhs @ %.8X, rhs @ %.8X\n", this, &rhs );
+		printf ( "   original lhs ref = %.8X, count = %d\n", xfLHS, xfLHS->clientRefs );
+		printf ( "   original rhs ref = %.8X, count = %d\n", xfRHS, xfRHS->clientRefs );
+	#endif
+	XMPDocOpsRef oldRef = this->xmpDocRef;				// ! Decrement last so errors leave client object OK.
+	this->xmpDocRef = rhs.xmpDocRef;
+	WXMPDocOps_IncrementRefCount_1 ( this->xmpDocRef );	// Increment the count on the new ref.
+	WXMPDocOps_DecrementRefCount_1 ( oldRef );			// Decrement the count on the old ref.
+	#if XMPDocOps_TraceCTorDTor
+		printf ( "   result   lhs ref = %.8X, count = %d\n", xfLHS, xfLHS->clientRefs );
+	#endif
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,XMPDocOpsRef)::
+GetInternalRef()
+{
+	return this->xmpDocRef;
+}
+
+// =================================================================================================
+
+XMP_MethodIntro(TXMPDocOps,void)::
+SetAppName ( XMP_StringPtr in_appName )
+{
+	WrapCheckVoid ( zXMPDocOps_SetAppName_1 ( in_appName ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+NewXMP ( TXMPMeta<tStringObj> * inout_docXMP,
+		 XMP_StringPtr  in_mimeType /* = "" */,
+		 XMP_OptionBits in_options  /* = kXMP_NoOptions */ )
+{
+	WrapCheckVoid ( zXMPDocOps_NewXMP_1 ( inout_docXMP->GetInternalRef(), in_mimeType, in_options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+OpenXMP ( TXMPMeta<tStringObj> * inout_docXMP,
+		  XMP_StringPtr  in_mimeType,
+		  XMP_OptionBits in_options /* = kXMP_NoOptions */ )
+{
+	WrapCheckVoid ( zXMPDocOps_OpenXMP_1 ( inout_docXMP->GetInternalRef(),
+										   in_mimeType, 0, 0, in_options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+OpenXMP ( TXMPMeta<tStringObj> * inout_docXMP,
+		  XMP_StringPtr  in_mimeType,
+		  XMP_StringPtr  in_filePath,
+		  XMP_OptionBits in_options /* = kXMP_NoOptions */ )
+{
+	WrapCheckVoid ( zXMPDocOps_OpenXMP_1 ( inout_docXMP->GetInternalRef(),
+										   in_mimeType, in_filePath, 0, in_options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+OpenXMP ( TXMPMeta<tStringObj> * inout_docXMP,
+		  XMP_StringPtr  in_mimeType,
+		  XMP_StringPtr  in_filePath,
+		  XMP_DateTime & in_fileModTime,
+		  XMP_OptionBits in_options /* = kXMP_NoOptions */ )
+{
+	WrapCheckVoid ( zXMPDocOps_OpenXMP_1 ( inout_docXMP->GetInternalRef(),
+										   in_mimeType, in_filePath, &in_fileModTime, in_options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+BranchXMP ( TXMPDocOps<tStringObj> * inout_derivedDoc,
+			TXMPMeta<tStringObj> * inout_derivedXMP,
+			XMP_StringPtr  in_mimeType,
+		    XMP_OptionBits in_options /* = kXMP_NoOptions */ )
+{
+	XMPMetaRef derivedRef = 0;
+	if ( inout_derivedXMP != 0 ) derivedRef = inout_derivedXMP->GetInternalRef();
+	WrapCheckVoid ( zXMPDocOps_BranchXMP_1 ( inout_derivedDoc->GetInternalRef(),
+											 derivedRef, in_mimeType, in_options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+PrepareForSave ( XMP_StringPtr  in_mimeType,
+				 XMP_OptionBits in_options /* = kXMP_NoOptions */ )
+{
+	WrapCheckVoid ( zXMPDocOps_PrepareForSave_1 ( in_mimeType, 0, 0, in_options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+PrepareForSave ( XMP_StringPtr  in_mimeType,
+				 XMP_StringPtr  in_filePath,
+				 XMP_OptionBits in_options /* = kXMP_NoOptions */ )
+{
+	WrapCheckVoid ( zXMPDocOps_PrepareForSave_1 ( in_mimeType, in_filePath, 0, in_options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+PrepareForSave ( XMP_StringPtr  in_mimeType,
+				 XMP_StringPtr  in_filePath,
+				 XMP_DateTime & in_fileModTime,
+				 XMP_OptionBits in_options /* = kXMP_NoOptions */ )
+{
+	WrapCheckVoid ( zXMPDocOps_PrepareForSave_1 ( in_mimeType, in_filePath, &in_fileModTime, in_options ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+NoteChange ( XMP_StringPtr in_part )
+{
+	WrapCheckVoid ( zXMPDocOps_NoteChange_1 ( &in_part, 1 ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+NoteChange ( std::vector<XMP_StringPtr> & in_parts )
+{
+	WrapCheckVoid ( zXMPDocOps_NoteChange_1 ( &in_parts[0], (XMP_Index)in_parts.size() ) );
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,void)::
+CreateID ( tStringObj * out_xmpID, XMP_StringPtr prefix /* = "xmp.id" */ )
+{
+	if ( out_xmpID == 0 ) return;
+	WrapCheckVoid ( zXMPDocOps_CreateID_1 ( prefix, out_xmpID, SetClientString ) );
+}
+
+// =================================================================================================
+
+XMP_MethodIntro(TXMPDocOps,XMP_TriState)::
+HasPartChanged ( XMP_StringPtr in_prevInstanceID,
+				 XMP_StringPtr in_partName ) const
+{
+	WrapCheckTriState ( state, zXMPDocOps_HasPartChanged_1 ( in_prevInstanceID, &in_partName, 1 ) );
+	return state;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,XMP_TriState)::
+HasPartChanged ( XMP_StringPtr in_prevInstanceID,
+				 std::vector<XMP_StringPtr> & in_partNames ) const
+{
+	WrapCheckTriState ( state, zXMPDocOps_HasPartChanged_1 ( in_prevInstanceID,
+															 &in_partNames[0], (XMP_Index)in_partNames.size() ) );
+	return state;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,bool)::
+GetPartChangeID ( XMP_StringPtr in_partName,
+				  tStringObj *  out_instanceID ) const
+{
+	if ( out_instanceID == 0 ) return false;
+	WrapCheckBool ( found, zXMPDocOps_GetPartChangeID_1 ( &in_partName, 1, out_instanceID, SetClientString ) );
+	return found;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,bool)::
+GetPartChangeID ( std::vector<XMP_StringPtr> & in_partNames,
+				  tStringObj * out_instanceID ) const
+{
+	if ( out_instanceID == 0 ) return false;
+	WrapCheckBool ( found, zXMPDocOps_GetPartChangeID_1 ( &in_partNames[0], (XMP_Index)in_partNames.size(), out_instanceID, SetClientString ) );
+	return found;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,bool)::
+EnsureIDsExist ( XMP_OptionBits options )
+{
+	WrapCheckBool ( newIDs, zXMPDocOps_EnsureIDsExist_1 ( options ) );
+	return newIDs;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,bool)::
+IsDirty() const
+{
+	WrapCheckBool ( isDirty, zXMPDocOps_IsDirty_1 ( 0 ) );
+	return isDirty;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,bool)::
+IsDirty ( XMP_OptionBits * reasons ) const
+{
+	WrapCheckBool ( isDirty, zXMPDocOps_IsDirty_1 ( reasons ) );
+	return isDirty;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,TXMPDocOps<tStringObj>)::
+Clone ( XMP_OptionBits options ) const
+{
+	WrapCheckDocOpsRef ( cloneRef, zXMPDocOps_Clone_1 ( options ) );
+	return TXMPDocOps<tStringObj> ( cloneRef );	// Ref construct will increment the clientRefs.
+}
+
+// -------------------------------------------------------------------------------------------------
+
+XMP_MethodIntro(TXMPDocOps,XMPMetaRef)::
+GetMetaRef() const
+{
+	WrapCheckMetaRef ( metaRef, zXMPDocOps_GetMetaRef_1() );
+	return metaRef;
+}
+
+// -------------------------------------------------------------------------------------------------
+#if XMP_AndroidBuild
+XMP_MethodIntro(TXMPDocOps,void)::
+SetJVM(JavaVM* jvm)
+{
+    WrapCheckVoid ( zXMPDocOps_SetJVM_1(jvm) );
+    
+}
+#endif
+// =================================================================================================
+
+#endif	// AdobePrivate
