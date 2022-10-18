@@ -34,7 +34,7 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 
 # TODO
 - [ ] Fix progressbar getting stuck loading the first image
-- [ ] ARM support – requires recompiling Adobe DNG SDK
+- [ ] ARM build – requires recompiling Adobe DNG SDK
 - [ ] 32-bit output - how can this be achieved in Adobe DNG SDK?
 - [ ] super-resolution
 
