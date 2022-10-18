@@ -25,6 +25,8 @@ struct burstphotoApp: App {
         WindowGroup {
             ContentView()
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willUpdateNotification), perform: { _ in disable_window_resizing()})
+                .onAppear {initialize_xmp_sdk()}
+                .onDisappear {terminate_xmp_sdk()}
         }
         .windowStyle(HiddenTitleBarWindowStyle())
         .commands {

@@ -7,6 +7,10 @@
 extern "C" {
 #endif
 
+    // initialize / terminate Adobe XMP SDK
+    void initialize_xmp_sdk();
+    void terminate_xmp_sdk();
+
     // function to read a dng image and store its pixel values
     int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height);
 

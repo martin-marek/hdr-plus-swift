@@ -7,15 +7,22 @@
 #include "dng_info.h"
 #include "dng_negative.h"
 #include "dng_simple_image.h"
-// #include "dng_xmp_sdk.h"
+#include "dng_xmp_sdk.h"
+
+
+void initialize_xmp_sdk() {
+    dng_xmp_sdk::InitializeSDK();
+}
+
+
+void terminate_xmp_sdk() {
+    dng_xmp_sdk::TerminateSDK();
+}
 
 
 int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height) {
     
     try {
-        
-        // initialize the sdk
-        // dng_xmp_sdk::InitializeSDK();
         
         // read image
         dng_host host;
@@ -51,12 +58,8 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
         *pixel_bytes_pointer = pixel_bytes;
         memcpy(pixel_bytes, pixel_buffer.DirtyPixel(0, 0), image_size);
         
-        // terminate the sdk
-        // dng_xmp_sdk::TerminateSDK();
-        
     }
     catch(...) {
-        // dng_xmp_sdk::TerminateSDK();
         return 1;
     }
     return 0;
@@ -65,9 +68,6 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
 int write_image(const char *in_path, const char *out_path, void** pixel_bytes_pointer) {
     
     try {
-        
-        // initialize the sdk
-        // dng_xmp_sdk::InitializeSDK();
         
         // read image
         dng_host host;
@@ -117,13 +117,9 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
             dng_image_writer writer;
             writer.WriteDNG(host, stream2, *negative.Get());
         }
-        
-        // terminate the sdk
-        // dng_xmp_sdk::TerminateSDK();
 
     }
     catch(...) {
-        // dng_xmp_sdk::TerminateSDK();
         return 1;
     }
     return 0;
