@@ -31,12 +31,14 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 - [x] robust merge
 - [x] mutli-threaded image loading
 - [x] align+merge running in pure Metal
+- [x] full ARM / x86 support (in main brach, not yet released)
 
 # TODO
-- [ ] Fix progressbar getting stuck loading the first image
-- [ ] ARM build – requires recompiling Adobe DNG SDK
-- [ ] 32-bit output - how can this be achieved in Adobe DNG SDK?
+- [ ] fix occasional color artifacts (under investigation)
+- [ ] preserve lens profiles
 - [ ] super-resolution
+- [ ] fix progressbar getting stuck loading the first image
+- [ ] 32-bit output - how can this be achieved in Adobe DNG SDK?
 
 Please feel free to contribute to any of these features or suggest other features.
 
