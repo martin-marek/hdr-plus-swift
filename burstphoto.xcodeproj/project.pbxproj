@@ -1426,7 +1426,7 @@
 				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/bridging_header.h;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				XMP_COMMON_FLAGS = "ENABLE_CPP_DOM_MODEL=0 XML_STATIC=1 HAVE_EXPAT_CONFIG_H=1 XMP_StaticBuild=1 XMP_64=1";
-				XMP_LIB_FLAGS = "-lXMPFilesStaticDebug -lXMPCoreStaticDebug";
+				XMP_LIB_FLAGS = "-lXMPFilesStatic$(DNG_SDK_BUILD_MODE) -lXMPCoreStatic$(DNG_SDK_BUILD_MODE)";
 				XMP_LIB_PATH = dng_sdk/xmp_lib;
 			};
 			name = Debug;
@@ -1501,7 +1501,7 @@
 				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/bridging_header.h;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				XMP_COMMON_FLAGS = "ENABLE_CPP_DOM_MODEL=0 XML_STATIC=1 HAVE_EXPAT_CONFIG_H=1 XMP_StaticBuild=1 XMP_64=1";
-				XMP_LIB_FLAGS = "-lXMPFilesStaticDebug -lXMPCoreStaticDebug";
+				XMP_LIB_FLAGS = "-lXMPFilesStatic$(DNG_SDK_BUILD_MODE) -lXMPCoreStatic$(DNG_SDK_BUILD_MODE)";
 				XMP_LIB_PATH = dng_sdk/xmp_lib;
 			};
 			name = Release;
