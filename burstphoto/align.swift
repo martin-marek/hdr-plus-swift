@@ -35,23 +35,23 @@ let mfl = device.makeDefaultLibrary()!
 
 
 // compile metal functions / pipelines
+let fill_with_zeros_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros")!)
+let texture_uint16_to_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "texture_uint16_to_float")!)
+let add_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture")!)
+let add_textures_weighted_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_textures_weighted")!)
 let upsample_nearest_int_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_nearest_int")!)
-let upsample_nearest_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_nearest_float")!)
-let upsample_bilinear_int_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_bilinear_int")!)
+let upsample_bilinear_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_bilinear_float")!)
 let avg_pool_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "avg_pool")!)
 let average_texture_sums_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_texture_sums")!)
 let compute_tile_differences_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences")!)
 let compute_tile_alignments_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_alignments")!)
 let warp_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture")!)
-let add_textures_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_textures")!)
-let add_textures_weighted_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_textures_weighted")!)
 let blur_bayer_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_bayer_x")!)
 let blur_bayer_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_bayer_y")!)
 let color_difference_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "color_difference")!)
 let average_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y")!)
 let average_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x")!)
 let compute_merge_weight_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_merge_weight")!)
-let fill_with_zeros_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros")!)
 
 
 func get_threads_per_thread_group(_ state: MTLComputePipelineState, _ threads_per_grid: MTLSize) -> MTLSize {
@@ -69,7 +69,45 @@ func get_threads_per_thread_group(_ state: MTLComputePipelineState, _ threads_pe
     }
 }
 
-func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String, type: String) -> MTLTexture {
+
+func fill_with_zeros(_ texture: MTLTexture) {
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = fill_with_zeros_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: texture.width, height: texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(texture, index: 0)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+}
+
+
+func texture_uint16_to_float(_ in_texture: MTLTexture) -> MTLTexture {
+    // create out texture
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: in_texture.width, height: in_texture.height, mipmapped: false)
+    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    
+    // run kernel
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = texture_uint16_to_float_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(out_texture, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    return out_texture
+}
+
+
+func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String) -> MTLTexture {
     // Metal has a built-in function for texture resizing but it doesn't support uint pixels
     // hence I wrote this function, which support *only* uint pixels
     
@@ -85,18 +123,14 @@ func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String
     // run the metal kernel
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    var state = upsample_nearest_int_state // unused initialization value
-    if mode == "nearest" && type == "int" {state = upsample_nearest_int_state}
-    if mode == "nearest" && type == "float" {state = upsample_nearest_float_state}
-    if mode == "bilinear" && type == "int" {state = upsample_bilinear_int_state}
+    let state = mode == "bilinear" ? upsample_bilinear_float_state : upsample_nearest_int_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(input_texture, index: 0)
     command_encoder.setTexture(output_texture, index: 1)
-    let params_array = [Float32(scale_x), Float32(scale_y)]
-    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Float32>.size, options: .storageModeShared)
-    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Float32(scale_x)], length: MemoryLayout<Float32>.stride, index: 0)
+    command_encoder.setBytes([Float32(scale_y)], length: MemoryLayout<Float32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -148,9 +182,7 @@ func average_texture_sums(_ input_texture: MTLTexture, _ n: Int) -> MTLTexture {
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(input_texture, index: 0)
     command_encoder.setTexture(output_texture, index: 1)
-    let params_array = [Int32(n)]
-    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Float32>.size, options: .storageModeShared)
-    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(n)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -188,7 +220,7 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     // create a 'tile difference' texture
     let texture_descriptor = MTLTextureDescriptor()
     texture_descriptor.textureType = .type3D
-    texture_descriptor.pixelFormat = .r32Uint
+    texture_descriptor.pixelFormat = .r32Float
     texture_descriptor.width = tile_info.n_tiles_x
     texture_descriptor.height = tile_info.n_tiles_y
     texture_descriptor.depth = tile_info.n_pos_2d
@@ -202,13 +234,15 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: tile_info.n_pos_2d)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    let params_array = [Int32(downscale_factor), Int32(tile_info.tile_size), Int32(tile_info.search_dist), Int32(tile_info.n_tiles_x), Int32(tile_info.n_tiles_y)]
-    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Int32>.size, options: .storageModeShared)
     command_encoder.setTexture(ref_layer, index: 0)
     command_encoder.setTexture(comp_layer, index: 1)
     command_encoder.setTexture(prev_alignment, index: 2)
     command_encoder.setTexture(tile_diff, index: 3)
-    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(downscale_factor)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(tile_info.search_dist)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(tile_info.n_tiles_x)], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.setBytes([Int32(tile_info.n_tiles_y)], length: MemoryLayout<Int32>.stride, index: 4)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -224,12 +258,11 @@ func compute_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLTextur
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    let params_array = [Int32(downscale_factor), Int32(tile_info.search_dist)]
-    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Int32>.size, options: .storageModeShared)
     command_encoder.setTexture(tile_diff, index: 0)
     command_encoder.setTexture(prev_alignment, index: 1)
     command_encoder.setTexture(current_alignment, index: 2)
-    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(downscale_factor)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(tile_info.search_dist)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -250,12 +283,13 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: texture_to_warp.width, height: texture_to_warp.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    let params_array = [Int32(downscale_factor), Int32(tile_info.tile_size), Int32(tile_info.n_tiles_x), Int32(tile_info.n_tiles_y)]
-    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Int32>.size, options: .storageModeShared)
     command_encoder.setTexture(texture_to_warp, index: 0)
     command_encoder.setTexture(warped_texture, index: 1)
     command_encoder.setTexture(alignment, index: 2)
-    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(downscale_factor)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(tile_info.n_tiles_x)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(tile_info.n_tiles_y)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -264,28 +298,20 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile
 }
 
 
-func add_textures(_ texture1: MTLTexture, _ texture2: MTLTexture, pixel_format: MTLPixelFormat = .r32Uint) -> MTLTexture {
-    
-    // create the output texture
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: pixel_format, width: texture1.width, height: texture1.height, mipmapped: false)
-    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+func add_texture(_ texture1: MTLTexture, _ texture2: MTLTexture) {
     
     // add textures
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = add_textures_state
+    let state = add_texture_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: texture1.width, height: texture1.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(texture1, index: 0)
     command_encoder.setTexture(texture2, index: 1)
-    command_encoder.setTexture(out_texture, index: 2)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
-    
-    return out_texture
 }
 
 
@@ -329,11 +355,9 @@ func blur_bayer_texture(_ in_texture: MTLTexture, _ kernel_size: Int) -> MTLText
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    let params_array = [Int32(kernel_size)]
-    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Int32>.size, options: .storageModeShared)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(blur_x, index: 1)
-    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(kernel_size)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
 
     // blur the texture along the y-axis
@@ -341,7 +365,6 @@ func blur_bayer_texture(_ in_texture: MTLTexture, _ kernel_size: Int) -> MTLText
     command_encoder.setComputePipelineState(state2)
     command_encoder.setTexture(blur_x, index: 0)
     command_encoder.setTexture(blur_xy, index: 1)
-    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     
     command_encoder.endEncoding()
@@ -457,29 +480,12 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     command_buffer.commit()
     
     // upsample merge weight to full image resolution
-    let weight_texture_upsampled = upsample(weight_texture, width: ref_texture.width, height: ref_texture.height, mode: "nearest", type: "float")
+    let weight_texture_upsampled = upsample(weight_texture, width: ref_texture.width, height: ref_texture.height, mode: "bilinear")
     
     // average the input textures based on the weight
     let output_texture = add_textures_weighted(ref_texture, comp_texture, weight_texture_upsampled)
     
     return output_texture
-}
-
-
-func fill_with_zeros(_ texture: MTLTexture) {
-    // a new MTLTexture *should* be initialized with zeros...
-    // but testing build 1.0.5 on Majka's macbook revelead that this
-    // may fail when repeatedly drag-and-dropping the same burst
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = fill_with_zeros_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: texture.width, height: texture.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(texture, index: 0)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
 }
 
 
@@ -550,10 +556,15 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     
     // load images
     var t = DispatchTime.now().uptimeNanoseconds
-    let (textures, mosaic_pettern_width) = try load_images(image_urls, progress)
-    let ref_texture = textures[ref_idx]
+    var (textures, mosaic_pettern_width) = try load_images(image_urls, progress)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     let t0 = DispatchTime.now().uptimeNanoseconds
+    
+    // convert images from uint16 to float16
+    textures = textures.map{texture_uint16_to_float($0)}
+    
+    // set reference texture
+    let ref_texture = textures[ref_idx]
     
     // set the maximum resolution of the smallest pyramid layer
     let search_distance_dict = [
@@ -585,16 +596,16 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     let noise_sd = estimate_color_noise(ref_texture, ref_texture_blurred)
     
     // create an empty output texture
-    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Uint, width: ref_texture.width, height: ref_texture.height, mipmapped: false)
+    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: ref_texture.width, height: ref_texture.height, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    var output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
+    let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
     fill_with_zeros(output_texture)
 
     // iterate over comparison images
     for comp_idx in 0..<image_urls.count {
         // add the reference texture to the output
         if comp_idx == ref_idx {
-            output_texture = add_textures(ref_texture, output_texture)
+            add_texture(ref_texture, output_texture)
             DispatchQueue.main.async { progress.int += 1 }
             continue
         }
@@ -641,7 +652,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
             } else {
                 downscale_factor = 0
             }
-            prev_alignment = upsample(current_alignment, width: n_tiles_x, height: n_tiles_y, mode: "bilinear", type: "int")
+            prev_alignment = upsample(current_alignment, width: n_tiles_x, height: n_tiles_y, mode: "nearest")
             current_alignment = texture_like(prev_alignment)
             
             // compute tile differences
@@ -660,7 +671,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
         let merged_texture = robust_merge(ref_texture, ref_texture_blurred, aligned_texture, kernel_size, robustness, noise_sd)
         
         // add robust-merged texture to the output image
-        output_texture = add_textures(merged_texture, output_texture)
+        add_texture(merged_texture, output_texture)
         
         // sync GUI progress
         DispatchQueue.main.async { progress.int += 1 }
