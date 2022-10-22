@@ -49,7 +49,7 @@ let blur_bayer_x_state = try! device.makeComputePipelineState(function: mfl.make
 let blur_bayer_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_bayer_y")!)
 let color_difference_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "color_difference")!)
 let average_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y")!)
-let sum_1d_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_1d")!)
+let average_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x")!)
 let compute_merge_weight_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_merge_weight")!)
 let fill_with_zeros_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros")!)
 
@@ -375,7 +375,7 @@ func color_difference(_ texture1: MTLTexture, _ texture2: MTLTexture) -> MTLText
 }
 
 
-func texture_mean(_ in_texture: MTLTexture) -> Float {
+func texture_mean(_ in_texture: MTLTexture) -> MTLBuffer {
     
     // create a 1d texture that will contain the averages of the input texture along the x-axis
     let texture_descriptor = MTLTextureDescriptor()
@@ -385,7 +385,7 @@ func texture_mean(_ in_texture: MTLTexture) -> Float {
     texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let avg_y = device.makeTexture(descriptor: texture_descriptor)!
     
-    // average the input texture along the x-axis
+    // average the input texture along the y-axis
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = average_y_state
@@ -396,36 +396,24 @@ func texture_mean(_ in_texture: MTLTexture) -> Float {
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(avg_y, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    
+    // average the generated 1d texture along the x-axis
+    let state2 = average_x_state
+    command_encoder.setComputePipelineState(state2)
+    let avg_buffer = device.makeBuffer(length: MemoryLayout<Float32>.size, options: .storageModeShared)!
+    command_encoder.setTexture(avg_y, index: 0)
+    command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
     
-    // sum up the generated 1d texture along the y-axis
-    var sum: UInt32 = 0
-    let command_buffer2 = command_queue.makeCommandBuffer()!
-    let command_encoder2 = command_buffer2.makeComputeCommandEncoder()!
-    let state2 = sum_1d_state
-    command_encoder2.setComputePipelineState(state2)
-    let params_buffer = device.makeBuffer(bytes: &sum, length: MemoryLayout<UInt32>.size, options: .storageModeShared)
-    command_encoder2.setTexture(avg_y, index: 0)
-    command_encoder2.setBuffer(params_buffer, offset: 0, index: 0)
-    command_encoder2.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder2.endEncoding()
-    command_buffer2.commit()
-    command_buffer2.waitUntilCompleted()
-    
-    // copy data from MTLBuffer back to the local variable 'sum'
-    let nsData = NSData(bytesNoCopy: params_buffer!.contents(), length: params_buffer!.length, freeWhenDone: false)
-    nsData.getBytes(&sum, length:params_buffer!.length)
-    
-    // average the sum along y-axis
-    let avg: Float = Float(sum) / Float(in_texture.width)
-    
     // return the average of all pixels in the input array
-    return avg
+    return avg_buffer
 }
 
 
-func estimate_color_noise(_ texure: MTLTexture, _ texture_blurred: MTLTexture) -> Float {
+func estimate_color_noise(_ texure: MTLTexture, _ texture_blurred: MTLTexture) -> MTLBuffer {
     
     // compute the color difference of each rggb superpixel between the original and the blurred texture
     let texture_diff = color_difference(texure, texture_blurred)
@@ -437,7 +425,7 @@ func estimate_color_noise(_ texure: MTLTexture, _ texture_blurred: MTLTexture) -
 }
 
 
-func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, _ comp_texture: MTLTexture, _ kernel_size: Int, _ robustness: Double, _ noise_sd: Float) -> MTLTexture {
+func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, _ comp_texture: MTLTexture, _ kernel_size: Int, _ robustness: Double, _ noise_sd: MTLBuffer) -> MTLTexture {
     
     // if robustness is 0, return simply the comparison texture
     if robustness == 0 {return comp_texture}
@@ -460,11 +448,10 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: ref_texture.width/2, height: ref_texture.height/2, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    let params_array = [Float32(noise_sd), Float32(robustness)]
-    let params_buffer = device.makeBuffer(bytes: params_array, length: params_array.count * MemoryLayout<Float32>.size, options: .storageModeShared)
     command_encoder.setTexture(texture_diff, index: 0)
     command_encoder.setTexture(weight_texture, index: 1)
-    command_encoder.setBuffer(params_buffer, offset: 0, index: 0)
+    command_encoder.setBuffer(noise_sd, offset: 0, index: 0)
+    command_encoder.setBytes([Float32(robustness)], length: MemoryLayout<Float32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()

@@ -363,10 +363,16 @@ kernel void average_y(texture2d<uint, access::read> in_texture [[texture(0)]],
 }
 
 
-kernel void sum_1d(texture1d<uint, access::read> in_texture [[texture(0)]],
-                   volatile device atomic_uint *sum [[buffer(0)]],
-                   uint gid [[thread_position_in_grid]]) {
-    atomic_fetch_add_explicit(sum, in_texture.read(gid).r, memory_order_relaxed);
+kernel void average_x(texture1d<uint, access::read> in_texture [[texture(0)]],
+                      device float *out_buffer [[buffer(0)]],
+                      constant int& width [[buffer(1)]],
+                      uint gid [[thread_position_in_grid]]) {
+    int total = 0;
+    for (int x = 0; x < width; x++) {
+        total += in_texture.read(uint(x)).r;
+    }
+    uint avg = total / width;
+    out_buffer[0] = avg;
 }
 
 
@@ -392,12 +398,12 @@ kernel void color_difference(texture2d<uint, access::read> texture1 [[texture(0)
 
 kernel void compute_merge_weight(texture2d<uint, access::read> texture_diff [[texture(0)]],
                                  texture2d<float, access::write> weight_texture [[texture(1)]],
-                                 constant float* params [[buffer(0)]],
+                                 constant float* noise_sd_buffer [[buffer(0)]],
+                                 constant float& robustness [[buffer(1)]],
                                  uint2 gid [[thread_position_in_grid]]) {
     
     // load args
-    float noise_sd = params[0];
-    float robustness = params[1];
+    float noise_sd = noise_sd_buffer[0];
     
     // load texture difference
     int diff = texture_diff.read(gid).r;
