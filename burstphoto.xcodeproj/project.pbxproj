@@ -137,7 +137,7 @@
 		E15DBBDC26B5CAD200186172 /* align.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBDB26B5CAD200186172 /* align.swift */; };
 		E15DBBE026B6145200186172 /* utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBDF26B6145200186172 /* utils.swift */; };
 		E18CD6282703612000F4E1FB /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = E18CD6272703612000F4E1FB /* Credits.rtf */; };
-		E1ACED6A26A490A1009B14EB /* burstphotoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1ACED6926A490A1009B14EB /* burstphotoApp.swift */; };
+		E1ACED6A26A490A1009B14EB /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1ACED6926A490A1009B14EB /* App.swift */; };
 		E1ACED6C26A490A1009B14EB /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1ACED6B26A490A1009B14EB /* ContentView.swift */; };
 		E1ACED6E26A490A2009B14EB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1ACED6D26A490A2009B14EB /* Assets.xcassets */; };
 		E1ACED7126A490A2009B14EB /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1ACED7026A490A2009B14EB /* Preview Assets.xcassets */; };
@@ -513,7 +513,7 @@
 		E15DBBDF26B6145200186172 /* utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = utils.swift; sourceTree = "<group>"; };
 		E18CD6272703612000F4E1FB /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; path = Credits.rtf; sourceTree = "<group>"; };
 		E1ACED6626A490A1009B14EB /* Burst Photo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Burst Photo.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		E1ACED6926A490A1009B14EB /* burstphotoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = burstphotoApp.swift; sourceTree = "<group>"; };
+		E1ACED6926A490A1009B14EB /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		E1ACED6B26A490A1009B14EB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E1ACED6D26A490A2009B14EB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E1ACED7026A490A2009B14EB /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -1124,18 +1124,18 @@
 		E1ACED6826A490A1009B14EB /* burstphoto */ = {
 			isa = PBXGroup;
 			children = (
-				E18CD6272703612000F4E1FB /* Credits.rtf */,
-				E15DBBD826B5CAA800186172 /* bridging_header.h */,
-				E15DBBD626B5CA9600186172 /* align.metal */,
-				E1ACED6926A490A1009B14EB /* burstphotoApp.swift */,
+				E1ACED6926A490A1009B14EB /* App.swift */,
 				E1ACED6B26A490A1009B14EB /* ContentView.swift */,
+				E15DBBDB26B5CAD200186172 /* align.swift */,
 				E15DBBDF26B6145200186172 /* utils.swift */,
+				E14152A926CBFF49006806D3 /* dng_utils.swift */,
+				E15DBBD626B5CA9600186172 /* align.metal */,
+				E15DBBD826B5CAA800186172 /* bridging_header.h */,
+				E18CD6272703612000F4E1FB /* Credits.rtf */,
 				E1ACED6D26A490A2009B14EB /* Assets.xcassets */,
 				E1ACED7226A490A2009B14EB /* Info.plist */,
 				E1ACED7326A490A2009B14EB /* burstphoto.entitlements */,
 				E1ACED6F26A490A2009B14EB /* Preview Content */,
-				E15DBBDB26B5CAD200186172 /* align.swift */,
-				E14152A926CBFF49006806D3 /* dng_utils.swift */,
 			);
 			path = burstphoto;
 			sourceTree = "<group>";
@@ -1238,7 +1238,7 @@
 				E133AD8F28FEF8770058B799 /* dng_gain_map.cpp in Sources */,
 				E133AD9928FEF8770058B799 /* dng_opcode_list.cpp in Sources */,
 				E133ADEA28FEF8780058B799 /* jcomapi.c in Sources */,
-				E1ACED6A26A490A1009B14EB /* burstphotoApp.swift in Sources */,
+				E1ACED6A26A490A1009B14EB /* App.swift in Sources */,
 				E133ADF728FEF8780058B799 /* jdpostct.c in Sources */,
 				E133ADCC28FEF8780058B799 /* jdhuff.c in Sources */,
 				E133ADCB28FEF8780058B799 /* jdatasrc.c in Sources */,
