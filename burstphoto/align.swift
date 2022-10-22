@@ -110,7 +110,7 @@ func avg_pool(_ input_texture: MTLTexture, _ scale: Int) -> MTLTexture {
     // hence I wrote this function, which support *only* uint pixels
     
     // create output texture
-    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: input_texture.width/2, height: input_texture.height/2, mipmapped: false)
+    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: input_texture.width/scale, height: input_texture.height/scale, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
     
@@ -123,17 +123,12 @@ func avg_pool(_ input_texture: MTLTexture, _ scale: Int) -> MTLTexture {
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(input_texture, index: 0)
     command_encoder.setTexture(output_texture, index: 1)
+    command_encoder.setBytes([Int32(scale)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
-    
-    // if the input 'scale' was 2, we are done
-    // otherwise, we need to keep average pooling the texture
-    if scale == 2 {
-        return output_texture
-    } else {
-        return avg_pool(output_texture, scale / 2)
-    }
+
+    return output_texture
 }
 
 
@@ -142,7 +137,6 @@ func average_texture_sums(_ input_texture: MTLTexture, _ n: Int) -> MTLTexture {
     // create output texture
     let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: input_texture.width, height: input_texture.height, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    print(output_texture_descriptor.storageMode)
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
     
     // run the metal kernel
@@ -502,24 +496,28 @@ func fill_with_zeros(_ texture: MTLTexture) {
 }
 
 
-func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> [MTLTexture] {
+func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> ([MTLTexture], Int) {
     
     var textures_dict: [Int: MTLTexture] = [:]
     let compute_group = DispatchGroup()
     let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
     let access_queue = DispatchQueue(label: "") // this is a serial queue to read/save data thread-safely
+    var mosaic_pettern_width: Int?
 
     for i in 0..<urls.count {
         compute_queue.async(group: compute_group) {
     
             // asynchronously load texture
-            if let texture = try? image_url_to_bayer_texture(urls[i], device) {
+            if let (texture, _mosaic_pettern_width) = try? image_url_to_bayer_texture(urls[i], device) {
     
                 // sync GUI progress
                 DispatchQueue.main.async { progress.int += 1 }
     
                 // thread-safely save the texture
-                access_queue.sync { textures_dict[i] = texture }
+                access_queue.sync {
+                    textures_dict[i] = texture
+                    mosaic_pettern_width = _mosaic_pettern_width
+                }
             }
         }
     }
@@ -543,12 +541,12 @@ func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> [MTLTe
         }
     }
     
-    return textures_list
+    return (textures_list, mosaic_pettern_width!)
 }
 
 
 func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 1) throws -> MTLTexture {
-    // DEBUGGING
+    
     // check that 2+ images have been passed
     if image_urls.count < 2 {
         throw AlignmentError.less_than_two_images
@@ -565,7 +563,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     
     // load images
     var t = DispatchTime.now().uptimeNanoseconds
-    let textures = try load_images(image_urls, progress)
+    let (textures, mosaic_pettern_width) = try load_images(image_urls, progress)
     let ref_texture = textures[ref_idx]
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -580,7 +578,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     
     // set alignment params
     let min_image_dim = min(ref_texture.width, ref_texture.height)
-    var downscale_factor_array = [2]
+    var downscale_factor_array = [mosaic_pettern_width]
     var search_dist_array = [2]
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]

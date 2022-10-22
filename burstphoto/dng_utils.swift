@@ -8,14 +8,15 @@ enum ImageIOError: Error {
     case save_error
 }
 
-func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) throws -> MTLTexture {
+func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture, Int) {
     
     // read image
     var error_code: Int32
     var pixel_bytes: UnsafeMutableRawPointer?
     var width: Int32 = 0;
     var height: Int32 = 0;
-    error_code = read_image(url.path, &pixel_bytes, &width, &height)
+    var mosaic_pettern_width: Int32 = 0;
+    error_code = read_image(url.path, &pixel_bytes, &width, &height, &mosaic_pettern_width)
     if (error_code != 0) {throw ImageIOError.load_error}
     
     // conver image bitmap to MTLTexture
@@ -30,7 +31,7 @@ func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) throws -> MTLTe
     // free memory
     free(pixel_bytes!)
 
-    return texture
+    return (texture, Int(mosaic_pettern_width))
 }
 
 

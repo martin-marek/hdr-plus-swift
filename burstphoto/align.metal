@@ -100,18 +100,19 @@ kernel void upsample_bilinear_int(texture2d<int, access::read> in_texture [[text
 
 kernel void avg_pool(texture2d<uint, access::read> in_texture [[texture(0)]],
                      texture2d<uint, access::write> out_texture [[texture(1)]],
+                     constant int& scale [[buffer(0)]],
                      uint2 gid [[thread_position_in_grid]]) {
     uint out_pixel = 0;
-    int x0 = gid.x * 2;
-    int y0 = gid.y * 2;
-    for (int dx = 0; dx <= 1; dx++) {
-        for (int dy = 0; dy <= 1; dy++) {
+    int x0 = gid.x * scale;
+    int y0 = gid.y * scale;
+    for (int dx = 0; dx < scale; dx++) {
+        for (int dy = 0; dy < scale; dy++) {
             int x = x0 + dx;
             int y = y0 + dy;
             out_pixel += in_texture.read(uint2(x, y)).r;
         }
     }
-    out_pixel /= 4;
+    out_pixel /= (scale*scale);
     out_texture.write(out_pixel, gid);
 }
 

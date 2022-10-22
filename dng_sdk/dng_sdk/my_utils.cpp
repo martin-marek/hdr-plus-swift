@@ -20,7 +20,7 @@ void terminate_xmp_sdk() {
 }
 
 
-int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height) {
+int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pettern_width) {
     
     try {
         
@@ -57,6 +57,17 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
         void* pixel_bytes = malloc(image_size);
         *pixel_bytes_pointer = pixel_bytes;
         memcpy(pixel_bytes, pixel_buffer.DirtyPixel(0, 0), image_size);
+        
+        // get size of mosaic patter
+        // - this affects how raw pixels are aligned
+        // - it is assumed that the pattern is square
+        dng_point mosaic_pettern_size = negative->fMosaicInfo->fCFAPatternSize;
+        *mosaic_pettern_width = mosaic_pettern_size.h;
+        // int mosaic_pettern_height = mosaic_pettern_size.v;
+        
+        // int mosaic_pettern_size = ;
+        printf("fCFAPatternSize v: %d\n", mosaic_pettern_size.v);
+        printf("fCFAPatternSize h: %d\n", mosaic_pettern_size.h);
         
     }
     catch(...) {
