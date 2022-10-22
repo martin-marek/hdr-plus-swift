@@ -63,11 +63,6 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
         // - it is assumed that the pattern is square
         dng_point mosaic_pettern_size = negative->fMosaicInfo->fCFAPatternSize;
         *mosaic_pettern_width = mosaic_pettern_size.h;
-        // int mosaic_pettern_height = mosaic_pettern_size.v;
-        
-        // int mosaic_pettern_size = ;
-        printf("fCFAPatternSize v: %d\n", mosaic_pettern_size.v);
-        printf("fCFAPatternSize h: %d\n", mosaic_pettern_size.h);
         
     }
     catch(...) {
