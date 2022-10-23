@@ -298,7 +298,7 @@ struct MyDropDelegate: DropDelegate {
                 }
                 
                 // save the output image
-                try bayer_texture_to_dng(output_texture, in_url, out_url)
+                try texture_to_dng(output_texture, in_url, out_url)
 
                 // inform the user about the saved image
                 app_state = .image_saved

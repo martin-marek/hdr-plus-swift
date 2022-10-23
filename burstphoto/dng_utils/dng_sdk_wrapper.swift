@@ -8,7 +8,7 @@ enum ImageIOError: Error {
     case save_error
 }
 
-func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture, Int) {
+func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture, Int) {
     
     // read image
     var error_code: Int32
@@ -35,7 +35,7 @@ func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLT
 }
 
 
-func bayer_texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) throws {
+func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) throws {
     // synchronize GPU and CPU memory
     let command_buffer = command_queue.makeCommandBuffer()!
     let blit_encoder = command_buffer.makeBlitCommandEncoder()!

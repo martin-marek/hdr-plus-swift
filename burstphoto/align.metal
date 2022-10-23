@@ -279,10 +279,11 @@ kernel void warp_texture(texture2d<float, access::read> in_texture [[texture(0)]
 }
 
 
-kernel void blur_bayer_x(texture2d<float, access::read> in_texture [[texture(0)]],
-                         texture2d<float, access::write> out_texture [[texture(1)]],
-                         constant int& kernel_size [[buffer(0)]],
-                         uint2 gid [[thread_position_in_grid]]) {
+kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)]],
+                          texture2d<float, access::write> out_texture [[texture(1)]],
+                          constant int& kernel_size [[buffer(0)]],
+                          constant int& mosaic_pettern_width [[buffer(1)]],
+                          uint2 gid [[thread_position_in_grid]]) {
     
     // load args
     int texture_width = in_texture.get_width();
@@ -292,7 +293,7 @@ kernel void blur_bayer_x(texture2d<float, access::read> in_texture [[texture(0)]
     float total_weight = 0;
     int y = gid.y;
     for (int dx = -kernel_size; dx <= kernel_size; dx++) {
-        int x = gid.x + 2*dx;
+        int x = gid.x + mosaic_pettern_width*dx;
         if (0 <= x && x < texture_width) {
             float weight = kernel_size - dx + 1;
             total_intensity += weight * in_texture.read(uint2(x, y)).r;
@@ -306,10 +307,11 @@ kernel void blur_bayer_x(texture2d<float, access::read> in_texture [[texture(0)]
 }
 
 
-kernel void blur_bayer_y(texture2d<float, access::read> in_texture [[texture(0)]],
-                         texture2d<float, access::write> out_texture [[texture(1)]],
-                         constant int& kernel_size [[buffer(0)]],
-                         uint2 gid [[thread_position_in_grid]]) {
+kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)]],
+                          texture2d<float, access::write> out_texture [[texture(1)]],
+                          constant int& kernel_size [[buffer(0)]],
+                          constant int& mosaic_pettern_width [[buffer(1)]],
+                          uint2 gid [[thread_position_in_grid]]) {
     
     // load args
     int texture_height = in_texture.get_height();
@@ -319,7 +321,7 @@ kernel void blur_bayer_y(texture2d<float, access::read> in_texture [[texture(0)]
     float total_weight = 0;
     int x = gid.x;
     for (int dy = -kernel_size; dy <= kernel_size; dy++) {
-        int y = gid.y + 2*dy;
+        int y = gid.y + mosaic_pettern_width*dy;
         if (0 <= y && y < texture_height) {
             float weight = kernel_size - dy + 1;
             total_intensity += weight * in_texture.read(uint2(x, y)).r;
@@ -363,12 +365,13 @@ kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
 kernel void color_difference(texture2d<float, access::read> texture1 [[texture(0)]],
                              texture2d<float, access::read> texture2 [[texture(1)]],
                              texture2d<float, access::write> out_texture [[texture(2)]],
+                             constant int& mosaic_pettern_width [[buffer(0)]],
                              uint2 gid [[thread_position_in_grid]]) {
     float total_diff = 0;
-    int x0 = gid.x * 2;
-    int y0 = gid.y * 2;
-    for (int dx = 0; dx <= 1; dx++) {
-        for (int dy = 0; dy <= 1; dy++) {
+    int x0 = gid.x * mosaic_pettern_width;
+    int y0 = gid.y * mosaic_pettern_width;
+    for (int dx = 0; dx < mosaic_pettern_width; dx++) {
+        for (int dy = 0; dy < mosaic_pettern_width; dy++) {
             int x = x0 + dx;
             int y = y0 + dy;
             float i1 = texture1.read(uint2(x, y)).r;
