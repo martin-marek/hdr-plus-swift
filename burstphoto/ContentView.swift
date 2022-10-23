@@ -130,6 +130,7 @@ struct ImageSavedView: View {
                 
                 Button(action: {NSWorkspace.shared.activateFileViewerSelecting([out_url])},
                        label: {Text("Show in Finder")})
+                .foregroundColor(.accentColor)
             }
             
             Spacer()
