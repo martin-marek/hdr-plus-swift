@@ -34,9 +34,9 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 - [x] full ARM / x86 support
 - [x] Bayer sensor support (good)
 - [x] non-Bayer sensor support (beta)
+- [x] preserve lens profiles
 
 # TODO
-- [ ] preserve lens profiles
 - [ ] super-resolution
 - [ ] RAW support (through Adobe DNG Converter CLI)
 - [ ] fix progressbar getting stuck loading the first image
