@@ -94,6 +94,9 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
         dng_simple_image& image = *image_pointer.Get();
         // rawIFD.ReadImage(host, stream, image);
         
+        // read opcode lists (required for lens calibration data)
+        negative->ReadOpcodeLists(host, stream, info);
+        
         // overwrite pixel buffer
         void* pixel_bytes = *pixel_bytes_pointer;
         int image_size = image.Width() * image.Height() * image.PixelSize();
