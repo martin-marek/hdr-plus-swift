@@ -1,5 +1,5 @@
-#ifndef __my_utils__
-#define __my_utils__
+#ifndef __dng_sdk_wrapper__
+#define __dng_sdk_wrapper__
 
 // use a c wrapper around c++ code
 // https://stackoverflow.com/q/35229149/6495494
