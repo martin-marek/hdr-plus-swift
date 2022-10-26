@@ -108,8 +108,6 @@ func texture_uint16_to_float(_ in_texture: MTLTexture) -> MTLTexture {
 
 
 func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String) -> MTLTexture {
-    // Metal has a built-in function for texture resizing but it doesn't support uint pixels
-    // hence I wrote this function, which support *only* uint pixels
     
     // convert args
     let scale_x = Double(width) / Double(input_texture.width)
@@ -140,9 +138,7 @@ func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String
 
 
 func avg_pool(_ input_texture: MTLTexture, _ scale: Int) -> MTLTexture {
-    // Metal has a built-in function for texture resizing but it doesn't support uint pixels
-    // hence I wrote this function, which support *only* uint pixels
-    
+
     // create output texture
     let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: input_texture.width/scale, height: input_texture.height/scale, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
