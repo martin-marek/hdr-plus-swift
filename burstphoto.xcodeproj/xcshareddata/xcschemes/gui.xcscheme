@@ -16,7 +16,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "E1ACED6526A490A1009B14EB"
                BuildableName = "Burst Photo.app"
-               BlueprintName = "burstphoto"
+               BlueprintName = "gui"
                ReferencedContainer = "container:burstphoto.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -47,7 +47,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E1ACED6526A490A1009B14EB"
             BuildableName = "Burst Photo.app"
-            BlueprintName = "burstphoto"
+            BlueprintName = "gui"
             ReferencedContainer = "container:burstphoto.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -64,7 +64,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E1ACED6526A490A1009B14EB"
             BuildableName = "Burst Photo.app"
-            BlueprintName = "burstphoto"
+            BlueprintName = "gui"
             ReferencedContainer = "container:burstphoto.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

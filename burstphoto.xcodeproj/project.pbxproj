@@ -141,6 +141,140 @@
 		E1ACED6C26A490A1009B14EB /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1ACED6B26A490A1009B14EB /* ContentView.swift */; };
 		E1ACED6E26A490A2009B14EB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1ACED6D26A490A2009B14EB /* Assets.xcassets */; };
 		E1ACED7126A490A2009B14EB /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1ACED7026A490A2009B14EB /* Preview Assets.xcassets */; };
+		E1F0A1FF2909D80D00AB127E /* dng_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACB928FEF8770058B799 /* dng_utils.cpp */; };
+		E1F0A2002909D80D00AB127E /* jfdctint.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1F28FEF8770058B799 /* jfdctint.c */; };
+		E1F0A2012909D80D00AB127E /* jmemnobs.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2328FEF8770058B799 /* jmemnobs.c */; };
+		E1F0A2022909D80D00AB127E /* jdapistd.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1728FEF8770058B799 /* jdapistd.c */; };
+		E1F0A2042909D80D00AB127E /* dng_image_writer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACEC28FEF8770058B799 /* dng_image_writer.cpp */; };
+		E1F0A2052909D80D00AB127E /* jfdctflt.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1C28FEF8770058B799 /* jfdctflt.c */; };
+		E1F0A2062909D80D00AB127E /* jquant2.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3B28FEF8770058B799 /* jquant2.c */; };
+		E1F0A2072909D80D00AB127E /* dng_big_table.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9C28FEF8770058B799 /* dng_big_table.cpp */; };
+		E1F0A2082909D80D00AB127E /* dng_gain_map.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9628FEF8770058B799 /* dng_gain_map.cpp */; };
+		E1F0A2092909D80D00AB127E /* dng_opcode_list.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACA428FEF8770058B799 /* dng_opcode_list.cpp */; };
+		E1F0A20A2909D80D00AB127E /* jcomapi.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3728FEF8770058B799 /* jcomapi.c */; };
+		E1F0A20C2909D80D00AB127E /* jdpostct.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD4528FEF8770058B799 /* jdpostct.c */; };
+		E1F0A20D2909D80D00AB127E /* jdhuff.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1328FEF8770058B799 /* jdhuff.c */; };
+		E1F0A20E2909D80D00AB127E /* jdatasrc.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1228FEF8770058B799 /* jdatasrc.c */; };
+		E1F0A20F2909D80D00AB127E /* dng_string_list.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9228FEF8770058B799 /* dng_string_list.cpp */; };
+		E1F0A2102909D80D00AB127E /* dng_lens_correction.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACC728FEF8770058B799 /* dng_lens_correction.cpp */; };
+		E1F0A2112909D80D00AB127E /* dng_ref_counted_block.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACDC28FEF8770058B799 /* dng_ref_counted_block.cpp */; };
+		E1F0A2122909D80D00AB127E /* jcprepct.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2628FEF8770058B799 /* jcprepct.c */; };
+		E1F0A2132909D80D00AB127E /* jdmainct.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD4128FEF8770058B799 /* jdmainct.c */; };
+		E1F0A2142909D80D00AB127E /* dng_host.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACA928FEF8770058B799 /* dng_host.cpp */; };
+		E1F0A2152909D80D00AB127E /* dng_bottlenecks.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACB128FEF8770058B799 /* dng_bottlenecks.cpp */; };
+		E1F0A2162909D80D00AB127E /* align.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBDB26B5CAD200186172 /* align.swift */; };
+		E1F0A2172909D80D00AB127E /* dng_orientation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AD0528FEF8770058B799 /* dng_orientation.cpp */; };
+		E1F0A2182909D80D00AB127E /* dng_image.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9F28FEF8770058B799 /* dng_image.cpp */; };
+		E1F0A2192909D80D00AB127E /* jdmarker.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1928FEF8770058B799 /* jdmarker.c */; };
+		E1F0A21A2909D80D00AB127E /* jdtrans.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1528FEF8770058B799 /* jdtrans.c */; };
+		E1F0A21B2909D80D00AB127E /* dng_jpeg_memory_source.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9028FEF8770058B799 /* dng_jpeg_memory_source.cpp */; };
+		E1F0A21C2909D80D00AB127E /* dng_fingerprint.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACF328FEF8770058B799 /* dng_fingerprint.cpp */; };
+		E1F0A21D2909D80D00AB127E /* jdcoefct.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD4228FEF8770058B799 /* jdcoefct.c */; };
+		E1F0A21E2909D80D00AB127E /* dng_matrix.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC7928FEF8770058B799 /* dng_matrix.cpp */; };
+		E1F0A21F2909D80D00AB127E /* dng_pixel_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACD828FEF8770058B799 /* dng_pixel_buffer.cpp */; };
+		E1F0A2202909D80D00AB127E /* dng_sdk_wrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E14152A926CBFF49006806D3 /* dng_sdk_wrapper.swift */; };
+		E1F0A2212909D80D00AB127E /* dng_area_task.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACB828FEF8770058B799 /* dng_area_task.cpp */; };
+		E1F0A2222909D80D00AB127E /* dng_string.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACF428FEF8770058B799 /* dng_string.cpp */; };
+		E1F0A2232909D80D00AB127E /* dng_safe_arithmetic.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACC528FEF8770058B799 /* dng_safe_arithmetic.cpp */; };
+		E1F0A2242909D80D00AB127E /* dng_linearization_info.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACCA28FEF8770058B799 /* dng_linearization_info.cpp */; };
+		E1F0A2252909D80D00AB127E /* jcapimin.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1828FEF8770058B799 /* jcapimin.c */; };
+		E1F0A2262909D80D00AB127E /* jccolor.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2828FEF8770058B799 /* jccolor.c */; };
+		E1F0A2272909D80D00AB127E /* dng_read_image.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACA028FEF8770058B799 /* dng_read_image.cpp */; };
+		E1F0A2282909D80D00AB127E /* dng_globals.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACDB28FEF8770058B799 /* dng_globals.cpp */; };
+		E1F0A2292909D80D00AB127E /* dng_filter_task.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACC828FEF8770058B799 /* dng_filter_task.cpp */; };
+		E1F0A22A2909D80D00AB127E /* align.metal in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBD626B5CA9600186172 /* align.metal */; };
+		E1F0A22B2909D80D00AB127E /* jerror.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2928FEF8770058B799 /* jerror.c */; };
+		E1F0A22C2909D80D00AB127E /* jdmerge.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1A28FEF8770058B799 /* jdmerge.c */; };
+		E1F0A22D2909D80D00AB127E /* dng_iptc.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACD328FEF8770058B799 /* dng_iptc.cpp */; };
+		E1F0A22E2909D80D00AB127E /* dng_1d_function.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACCB28FEF8770058B799 /* dng_1d_function.cpp */; };
+		E1F0A22F2909D80D00AB127E /* dng_tone_curve.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC7128FEF8770058B799 /* dng_tone_curve.cpp */; };
+		E1F0A2302909D80D00AB127E /* jcmarker.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3A28FEF8770058B799 /* jcmarker.c */; };
+		E1F0A2312909D80D00AB127E /* dng_misc_opcodes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AD0828FEF8770058B799 /* dng_misc_opcodes.cpp */; };
+		E1F0A2322909D80D00AB127E /* dng_mosaic_info.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC8928FEF8770058B799 /* dng_mosaic_info.cpp */; };
+		E1F0A2332909D80D00AB127E /* dng_info.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACAF28FEF8770058B799 /* dng_info.cpp */; };
+		E1F0A2342909D80D00AB127E /* dng_lossless_jpeg.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACE628FEF8770058B799 /* dng_lossless_jpeg.cpp */; };
+		E1F0A2352909D80D00AB127E /* dng_ifd.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC8B28FEF8770058B799 /* dng_ifd.cpp */; };
+		E1F0A2362909D80D00AB127E /* jcmainct.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2128FEF8770058B799 /* jcmainct.c */; };
+		E1F0A2372909D80D00AB127E /* dng_exif.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AD0328FEF8770058B799 /* dng_exif.cpp */; };
+		E1F0A2382909D80D00AB127E /* jidctflt.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3F28FEF8770058B799 /* jidctflt.c */; };
+		E1F0A2392909D80D00AB127E /* dng_color_spec.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACA828FEF8770058B799 /* dng_color_spec.cpp */; };
+		E1F0A23A2909D80D00AB127E /* dng_point.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACF528FEF8770058B799 /* dng_point.cpp */; };
+		E1F0A23B2909D80D00AB127E /* jcdctmgr.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2B28FEF8770058B799 /* jcdctmgr.c */; };
+		E1F0A23C2909D80D00AB127E /* dng_memory_stream.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACE128FEF8770058B799 /* dng_memory_stream.cpp */; };
+		E1F0A23D2909D80D00AB127E /* dng_spline.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACA628FEF8770058B799 /* dng_spline.cpp */; };
+		E1F0A23E2909D80D00AB127E /* dng_update_meta.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9B28FEF8770058B799 /* dng_update_meta.cpp */; };
+		E1F0A23F2909D80D00AB127E /* dng_hue_sat_map.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACBC28FEF8770058B799 /* dng_hue_sat_map.cpp */; };
+		E1F0A2402909D80D00AB127E /* jcarith.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2428FEF8770058B799 /* jcarith.c */; };
+		E1F0A2412909D80D00AB127E /* jdarith.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3228FEF8770058B799 /* jdarith.c */; };
+		E1F0A2422909D80D00AB127E /* jidctint.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3C28FEF8770058B799 /* jidctint.c */; };
+		E1F0A2432909D80D00AB127E /* dng_tile_iterator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACEF28FEF8770058B799 /* dng_tile_iterator.cpp */; };
+		E1F0A2442909D80D00AB127E /* dng_memory.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACDF28FEF8770058B799 /* dng_memory.cpp */; };
+		E1F0A2452909D80D00AB127E /* jdatadst.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3828FEF8770058B799 /* jdatadst.c */; };
+		E1F0A2462909D80D00AB127E /* dng_mutex.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACC128FEF8770058B799 /* dng_mutex.cpp */; };
+		E1F0A2472909D80D00AB127E /* jcmaster.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1628FEF8770058B799 /* jcmaster.c */; };
+		E1F0A2482909D80D00AB127E /* dng_resample.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9D28FEF8770058B799 /* dng_resample.cpp */; };
+		E1F0A2492909D80D00AB127E /* dng_xmp.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACD728FEF8770058B799 /* dng_xmp.cpp */; };
+		E1F0A24A2909D80D00AB127E /* jdinput.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1428FEF8770058B799 /* jdinput.c */; };
+		E1F0A24B2909D80D00AB127E /* dng_local_string.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACF728FEF8770058B799 /* dng_local_string.cpp */; };
+		E1F0A24C2909D80D00AB127E /* dng_color_space.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AD0A28FEF8770058B799 /* dng_color_space.cpp */; };
+		E1F0A24D2909D80D00AB127E /* jaricom.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3128FEF8770058B799 /* jaricom.c */; };
+		E1F0A24E2909D80D00AB127E /* dng_rational.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACB328FEF8770058B799 /* dng_rational.cpp */; };
+		E1F0A24F2909D80D00AB127E /* dng_1d_table.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9728FEF8770058B799 /* dng_1d_table.cpp */; };
+		E1F0A2502909D80D00AB127E /* jidctfst.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1128FEF8770058B799 /* jidctfst.c */; };
+		E1F0A2512909D80D00AB127E /* jdsample.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD4328FEF8770058B799 /* jdsample.c */; };
+		E1F0A2522909D80D00AB127E /* dng_negative.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9928FEF8770058B799 /* dng_negative.cpp */; };
+		E1F0A2532909D80D00AB127E /* jctrans.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3E28FEF8770058B799 /* jctrans.c */; };
+		E1F0A2542909D80D00AB127E /* dng_pthread.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACCC28FEF8770058B799 /* dng_pthread.cpp */; };
+		E1F0A2552909D80D00AB127E /* dng_tag_types.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC8828FEF8770058B799 /* dng_tag_types.cpp */; };
+		E1F0A2562909D80D00AB127E /* dng_render.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACDE28FEF8770058B799 /* dng_render.cpp */; };
+		E1F0A2572909D80D00AB127E /* jcinit.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD4028FEF8770058B799 /* jcinit.c */; };
+		E1F0A2582909D80D00AB127E /* dng_simple_image.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC7828FEF8770058B799 /* dng_simple_image.cpp */; };
+		E1F0A2592909D80D00AB127E /* dng_date_time.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACBF28FEF8770058B799 /* dng_date_time.cpp */; };
+		E1F0A25A2909D80D00AB127E /* jdmaster.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3328FEF8770058B799 /* jdmaster.c */; };
+		E1F0A25B2909D80D00AB127E /* dng_rect.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC7E28FEF8770058B799 /* dng_rect.cpp */; };
+		E1F0A25C2909D80D00AB127E /* dng_temperature.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9A28FEF8770058B799 /* dng_temperature.cpp */; };
+		E1F0A25D2909D80D00AB127E /* dng_bad_pixels.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC8E28FEF8770058B799 /* dng_bad_pixels.cpp */; };
+		E1F0A25E2909D80D00AB127E /* dng_parse_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC7A28FEF8770058B799 /* dng_parse_utils.cpp */; };
+		E1F0A25F2909D80D00AB127E /* dng_sdk_wrapper.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AD0028FEF8770058B799 /* dng_sdk_wrapper.cpp */; };
+		E1F0A2602909D80D00AB127E /* jccoefct.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1E28FEF8770058B799 /* jccoefct.c */; };
+		E1F0A2612909D80D00AB127E /* dng_file_stream.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC9828FEF8770058B799 /* dng_file_stream.cpp */; };
+		E1F0A2622909D80D00AB127E /* jfdctfst.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3028FEF8770058B799 /* jfdctfst.c */; };
+		E1F0A2632909D80D00AB127E /* dng_exceptions.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACCD28FEF8770058B799 /* dng_exceptions.cpp */; };
+		E1F0A2642909D80D00AB127E /* dng_shared.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACC028FEF8770058B799 /* dng_shared.cpp */; };
+		E1F0A2652909D80D00AB127E /* jdcolor.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1B28FEF8770058B799 /* jdcolor.c */; };
+		E1F0A2662909D80D00AB127E /* utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBDF26B6145200186172 /* utils.swift */; };
+		E1F0A2672909D80D00AB127E /* dng_xmp_sdk.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AD0628FEF8770058B799 /* dng_xmp_sdk.cpp */; };
+		E1F0A2682909D80D00AB127E /* jchuff.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2228FEF8770058B799 /* jchuff.c */; };
+		E1F0A2692909D80D00AB127E /* dng_preview.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC8428FEF8770058B799 /* dng_preview.cpp */; };
+		E1F0A26A2909D80D00AB127E /* jddctmgr.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD0F28FEF8770058B799 /* jddctmgr.c */; };
+		E1F0A26B2909D80D00AB127E /* dng_xy_coord.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACE928FEF8770058B799 /* dng_xy_coord.cpp */; };
+		E1F0A26C2909D80D00AB127E /* dng_abort_sniffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACFD28FEF8770058B799 /* dng_abort_sniffer.cpp */; };
+		E1F0A26D2909D80D00AB127E /* jcsample.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2028FEF8770058B799 /* jcsample.c */; };
+		E1F0A26E2909D80D00AB127E /* jmemmgr.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3928FEF8770058B799 /* jmemmgr.c */; };
+		E1F0A26F2909D80D00AB127E /* jcapistd.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2E28FEF8770058B799 /* jcapistd.c */; };
+		E1F0A2702909D80D00AB127E /* dng_stream.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC7228FEF8770058B799 /* dng_stream.cpp */; };
+		E1F0A2712909D80D00AB127E /* dng_camera_profile.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACB728FEF8770058B799 /* dng_camera_profile.cpp */; };
+		E1F0A2722909D80D00AB127E /* jcparam.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1D28FEF8770058B799 /* jcparam.c */; };
+		E1F0A2732909D80D00AB127E /* dng_jpeg_image.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACB228FEF8770058B799 /* dng_jpeg_image.cpp */; };
+		E1F0A2742909D80D00AB127E /* jdapimin.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD3D28FEF8770058B799 /* jdapimin.c */; };
+		E1F0A2752909D80D00AB127E /* dng_reference.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AD0128FEF8770058B799 /* dng_reference.cpp */; };
+		E1F0A2762909D80D00AB127E /* dng_opcodes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACBA28FEF8770058B799 /* dng_opcodes.cpp */; };
+		E1F0A2772909D80D00AB127E /* jutils.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2C28FEF8770058B799 /* jutils.c */; };
+		E1F0A2782909D80D00AB127E /* jquant1.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2A28FEF8770058B799 /* jquant1.c */; };
+		E1F0A27A2909D80D00AB127E /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E141516826CBFB2C006806D3 /* Carbon.framework */; };
+		E1F0A27B2909D80D00AB127E /* GameKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1F8351326F2741100994226 /* GameKit.framework */; };
+		E1F0A27D2909D80D00AB127E /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1ACED7026A490A2009B14EB /* Preview Assets.xcassets */; };
+		E1F0A27E2909D80D00AB127E /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = E18CD6272703612000F4E1FB /* Credits.rtf */; };
+		E1F0A27F2909D80D00AB127E /* TXMPAlbumArt.incl_cpp in Resources */ = {isa = PBXBuildFile; fileRef = E133AC3D28FEF8770058B799 /* TXMPAlbumArt.incl_cpp */; };
+		E1F0A2802909D80D00AB127E /* TXMPIterator.incl_cpp in Resources */ = {isa = PBXBuildFile; fileRef = E133AC3328FEF8770058B799 /* TXMPIterator.incl_cpp */; };
+		E1F0A2812909D80D00AB127E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1ACED6D26A490A2009B14EB /* Assets.xcassets */; };
+		E1F0A2822909D80D00AB127E /* XMP.incl_cpp in Resources */ = {isa = PBXBuildFile; fileRef = E133AC6F28FEF8770058B799 /* XMP.incl_cpp */; };
+		E1F0A2832909D80D00AB127E /* TXMPFiles.incl_cpp in Resources */ = {isa = PBXBuildFile; fileRef = E133AC3B28FEF8770058B799 /* TXMPFiles.incl_cpp */; };
+		E1F0A2842909D80D00AB127E /* TXMPUtils.incl_cpp in Resources */ = {isa = PBXBuildFile; fileRef = E133AC3A28FEF8770058B799 /* TXMPUtils.incl_cpp */; };
+		E1F0A2852909D80D00AB127E /* TXMPDocOps.incl_cpp in Resources */ = {isa = PBXBuildFile; fileRef = E133AC3628FEF8770058B799 /* TXMPDocOps.incl_cpp */; };
+		E1F0A2862909D80D00AB127E /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = E133AD2528FEF8770058B799 /* README.md */; };
+		E1F0A2872909D80D00AB127E /* TXMPMeta.incl_cpp in Resources */ = {isa = PBXBuildFile; fileRef = E133AC3728FEF8770058B799 /* TXMPMeta.incl_cpp */; };
+		E1F0A28D2909D85D00AB127E /* cli.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F0A1FC2909A39700AB127E /* cli.swift */; };
 		E1F8351426F2741100994226 /* GameKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1F8351326F2741100994226 /* GameKit.framework */; };
 /* End PBXBuildFile section */
 
@@ -519,6 +653,8 @@
 		E1ACED7026A490A2009B14EB /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		E1ACED7226A490A2009B14EB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E1ACED7326A490A2009B14EB /* burstphoto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = burstphoto.entitlements; sourceTree = "<group>"; };
+		E1F0A1FC2909A39700AB127E /* cli.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = cli.swift; sourceTree = "<group>"; };
+		E1F0A28B2909D80D00AB127E /* cli.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cli.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1F8351326F2741100994226 /* GameKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameKit.framework; path = System/Library/Frameworks/GameKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -529,6 +665,15 @@
 			files = (
 				E141516926CBFB2C006806D3 /* Carbon.framework in Frameworks */,
 				E1F8351426F2741100994226 /* GameKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1F0A2792909D80D00AB127E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1F0A27A2909D80D00AB127E /* Carbon.framework in Frameworks */,
+				E1F0A27B2909D80D00AB127E /* GameKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1115,6 +1260,7 @@
 			isa = PBXGroup;
 			children = (
 				E1ACED6626A490A1009B14EB /* Burst Photo.app */,
+				E1F0A28B2909D80D00AB127E /* cli.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1124,6 +1270,7 @@
 			children = (
 				E1ACED6926A490A1009B14EB /* App.swift */,
 				E1ACED6B26A490A1009B14EB /* ContentView.swift */,
+				E1F0A1FC2909A39700AB127E /* cli.swift */,
 				E15DBBDB26B5CAD200186172 /* align.swift */,
 				E15DBBDF26B6145200186172 /* utils.swift */,
 				E15DBBD626B5CA9600186172 /* align.metal */,
@@ -1159,9 +1306,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		E1ACED6526A490A1009B14EB /* burstphoto */ = {
+		E1ACED6526A490A1009B14EB /* gui */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E1ACED7626A490A2009B14EB /* Build configuration list for PBXNativeTarget "burstphoto" */;
+			buildConfigurationList = E1ACED7626A490A2009B14EB /* Build configuration list for PBXNativeTarget "gui" */;
 			buildPhases = (
 				E1ACED6226A490A1009B14EB /* Sources */,
 				E1ACED6326A490A1009B14EB /* Frameworks */,
@@ -1171,9 +1318,26 @@
 			);
 			dependencies = (
 			);
-			name = burstphoto;
+			name = gui;
 			productName = burstphoto;
 			productReference = E1ACED6626A490A1009B14EB /* Burst Photo.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E1F0A1FD2909D80D00AB127E /* cli */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1F0A2882909D80D00AB127E /* Build configuration list for PBXNativeTarget "cli" */;
+			buildPhases = (
+				E1F0A1FE2909D80D00AB127E /* Sources */,
+				E1F0A2792909D80D00AB127E /* Frameworks */,
+				E1F0A27C2909D80D00AB127E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = cli;
+			productName = burstphoto;
+			productReference = E1F0A28B2909D80D00AB127E /* cli.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -1203,7 +1367,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				E1ACED6526A490A1009B14EB /* burstphoto */,
+				E1ACED6526A490A1009B14EB /* gui */,
+				E1F0A1FD2909D80D00AB127E /* cli */,
 			);
 		};
 /* End PBXProject section */
@@ -1224,6 +1389,24 @@
 				E133AD6928FEF8770058B799 /* TXMPDocOps.incl_cpp in Resources */,
 				E133ADDE28FEF8780058B799 /* README.md in Resources */,
 				E133AD6A28FEF8770058B799 /* TXMPMeta.incl_cpp in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1F0A27C2909D80D00AB127E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1F0A27D2909D80D00AB127E /* Preview Assets.xcassets in Resources */,
+				E1F0A27E2909D80D00AB127E /* Credits.rtf in Resources */,
+				E1F0A27F2909D80D00AB127E /* TXMPAlbumArt.incl_cpp in Resources */,
+				E1F0A2802909D80D00AB127E /* TXMPIterator.incl_cpp in Resources */,
+				E1F0A2812909D80D00AB127E /* Assets.xcassets in Resources */,
+				E1F0A2822909D80D00AB127E /* XMP.incl_cpp in Resources */,
+				E1F0A2832909D80D00AB127E /* TXMPFiles.incl_cpp in Resources */,
+				E1F0A2842909D80D00AB127E /* TXMPUtils.incl_cpp in Resources */,
+				E1F0A2852909D80D00AB127E /* TXMPDocOps.incl_cpp in Resources */,
+				E1F0A2862909D80D00AB127E /* README.md in Resources */,
+				E1F0A2872909D80D00AB127E /* TXMPMeta.incl_cpp in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1356,6 +1539,134 @@
 				E133ADA428FEF8770058B799 /* dng_opcodes.cpp in Sources */,
 				E133ADE428FEF8780058B799 /* jutils.c in Sources */,
 				E133ADE228FEF8780058B799 /* jquant1.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1F0A1FE2909D80D00AB127E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1F0A28D2909D85D00AB127E /* cli.swift in Sources */,
+				E1F0A1FF2909D80D00AB127E /* dng_utils.cpp in Sources */,
+				E1F0A2002909D80D00AB127E /* jfdctint.c in Sources */,
+				E1F0A2012909D80D00AB127E /* jmemnobs.c in Sources */,
+				E1F0A2022909D80D00AB127E /* jdapistd.c in Sources */,
+				E1F0A2042909D80D00AB127E /* dng_image_writer.cpp in Sources */,
+				E1F0A2052909D80D00AB127E /* jfdctflt.c in Sources */,
+				E1F0A2062909D80D00AB127E /* jquant2.c in Sources */,
+				E1F0A2072909D80D00AB127E /* dng_big_table.cpp in Sources */,
+				E1F0A2082909D80D00AB127E /* dng_gain_map.cpp in Sources */,
+				E1F0A2092909D80D00AB127E /* dng_opcode_list.cpp in Sources */,
+				E1F0A20A2909D80D00AB127E /* jcomapi.c in Sources */,
+				E1F0A20C2909D80D00AB127E /* jdpostct.c in Sources */,
+				E1F0A20D2909D80D00AB127E /* jdhuff.c in Sources */,
+				E1F0A20E2909D80D00AB127E /* jdatasrc.c in Sources */,
+				E1F0A20F2909D80D00AB127E /* dng_string_list.cpp in Sources */,
+				E1F0A2102909D80D00AB127E /* dng_lens_correction.cpp in Sources */,
+				E1F0A2112909D80D00AB127E /* dng_ref_counted_block.cpp in Sources */,
+				E1F0A2122909D80D00AB127E /* jcprepct.c in Sources */,
+				E1F0A2132909D80D00AB127E /* jdmainct.c in Sources */,
+				E1F0A2142909D80D00AB127E /* dng_host.cpp in Sources */,
+				E1F0A2152909D80D00AB127E /* dng_bottlenecks.cpp in Sources */,
+				E1F0A2162909D80D00AB127E /* align.swift in Sources */,
+				E1F0A2172909D80D00AB127E /* dng_orientation.cpp in Sources */,
+				E1F0A2182909D80D00AB127E /* dng_image.cpp in Sources */,
+				E1F0A2192909D80D00AB127E /* jdmarker.c in Sources */,
+				E1F0A21A2909D80D00AB127E /* jdtrans.c in Sources */,
+				E1F0A21B2909D80D00AB127E /* dng_jpeg_memory_source.cpp in Sources */,
+				E1F0A21C2909D80D00AB127E /* dng_fingerprint.cpp in Sources */,
+				E1F0A21D2909D80D00AB127E /* jdcoefct.c in Sources */,
+				E1F0A21E2909D80D00AB127E /* dng_matrix.cpp in Sources */,
+				E1F0A21F2909D80D00AB127E /* dng_pixel_buffer.cpp in Sources */,
+				E1F0A2202909D80D00AB127E /* dng_sdk_wrapper.swift in Sources */,
+				E1F0A2212909D80D00AB127E /* dng_area_task.cpp in Sources */,
+				E1F0A2222909D80D00AB127E /* dng_string.cpp in Sources */,
+				E1F0A2232909D80D00AB127E /* dng_safe_arithmetic.cpp in Sources */,
+				E1F0A2242909D80D00AB127E /* dng_linearization_info.cpp in Sources */,
+				E1F0A2252909D80D00AB127E /* jcapimin.c in Sources */,
+				E1F0A2262909D80D00AB127E /* jccolor.c in Sources */,
+				E1F0A2272909D80D00AB127E /* dng_read_image.cpp in Sources */,
+				E1F0A2282909D80D00AB127E /* dng_globals.cpp in Sources */,
+				E1F0A2292909D80D00AB127E /* dng_filter_task.cpp in Sources */,
+				E1F0A22A2909D80D00AB127E /* align.metal in Sources */,
+				E1F0A22B2909D80D00AB127E /* jerror.c in Sources */,
+				E1F0A22C2909D80D00AB127E /* jdmerge.c in Sources */,
+				E1F0A22D2909D80D00AB127E /* dng_iptc.cpp in Sources */,
+				E1F0A22E2909D80D00AB127E /* dng_1d_function.cpp in Sources */,
+				E1F0A22F2909D80D00AB127E /* dng_tone_curve.cpp in Sources */,
+				E1F0A2302909D80D00AB127E /* jcmarker.c in Sources */,
+				E1F0A2312909D80D00AB127E /* dng_misc_opcodes.cpp in Sources */,
+				E1F0A2322909D80D00AB127E /* dng_mosaic_info.cpp in Sources */,
+				E1F0A2332909D80D00AB127E /* dng_info.cpp in Sources */,
+				E1F0A2342909D80D00AB127E /* dng_lossless_jpeg.cpp in Sources */,
+				E1F0A2352909D80D00AB127E /* dng_ifd.cpp in Sources */,
+				E1F0A2362909D80D00AB127E /* jcmainct.c in Sources */,
+				E1F0A2372909D80D00AB127E /* dng_exif.cpp in Sources */,
+				E1F0A2382909D80D00AB127E /* jidctflt.c in Sources */,
+				E1F0A2392909D80D00AB127E /* dng_color_spec.cpp in Sources */,
+				E1F0A23A2909D80D00AB127E /* dng_point.cpp in Sources */,
+				E1F0A23B2909D80D00AB127E /* jcdctmgr.c in Sources */,
+				E1F0A23C2909D80D00AB127E /* dng_memory_stream.cpp in Sources */,
+				E1F0A23D2909D80D00AB127E /* dng_spline.cpp in Sources */,
+				E1F0A23E2909D80D00AB127E /* dng_update_meta.cpp in Sources */,
+				E1F0A23F2909D80D00AB127E /* dng_hue_sat_map.cpp in Sources */,
+				E1F0A2402909D80D00AB127E /* jcarith.c in Sources */,
+				E1F0A2412909D80D00AB127E /* jdarith.c in Sources */,
+				E1F0A2422909D80D00AB127E /* jidctint.c in Sources */,
+				E1F0A2432909D80D00AB127E /* dng_tile_iterator.cpp in Sources */,
+				E1F0A2442909D80D00AB127E /* dng_memory.cpp in Sources */,
+				E1F0A2452909D80D00AB127E /* jdatadst.c in Sources */,
+				E1F0A2462909D80D00AB127E /* dng_mutex.cpp in Sources */,
+				E1F0A2472909D80D00AB127E /* jcmaster.c in Sources */,
+				E1F0A2482909D80D00AB127E /* dng_resample.cpp in Sources */,
+				E1F0A2492909D80D00AB127E /* dng_xmp.cpp in Sources */,
+				E1F0A24A2909D80D00AB127E /* jdinput.c in Sources */,
+				E1F0A24B2909D80D00AB127E /* dng_local_string.cpp in Sources */,
+				E1F0A24C2909D80D00AB127E /* dng_color_space.cpp in Sources */,
+				E1F0A24D2909D80D00AB127E /* jaricom.c in Sources */,
+				E1F0A24E2909D80D00AB127E /* dng_rational.cpp in Sources */,
+				E1F0A24F2909D80D00AB127E /* dng_1d_table.cpp in Sources */,
+				E1F0A2502909D80D00AB127E /* jidctfst.c in Sources */,
+				E1F0A2512909D80D00AB127E /* jdsample.c in Sources */,
+				E1F0A2522909D80D00AB127E /* dng_negative.cpp in Sources */,
+				E1F0A2532909D80D00AB127E /* jctrans.c in Sources */,
+				E1F0A2542909D80D00AB127E /* dng_pthread.cpp in Sources */,
+				E1F0A2552909D80D00AB127E /* dng_tag_types.cpp in Sources */,
+				E1F0A2562909D80D00AB127E /* dng_render.cpp in Sources */,
+				E1F0A2572909D80D00AB127E /* jcinit.c in Sources */,
+				E1F0A2582909D80D00AB127E /* dng_simple_image.cpp in Sources */,
+				E1F0A2592909D80D00AB127E /* dng_date_time.cpp in Sources */,
+				E1F0A25A2909D80D00AB127E /* jdmaster.c in Sources */,
+				E1F0A25B2909D80D00AB127E /* dng_rect.cpp in Sources */,
+				E1F0A25C2909D80D00AB127E /* dng_temperature.cpp in Sources */,
+				E1F0A25D2909D80D00AB127E /* dng_bad_pixels.cpp in Sources */,
+				E1F0A25E2909D80D00AB127E /* dng_parse_utils.cpp in Sources */,
+				E1F0A25F2909D80D00AB127E /* dng_sdk_wrapper.cpp in Sources */,
+				E1F0A2602909D80D00AB127E /* jccoefct.c in Sources */,
+				E1F0A2612909D80D00AB127E /* dng_file_stream.cpp in Sources */,
+				E1F0A2622909D80D00AB127E /* jfdctfst.c in Sources */,
+				E1F0A2632909D80D00AB127E /* dng_exceptions.cpp in Sources */,
+				E1F0A2642909D80D00AB127E /* dng_shared.cpp in Sources */,
+				E1F0A2652909D80D00AB127E /* jdcolor.c in Sources */,
+				E1F0A2662909D80D00AB127E /* utils.swift in Sources */,
+				E1F0A2672909D80D00AB127E /* dng_xmp_sdk.cpp in Sources */,
+				E1F0A2682909D80D00AB127E /* jchuff.c in Sources */,
+				E1F0A2692909D80D00AB127E /* dng_preview.cpp in Sources */,
+				E1F0A26A2909D80D00AB127E /* jddctmgr.c in Sources */,
+				E1F0A26B2909D80D00AB127E /* dng_xy_coord.cpp in Sources */,
+				E1F0A26C2909D80D00AB127E /* dng_abort_sniffer.cpp in Sources */,
+				E1F0A26D2909D80D00AB127E /* jcsample.c in Sources */,
+				E1F0A26E2909D80D00AB127E /* jmemmgr.c in Sources */,
+				E1F0A26F2909D80D00AB127E /* jcapistd.c in Sources */,
+				E1F0A2702909D80D00AB127E /* dng_stream.cpp in Sources */,
+				E1F0A2712909D80D00AB127E /* dng_camera_profile.cpp in Sources */,
+				E1F0A2722909D80D00AB127E /* jcparam.c in Sources */,
+				E1F0A2732909D80D00AB127E /* dng_jpeg_image.cpp in Sources */,
+				E1F0A2742909D80D00AB127E /* jdapimin.c in Sources */,
+				E1F0A2752909D80D00AB127E /* dng_reference.cpp in Sources */,
+				E1F0A2762909D80D00AB127E /* dng_opcodes.cpp in Sources */,
+				E1F0A2772909D80D00AB127E /* jutils.c in Sources */,
+				E1F0A2782909D80D00AB127E /* jquant1.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1580,6 +1891,68 @@
 			};
 			name = Release;
 		};
+		E1F0A2892909D80D00AB127E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 14;
+				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";
+				DEVELOPMENT_TEAM = H3NRAX7BS4;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = burstphoto/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/dng_sdk/xmp_lib/Release",
+					"$(PROJECT_DIR)/dng_sdk/xmp_lib/Debug",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E1F0A28A2909D80D00AB127E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 14;
+				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";
+				DEVELOPMENT_TEAM = H3NRAX7BS4;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = burstphoto/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/dng_sdk/xmp_lib/Release",
+					"$(PROJECT_DIR)/dng_sdk/xmp_lib/Debug",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1592,11 +1965,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E1ACED7626A490A2009B14EB /* Build configuration list for PBXNativeTarget "burstphoto" */ = {
+		E1ACED7626A490A2009B14EB /* Build configuration list for PBXNativeTarget "gui" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E1ACED7726A490A2009B14EB /* Debug */,
 				E1ACED7826A490A2009B14EB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1F0A2882909D80D00AB127E /* Build configuration list for PBXNativeTarget "cli" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1F0A2892909D80D00AB127E /* Debug */,
+				E1F0A28A2909D80D00AB127E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
