@@ -8,6 +8,47 @@ enum ImageIOError: Error {
     case save_error
 }
 
+// https://stackoverflow.com/questions/26971240/how-do-i-run-a-terminal-command-in-a-swift-script-e-g-xcodebuild
+@discardableResult // Add to suppress warnings when you don't want/need a result
+func safeShell(_ command: String) throws -> String {
+    let task = Process()
+    let pipe = Pipe()
+    
+    task.standardOutput = pipe
+    task.standardError = pipe
+    task.arguments = ["-c", command]
+    task.executableURL = URL(fileURLWithPath: "/bin/zsh") //<--updated
+    task.standardInput = nil
+
+    try task.run() //<--updated
+    
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    let output = String(data: data, encoding: .utf8)!
+    
+    return output
+}
+
+func optionally_convert_to_dngs(raw_ruls urls: [URL], using_tmp_dir tmp_dir_path: String, dng_converter_path: String) throws -> [URL] {
+    var urls_new = urls
+    
+    for i in 0..<urls_new.capacity {
+        let url_original = urls_new[i]
+        let file_extension = url_original.absoluteString.suffix(3).lowercased()
+        if file_extension != "dng" {
+            // Call adobe dng converter
+            let file_path_original = url_original.path
+            let command = "." + dng_converter_path + " " + file_path_original + " -d " + tmp_dir_path
+            let output = try safeShell(command)
+            
+            // Save the new URL
+            let new_file_path = tmp_dir_path + url_original.deletingPathExtension().lastPathComponent + ".dng"
+            let url_new = URL(fileURLWithPath: new_file_path)
+            urls_new[i] = url_new
+        }
+    }
+    return urls_new
+}
+
 func image_url_to_bayer_texture(_ url: URL, _ device: MTLDevice) throws -> MTLTexture {
     
     // read image

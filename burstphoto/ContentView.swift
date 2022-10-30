@@ -9,6 +9,7 @@ class AppSettings: ObservableObject {
     @AppStorage("tile_size") static var tile_size: Int = 16
     @AppStorage("search_distance") static var search_distance: String = "Medium"
     @AppStorage("robustness") static var robustness: Double = 0.5
+    @AppStorage("adobe_dng_converter_parth") static var dng_converter_path: String = "/Applications/Adobe\\ DNG\\ Converter.app/Contents/MacOS/Adobe\\ DNG\\ Converter"
 }
 
 struct MyAlert {
@@ -79,7 +80,7 @@ struct MainView: View {
         VStack{
             Spacer()
             
-            Text("Drag & drop a burst of DNG images")
+            Text("Drag & drop a burst of raw image files")
                 .multilineTextAlignment(.center)
                 .font(.system(size: 20, weight: .medium))
                 .opacity(0.8)
@@ -92,7 +93,7 @@ struct MainView: View {
             
             Spacer()
             
-            Text("*.dng, *.DNG")
+            Text("*.dng, *.arw, *.nef, etc.")
                 .font(.system(size: 14, weight: .light))
                 .italic()
                 .opacity(0.8)
@@ -211,8 +212,13 @@ struct SettingsView: View {
                     Text("High")
                 }
             }.padding(20)
+            
+            Spacer()
+            
+            // TODO: A File picker
+            
         }
-        .frame(width: 350, height: 300)
+        .frame(width: 350)
         .navigationTitle("Preferences")
     }
 }
@@ -263,13 +269,10 @@ struct MyDropDelegate: DropDelegate {
             }
             
             // if a directory was drag-and-dropped, convert it to a list of urls
-            all_file_urls = optionally_convert_dir_to_urls(all_file_urls)
+            image_urls = optionally_convert_dir_to_urls(all_file_urls)
             
             // sort the urls alphabetically
-            all_file_urls.sort(by: {$0.path < $1.path})
-            
-            // update the app's list of urls
-            image_urls = all_file_urls
+            image_urls.sort(by: {$0.path < $1.path})
             
             // sync GUI
             DispatchQueue.main.async {
@@ -280,15 +283,13 @@ struct MyDropDelegate: DropDelegate {
             do {
                 // compute reference index (use the middle image)
                 let ref_idx = image_urls.count / 2
-                
-                // align and merge the burst
-                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
 
                 // set output image url
                 let in_url = image_urls[ref_idx]
                 let in_filename = in_url.deletingPathExtension().lastPathComponent
                 let out_filename = in_filename + "_merged"
                 let out_dir = NSHomeDirectory() + "/Pictures/Burst Photo/"
+                let tmp_dir = out_dir + "." + out_filename + "/"
                 let out_path = out_dir + out_filename + ".dng"
                 out_url = URL(fileURLWithPath: out_path)
                 
@@ -296,6 +297,26 @@ struct MyDropDelegate: DropDelegate {
                 if !FileManager.default.fileExists(atPath: out_dir) {
                     try FileManager.default.createDirectory(atPath: out_dir, withIntermediateDirectories: true, attributes: nil)
                 }
+                
+                // create the temp directory inside the output directory
+                try FileManager.default.createDirectory(atPath: tmp_dir, withIntermediateDirectories: true)
+                
+                // ensure that all files are .dng, converting them if necessary
+                if image_urls.contains(where: {$0.absoluteString.suffix(3).lowercased() != "dng"}) {
+                    // set the DNG path if it wasn't already set
+                    if AppSettings.dng_converter_path.isEmpty {
+                        // TODO: 
+                    }
+                    
+                    // convert any of the non-DNGs and update image_urls
+                    image_urls = try optionally_convert_to_dngs(raw_ruls: image_urls, using_tmp_dir: tmp_dir, dng_converter_path: AppSettings.dng_converter_path)
+                }
+                
+                // delete the temp folder for the image
+                try FileManager.default.removeItem(atPath: tmp_dir)
+                
+                // align and merge the burst
+                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
                 
                 // save the output image
                 try bayer_texture_to_dng(output_texture, in_url, out_url)
