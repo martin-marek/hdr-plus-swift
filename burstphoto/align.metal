@@ -396,10 +396,18 @@ kernel void compute_merge_weight(texture2d<float, access::read> texture_diff [[t
     float diff = texture_diff.read(gid).r;
     
     // compute the weight to assign to the comparison frame
+    // weight == 0 means that the aligned image is ignored
+    // weight == 1 means that the aligned image has full weight
     float weight;
     if (robustness == 0) {
+        // robustness == 0 means that robust merge is turned off
         weight = 1;
     } else {
+        // compare the difference to image noise
+        // as diff increases, the weight of the aligned image will continuously decrease from 1.0 to 0.0
+        // the two extreme cases are:
+        // diff == 0                   --> aligned image will have weight 1.0
+        // diff >= noise_sd/robustness --> aligned image will have weight 0.0
         float max_diff = noise_sd / robustness;
         weight =  1 - diff / max_diff;
         weight = clamp(weight, 0.0, 1.0);
