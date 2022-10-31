@@ -401,7 +401,7 @@ kernel void compute_merge_weight(texture2d<float, access::read> texture_diff [[t
         weight = 1;
     } else {
         float max_diff = noise_sd / robustness;
-        weight =  1 - float(diff) / float(max_diff);
+        weight =  1 - diff / max_diff;
         weight = clamp(weight, 0.0, 1.0);
     }
     
