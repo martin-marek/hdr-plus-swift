@@ -399,8 +399,6 @@ struct SettingsButton: View {
         } else {
           NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
         }
-        
-        
     }
     
     var body: some View {
