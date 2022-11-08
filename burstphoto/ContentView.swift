@@ -130,7 +130,6 @@ struct ImageSavedView: View {
                 
                 Button(action: {NSWorkspace.shared.activateFileViewerSelecting([out_url])},
                        label: {Text("Show in Finder")})
-                .foregroundColor(.accentColor)
             }
             
             Spacer()
@@ -369,8 +368,17 @@ struct HelpButton: View {
 
 
 struct SettingsButton: View {
+    // make the buttom open the app's settings / preferences window
     // https://stackoverflow.com/a/65356627/6495494
-    let action: () -> Void = {NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)}
+    let action: () -> Void = {
+        // Version specific function call, as this changed in macOS 13 (Ventura)
+        // https://developer.apple.com/forums/thread/711940
+        if #available(macOS 13, *) {
+          NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        } else {
+          NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
+    }
     
     var body: some View {
         Button(action: action, label: {
