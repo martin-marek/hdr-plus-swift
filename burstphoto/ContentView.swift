@@ -306,7 +306,7 @@ struct MyDropDelegate: DropDelegate {
 
             } catch ImageIOError.load_error {
                 my_alert.title = "Unsupported format"
-                my_alert.message = "Image format not supported. Please use DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Converter. Avoid using DNG files generated from edited images."
+                my_alert.message = "Image format not supported. Please use RAW DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Converter. Avoid using processed (demosaiced) DNG images."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch ImageIOError.save_error {
