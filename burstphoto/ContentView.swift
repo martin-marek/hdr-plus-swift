@@ -234,10 +234,16 @@ struct MyDropDelegate: DropDelegate {
     
     func dropEntered(info: DropInfo) {
         self.active = true
+        if (app_state != .processing) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
     }
     
     func dropExited(info: DropInfo) {
         self.active = false
+        if (app_state != .processing) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
     }
     
     func performDrop(info: DropInfo) -> Bool {
