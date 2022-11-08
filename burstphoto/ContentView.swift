@@ -131,6 +131,7 @@ struct ImageSavedView: View {
                 
                 Button(action: {NSWorkspace.shared.activateFileViewerSelecting([out_url])},
                        label: {Text("Show in Finder")})
+                .foregroundColor(.accentColor)
             }
             
             Spacer()
@@ -239,10 +240,16 @@ struct MyDropDelegate: DropDelegate {
     
     func dropEntered(info: DropInfo) {
         self.active = true
+        if (app_state != .processing) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
     }
     
     func dropExited(info: DropInfo) {
         self.active = false
+        if (app_state != .processing) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
     }
     
     func performDrop(info: DropInfo) -> Bool {
@@ -319,14 +326,14 @@ struct MyDropDelegate: DropDelegate {
                 let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
                 
                 // save the output image
-                try bayer_texture_to_dng(output_texture, in_url, out_url)
+                try texture_to_dng(output_texture, in_url, out_url)
 
                 // inform the user about the saved image
                 app_state = .image_saved
 
             } catch ImageIOError.load_error {
                 my_alert.title = "Unsupported format"
-                my_alert.message = "Image format not supported. Please use DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Converter. Avoid using DNG files generated from edited images."
+                my_alert.message = "Image format not supported. Please use RAW DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Converter. Avoid using processed (demosaiced) DNG images."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch ImageIOError.save_error {

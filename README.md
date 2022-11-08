@@ -27,16 +27,18 @@ To process a burst of DNG images, simply drag-and-drop them into the app. You ca
 You can download the app from the [Mac App Store](https://burst.photo/download/) or as a [GitHub release](https://github.com/martin-marek/hdr-plus-swift/releases).
 
 # Features
-- [x] Bayer DNG support
+- [x] DNG support
 - [x] robust merge
 - [x] mutli-threaded image loading
 - [x] align+merge running in pure Metal
-- [x] full ARM / x86 support (in main brach, not yet released)
+- [x] full ARM / x86 support
+- [x] Bayer sensor support (good)
+- [x] non-Bayer sensor support (beta)
+- [x] preserve lens profiles
 
 # TODO
-- [ ] preserve lens profiles
 - [ ] super-resolution
-- [ ] support for non-Bayer sensors (Fuji...)
+- [ ] RAW support (through Adobe DNG Converter CLI)
 - [ ] fix progressbar getting stuck loading the first image
 - [ ] 32-bit output - how can this be achieved in Adobe DNG SDK?
 

@@ -4,7 +4,12 @@
 <dict>
 	<key>SchemeUserState</key>
 	<dict>
-		<key>burstphoto.xcscheme_^#shared#^_</key>
+		<key>cli.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>1</integer>
+		</dict>
+		<key>gui.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
 			<integer>0</integer>
@@ -13,6 +18,11 @@
 	<key>SuppressBuildableAutocreation</key>
 	<dict>
 		<key>E1ACED6526A490A1009B14EB</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>E1F0A1FD2909D80D00AB127E</key>
 		<dict>
 			<key>primary</key>
 			<true/>
