@@ -9,7 +9,6 @@ class AppSettings: ObservableObject {
     @AppStorage("tile_size") static var tile_size: Int = 16
     @AppStorage("search_distance") static var search_distance: String = "Medium"
     @AppStorage("robustness") static var robustness: Double = 0.5
-    @AppStorage("adobe_dng_converter_parth") static var dng_converter_path: String = "/Applications/Adobe DNG Converter.app"
 }
 
 struct MyAlert {
@@ -93,7 +92,7 @@ struct MainView: View {
             
             Spacer()
             
-            Text("*.dng, *.arw, *.nef, etc.")
+            Text("*.DNG, *.ARW, *.NEF…")
                 .font(.system(size: 14, weight: .light))
                 .italic()
                 .opacity(0.8)
@@ -157,7 +156,7 @@ struct ProcessingView: View {
     func progress_int_to_str(_ int: Int) -> String {
         if progress.includes_conversion {
             if progress.int < image_urls.count {
-                return "Converting images to DNG..."
+                return "Converting images to DNG (this might take a while)..."
             } else if progress.int < 2*image_urls.count {
                 return "Loading \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
             } else if progress.int < 3*image_urls.count {
@@ -303,14 +302,14 @@ struct MyDropDelegate: DropDelegate {
                 let ref_idx = image_urls.count / 2
 
                 // align and merge the burst
-                out_url = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness, dng_converter_path: AppSettings.dng_converter_path)
+                out_url = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
 
                 // inform the user about the saved image
                 app_state = .image_saved
 
             } catch ImageIOError.load_error {
                 my_alert.title = "Unsupported format"
-                my_alert.message = "Image format not supported. Please use RAW DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Converter. Avoid using processed (demosaiced) DNG images."
+                my_alert.message = "Image format not supported. Please only use unprocessed RAW or DNG images. Using RAW images requires Adobe DNG Converter to be installed on your Mac."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch ImageIOError.save_error {
@@ -325,12 +324,22 @@ struct MyDropDelegate: DropDelegate {
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_extensions {
                 my_alert.title = "Inconsistent formats"
-                my_alert.message = "The dropped files heve inconsistent formats. Please make sure that all images are DNG files."
+                my_alert.message = "Please make sure that all images have the same format."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_resolutions {
                 my_alert.title = "Inconsistent resolution"
-                my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Converter."
+                my_alert.message = "Please make sure that all images have the same resolution."
+                my_alert.show = true
+                DispatchQueue.main.async { app_state = .main }
+            } catch AlignmentError.missing_dng_converter {
+                my_alert.title = "Missing Adobe DNG Converter"
+                my_alert.message = "Only DNG files are supported natively. If you wish to use other RAW formats, please download and install Adobe DNG Converter. Burst Photo will then be able to process most RAW formats automatically."
+                my_alert.show = true
+                DispatchQueue.main.async { app_state = .main }
+            } catch AlignmentError.conversion_failed {
+                my_alert.title = "Conversion Failed"
+                my_alert.message = "Image format not supported. Please only use unprocessed RAW or DNG images."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch {

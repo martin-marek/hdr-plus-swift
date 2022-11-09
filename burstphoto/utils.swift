@@ -98,16 +98,17 @@ func convert_images_to_dng(_ in_urls: [URL], _ dng_converter_path: String, _ tmp
 
     // call adobe dng converter
     let output = try safeShell(command)
-    // print("output:", output)
-    // let conversion_successful = !output.contains("Invalid") // TODO: this is insufficient
-    // print("conversion_successful:", conversion_successful)
 
     // return urls of the newly created dngs
     var out_urls: [URL] = []
     for url in in_urls {
         let fine_name = url.deletingPathExtension().lastPathComponent + ".dng"
-        let out_url = URL(fileURLWithPath: tmp_dir + fine_name)
+        let out_path = tmp_dir + fine_name
+        let out_url = URL(fileURLWithPath: out_path)
         out_urls.append(out_url)
+        if !FileManager.default.fileExists(atPath: out_path) {
+            throw AlignmentError.conversion_failed
+        }
     }
 
     return out_urls

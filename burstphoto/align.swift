@@ -8,6 +8,8 @@ enum AlignmentError: Error {
     case less_than_two_images
     case inconsistent_extensions
     case inconsistent_resolutions
+    case missing_dng_converter
+    case conversion_failed
 }
 
 
@@ -488,11 +490,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
 }
 
 
-func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 1, dng_converter_path: String?) throws -> URL {
-    
-    // filter supported image formats
-    // let supported_extensions = ["3fr", "arw", "cr2", "crw", "dcr", "erf", "fff", "iiq", "kdc", "mef", "mos", "mrw", "nef", "nrw", "orf", "pef", "raf", "raw", "rw2", "rwl", "sr2", "tif", "x3f"]
-    // let out_urls = in_urls.filter{supported_extensions.contains($0.pathExtension.lowercased())}
+func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 1) throws -> URL {
     
     // check that all images are of the same extension
     let image_extension = image_urls[0].pathExtension
@@ -521,14 +519,18 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     let convert_to_dng = image_extension != "dng"
     DispatchQueue.main.async { progress.includes_conversion = convert_to_dng }
     if convert_to_dng {
-        // if dng coverter is not installed, prompt user
-        // TODO
-        
-        // assume for now that dng converter is installed
-        dng_urls = try convert_images_to_dng(image_urls, dng_converter_path!, tmp_dir, progress)
-        print("Time to convert images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
-        DispatchQueue.main.async { progress.int += n_images }
-        t = DispatchTime.now().uptimeNanoseconds
+        // check if dng converter is installed
+        let dng_converter_path = "/Applications/Adobe DNG Converter.app"
+        if !FileManager.default.fileExists(atPath: dng_converter_path) {
+            // if dng coverter is not installed, prompt user
+            throw AlignmentError.missing_dng_converter
+        } else {
+            // the dng converter is installed -> use it
+            dng_urls = try convert_images_to_dng(image_urls, dng_converter_path, tmp_dir, progress)
+            print("Time to convert images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
+            DispatchQueue.main.async { progress.int += n_images }
+            t = DispatchTime.now().uptimeNanoseconds
+        }
     }
     
     // set output location

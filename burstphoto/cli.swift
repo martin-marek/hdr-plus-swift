@@ -15,7 +15,8 @@ struct MyProgram {
         
         // create a list of bursts to process
         let burst_dirs = [
-            "/Users/martinmarek/Downloads/rafs mini/"
+            //"/Users/martinmarek/Downloads/rafs mini/",
+            "/Users/martinmarek/My Drive/Coding/Burst/bursts/Fuji X-trans RAF/",
             // "/Users/martinmarek/My Drive/Coding/Burst/bursts/33TJ_20150614_232110_642_dng/",
             // "/Users/martinmarek/My Drive/Coding/Burst/bursts/Monika-HP-dng/",
             // "/Users/martinmarek/My Drive/Coding/Burst/bursts/Monika-stars-DNG/",
@@ -39,11 +40,10 @@ struct MyProgram {
             let search_distance = "Medium"
             let tile_size = 16
             let kernel_size = 5
-            let dng_converter_path = "/Applications/Adobe DNG Converter.app"
             
             // align+merge
-            let out_url = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness, dng_converter_path: dng_converter_path)
-            print("Image saved in:", out_url)
+            let out_url = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness)
+            print("Image saved in:", out_url.relativePath)
             
         }
         
