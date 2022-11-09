@@ -25,6 +25,7 @@ struct TileInfo {
 // class to store the progress of the align+merge
 class ProcessingProgress: ObservableObject {
     @Published var int = 0
+    @Published var includes_conversion = false
 }
 
 
@@ -516,16 +517,17 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     var t = DispatchTime.now().uptimeNanoseconds
     
     // ensure that all files are .dng, converting them if necessary
-    
     var dng_urls = image_urls
     let convert_to_dng = image_extension != "dng"
+    DispatchQueue.main.async { progress.includes_conversion = convert_to_dng }
     if convert_to_dng {
         // if dng coverter is not installed, prompt user
         // TODO
         
         // assume for now that dng converter is installed
-        dng_urls = try convert_to_dngs(image_urls, dng_converter_path!, tmp_dir)
+        dng_urls = try convert_images_to_dng(image_urls, dng_converter_path!, tmp_dir, progress)
         print("Time to convert images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
+        DispatchQueue.main.async { progress.int += n_images }
         t = DispatchTime.now().uptimeNanoseconds
     }
     

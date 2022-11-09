@@ -155,17 +155,29 @@ struct ProcessingView: View {
     let saving_as_num_of_images = 0
     
     func progress_int_to_str(_ int: Int) -> String {
-        if progress.int < image_urls.count {
-            return "Loading \(image_urls[progress.int].lastPathComponent)..."
-        } else if progress.int < 2*image_urls.count {
-            return "Processing \(image_urls[progress.int - image_urls.count].lastPathComponent)..."
+        if progress.includes_conversion {
+            if progress.int < image_urls.count {
+                return "Converting images to DNG..."
+            } else if progress.int < 2*image_urls.count {
+                return "Loading \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            } else if progress.int < 3*image_urls.count {
+                return "Processing \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            } else {
+                return "Saving processed image..."
+            }
         } else {
-            return "Saving processed image..."
+            if progress.int < image_urls.count {
+                return "Loading \(image_urls[progress.int].lastPathComponent)..."
+            } else if progress.int < 2*image_urls.count {
+                return "Processing \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            } else {
+                return "Saving processed image..."
+            }
         }
     }
     
     var body: some View {
-        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double(2*image_urls.count + saving_as_num_of_images))
+        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double((progress.includes_conversion ? 3 : 2)*image_urls.count + saving_as_num_of_images))
             .font(.system(size: 16, weight: .medium))
             .opacity(0.8)
             .padding(20)
