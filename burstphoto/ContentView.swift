@@ -9,7 +9,7 @@ class AppSettings: ObservableObject {
     @AppStorage("tile_size") static var tile_size: Int = 16
     @AppStorage("search_distance") static var search_distance: String = "Medium"
     @AppStorage("robustness") static var robustness: Double = 0.5
-    @AppStorage("adobe_dng_converter_parth") static var dng_converter_path: String = "/Applications/Adobe\\ DNG\\ Converter.app/Contents/MacOS/Adobe\\ DNG\\ Converter"
+    @AppStorage("adobe_dng_converter_parth") static var dng_converter_path: String = "/Applications/Adobe DNG Converter.app"
 }
 
 struct MyAlert {
@@ -290,42 +290,8 @@ struct MyDropDelegate: DropDelegate {
                 // compute reference index (use the middle image)
                 let ref_idx = image_urls.count / 2
 
-                // set output image url
-                let in_url = image_urls[ref_idx]
-                let in_filename = in_url.deletingPathExtension().lastPathComponent
-                let out_filename = in_filename + "_merged"
-                let out_dir = NSHomeDirectory() + "/Pictures/Burst Photo/"
-                let tmp_dir = out_dir + "." + out_filename + "/"
-                let out_path = out_dir + out_filename + ".dng"
-                out_url = URL(fileURLWithPath: out_path)
-                
-                // create output directory
-                if !FileManager.default.fileExists(atPath: out_dir) {
-                    try FileManager.default.createDirectory(atPath: out_dir, withIntermediateDirectories: true, attributes: nil)
-                }
-                
-                // create the temp directory inside the output directory
-                try FileManager.default.createDirectory(atPath: tmp_dir, withIntermediateDirectories: true)
-                
-                // ensure that all files are .dng, converting them if necessary
-                if image_urls.contains(where: {$0.absoluteString.suffix(3).lowercased() != "dng"}) {
-                    // set the DNG path if it wasn't already set
-                    if AppSettings.dng_converter_path.isEmpty {
-                        // TODO: 
-                    }
-                    
-                    // convert any of the non-DNGs and update image_urls
-                    image_urls = try optionally_convert_to_dngs(raw_ruls: image_urls, using_tmp_dir: tmp_dir, dng_converter_path: AppSettings.dng_converter_path)
-                }
-                
-                // delete the temp folder for the image
-                try FileManager.default.removeItem(atPath: tmp_dir)
-                
                 // align and merge the burst
-                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
-                
-                // save the output image
-                try texture_to_dng(output_texture, in_url, out_url)
+                out_url = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness, dng_converter_path: AppSettings.dng_converter_path)
 
                 // inform the user about the saved image
                 app_state = .image_saved

@@ -536,25 +536,52 @@ func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> ([MTLT
 }
 
 
-func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 1) throws -> MTLTexture {
+func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 1, dng_converter_path: String?) throws -> URL {
     
-    // check that 2+ images have been passed
-    if image_urls.count < 2 {
-        throw AlignmentError.less_than_two_images
-    }
+    // filter supported image formats
+    // let supported_extensions = ["3fr", "arw", "cr2", "crw", "dcr", "erf", "fff", "iiq", "kdc", "mef", "mos", "mrw", "nef", "nrw", "orf", "pef", "raf", "raw", "rw2", "rwl", "sr2", "tif", "x3f"]
+    // let out_urls = in_urls.filter{supported_extensions.contains($0.pathExtension.lowercased())}
     
     // check that all images are of the same extension
-    let ref_ext = image_urls[0].pathExtension
-    for i in 1..<image_urls.count {
-        let comp_ext = image_urls[i].pathExtension
-        if comp_ext != ref_ext {
-            throw AlignmentError.inconsistent_extensions
-        }
+    let image_extension = image_urls[0].pathExtension
+    let all_extensions_same = image_urls.allSatisfy{$0.pathExtension == image_extension}
+    if !all_extensions_same {throw AlignmentError.inconsistent_extensions}
+    
+    // check that 2+ images were provided
+    let n_images = image_urls.count
+    if n_images < 2 {throw AlignmentError.less_than_two_images}
+    
+    // create output directory
+    let out_dir = NSHomeDirectory() + "/Pictures/Burst Photo/"
+    if !FileManager.default.fileExists(atPath: out_dir) {
+        try FileManager.default.createDirectory(atPath: out_dir, withIntermediateDirectories: true, attributes: nil)
     }
+    
+    // create a directory for temporary dngs inside the output directory
+    let tmp_dir = out_dir + ".dngs/"
+    try FileManager.default.createDirectory(atPath: tmp_dir, withIntermediateDirectories: true)
+    
+    // ensure that all files are .dng, converting them if necessary
+    var dng_urls = image_urls
+    let convert_to_dng = image_extension != "dng"
+    if convert_to_dng {
+        // if dng coverter is not installed, prompt user
+        // TODO
+        
+        // assume for now that dng converter is installed
+        dng_urls = try convert_to_dngs(image_urls, dng_converter_path!, tmp_dir)
+    }
+    
+    // set output location
+    let in_url = dng_urls[ref_idx]
+    let in_filename = in_url.deletingPathExtension().lastPathComponent
+    let out_filename = in_filename + "_merged"
+    let out_path = out_dir + out_filename + ".dng"
+    let out_url = URL(fileURLWithPath: out_path)
     
     // load images
     var t = DispatchTime.now().uptimeNanoseconds
-    var (textures, mosaic_pettern_width) = try load_images(image_urls, progress)
+    var (textures, mosaic_pettern_width) = try load_images(dng_urls, progress)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     let t0 = DispatchTime.now().uptimeNanoseconds
     
@@ -600,7 +627,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     fill_with_zeros(output_texture)
 
     // iterate over comparison images
-    for comp_idx in 0..<image_urls.count {
+    for comp_idx in 0..<n_images {
         // add the reference texture to the output
         if comp_idx == ref_idx {
             add_texture(ref_texture, output_texture)
@@ -676,9 +703,15 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     }
     
     // rescale output texture
-    let output_texture_uint16 = average_texture_sums(output_texture, image_urls.count)
+    let output_texture_uint16 = average_texture_sums(output_texture, n_images)
     
     print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
     
-    return output_texture_uint16
+    // save the output image
+    try texture_to_dng(output_texture_uint16, in_url, out_url)
+    
+    // delete the temporary dng directory
+    try FileManager.default.removeItem(atPath: tmp_dir)
+    
+    return out_url
 }
