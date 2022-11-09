@@ -487,55 +487,6 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
 }
 
 
-func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> ([MTLTexture], Int) {
-    
-    var textures_dict: [Int: MTLTexture] = [:]
-    let compute_group = DispatchGroup()
-    let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
-    let access_queue = DispatchQueue(label: "") // this is a serial queue to read/save data thread-safely
-    var mosaic_pettern_width: Int?
-
-    for i in 0..<urls.count {
-        compute_queue.async(group: compute_group) {
-    
-            // asynchronously load texture
-            if let (texture, _mosaic_pettern_width) = try? image_url_to_texture(urls[i], device) {
-    
-                // sync GUI progress
-                DispatchQueue.main.async { progress.int += 1 }
-    
-                // thread-safely save the texture
-                access_queue.sync {
-                    textures_dict[i] = texture
-                    mosaic_pettern_width = _mosaic_pettern_width
-                }
-            }
-        }
-    }
-    
-    // wait until all the images are loaded
-    compute_group.wait()
-    
-    // convert dict to list
-    var textures_list: [MTLTexture] = []
-    for i in 0..<urls.count {
-        
-        // ensure thread-safety
-        try access_queue.sync {
-            
-            // check whether the images have been loaded successfully
-            if let texture = textures_dict[i] {
-                textures_list.append(texture)
-            } else {
-                throw ImageIOError.load_error
-            }
-        }
-    }
-    
-    return (textures_list, mosaic_pettern_width!)
-}
-
-
 func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 1, dng_converter_path: String?) throws -> URL {
     
     // filter supported image formats
@@ -561,7 +512,11 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     let tmp_dir = out_dir + ".dngs/"
     try FileManager.default.createDirectory(atPath: tmp_dir, withIntermediateDirectories: true)
     
+    // measure execution time
+    var t = DispatchTime.now().uptimeNanoseconds
+    
     // ensure that all files are .dng, converting them if necessary
+    
     var dng_urls = image_urls
     let convert_to_dng = image_extension != "dng"
     if convert_to_dng {
@@ -570,6 +525,8 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
         
         // assume for now that dng converter is installed
         dng_urls = try convert_to_dngs(image_urls, dng_converter_path!, tmp_dir)
+        print("Time to convert images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
+        t = DispatchTime.now().uptimeNanoseconds
     }
     
     // set output location
@@ -580,10 +537,9 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     let out_url = URL(fileURLWithPath: out_path)
     
     // load images
-    var t = DispatchTime.now().uptimeNanoseconds
     var (textures, mosaic_pettern_width) = try load_images(dng_urls, progress)
-    print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
-    let t0 = DispatchTime.now().uptimeNanoseconds
+    print("Time to load images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
+    t = DispatchTime.now().uptimeNanoseconds
     
     // convert images from uint16 to float16
     textures = textures.map{texture_uint16_to_float($0)}
@@ -652,7 +608,6 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
 
         // align tiles
         for i in (0 ... downscale_factor_array.count-1).reversed() {
-            t = DispatchTime.now().uptimeNanoseconds
             
             // load layer params
             let tile_size = tile_size_array[i]
@@ -704,8 +659,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     
     // rescale output texture
     let output_texture_uint16 = average_texture_sums(output_texture, n_images)
-    
-    print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
+    print("Time to align+merge images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     
     // save the output image
     try texture_to_dng(output_texture_uint16, in_url, out_url)
