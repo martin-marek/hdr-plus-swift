@@ -18,7 +18,7 @@ For more examples, please visit [burst.photo/gallery/](https://burst.photo/galle
 
 # Usage
 
-To process a burst of DNG images, simply drag-and-drop them into the app. You can read more at [burst.photo/help/](https://burst.photo/help/).
+To process a burst of RAW images, simply drag-and-drop them into the app. You can read more at [burst.photo/help/](https://burst.photo/help/).
 
 ![alt text](docs/assets/images/help/drag-and-drop.jpg)
 
@@ -28,17 +28,18 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 
 # Features
 - [x] DNG support
-- [x] robust merge
-- [x] mutli-threaded image loading
-- [x] align+merge running in pure Metal
-- [x] full ARM / x86 support
+- [x] RAW support (requires Adobe DNG Converter to be installed)
+- [x] robust merge (simplified)
 - [x] Bayer sensor support (good)
 - [x] non-Bayer sensor support (beta)
-- [x] preserve lens profiles
+- [x] preserves lens profiles
+- [x] mutli-threaded image loading
+- [x] align+merge running in pure Metal
+- [x] native Intel, Apple Silicon support
 
 # TODO
 - [ ] super-resolution
-- [ ] RAW support (through Adobe DNG Converter CLI)
+- [ ] robust merge in frequency domain
 - [ ] fix progressbar getting stuck loading the first image
 - [ ] 32-bit output - how can this be achieved in Adobe DNG SDK?
 
