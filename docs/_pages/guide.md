@@ -9,17 +9,13 @@ Our app takes as input a burst of images and stacks them to produce a single out
 
 The app relies on aligning and merging a burst of similar images. Ideally, try to capture at least 5 - 10 sharp images without significant movement between them. It is okay if you take the burst handheld or if a person moves slightly between the photos. However, try to avoid motion blur and significant movement between images (for example a person tilting their head or changing their smile).
 
-### Converting images to DNG
+### Image formats
 
-Currently, the only supported image format is DNG with raw data. Confusingly, not all DNG images contain raw data. We suggest using [Adobe DNG Converter](https://helpx.adobe.com/camera-raw/using/adobe-dng-converter.html) or [Adobe Lightroom](https://www.adobe.com/products/photoshop-lightroom.html) to convert raw images into DNG. The following settings are recommended:
-
-{% include figure image_path="/assets/images/help/lightroom_settings.png" caption="Lightroom" %}
-
-{% include figure image_path="/assets/images/help/dng_converter_settings.png" caption="DNG Converter" %}
+The only *natively* supported image format is DNG. However, if you download and install [Adobe DNG Converter](https://helpx.adobe.com/camera-raw/using/adobe-dng-converter.html), Burst Photo will be able to convert most RAW formats in the background.
 
 ### Loading images
 
-To process a burst of DNG images, please drag-and-drop them into the app. You can either drag-and-drop individual images or a folder containing the whole burst.
+To process a burst of images, please drag-and-drop them into the app. You can either drag-and-drop individual images or a folder containing the whole burst.
 
 {% include figure image_path="/assets/images/help/drag-and-drop.jpg" %}
 
