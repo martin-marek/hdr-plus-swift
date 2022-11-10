@@ -224,10 +224,6 @@ struct SettingsView: View {
                 }
             }.padding(20)
             
-            Spacer()
-            
-            // TODO: A File picker
-            
         }
         .frame(width: 350)
         .navigationTitle("Preferences")
