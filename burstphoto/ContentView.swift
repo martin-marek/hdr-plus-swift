@@ -79,7 +79,7 @@ struct MainView: View {
         VStack{
             Spacer()
             
-            Text("Drag & drop a burst of DNG images")
+            Text("Drag & drop a burst of raw image files")
                 .multilineTextAlignment(.center)
                 .font(.system(size: 20, weight: .medium))
                 .opacity(0.8)
@@ -92,7 +92,7 @@ struct MainView: View {
             
             Spacer()
             
-            Text("*.dng, *.DNG")
+            Text("*.DNG, *.ARW, *.NEF…")
                 .font(.system(size: 14, weight: .light))
                 .italic()
                 .opacity(0.8)
@@ -154,17 +154,29 @@ struct ProcessingView: View {
     let saving_as_num_of_images = 0
     
     func progress_int_to_str(_ int: Int) -> String {
-        if progress.int < image_urls.count {
-            return "Loading \(image_urls[progress.int].lastPathComponent)..."
-        } else if progress.int < 2*image_urls.count {
-            return "Processing \(image_urls[progress.int - image_urls.count].lastPathComponent)..."
+        if progress.includes_conversion {
+            if progress.int < image_urls.count {
+                return "Converting images to DNG (this might take a while)..."
+            } else if progress.int < 2*image_urls.count {
+                return "Loading \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            } else if progress.int < 3*image_urls.count {
+                return "Processing \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            } else {
+                return "Saving processed image..."
+            }
         } else {
-            return "Saving processed image..."
+            if progress.int < image_urls.count {
+                return "Loading \(image_urls[progress.int].lastPathComponent)..."
+            } else if progress.int < 2*image_urls.count {
+                return "Processing \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            } else {
+                return "Saving processed image..."
+            }
         }
     }
     
     var body: some View {
-        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double(2*image_urls.count + saving_as_num_of_images))
+        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double((progress.includes_conversion ? 3 : 2)*image_urls.count + saving_as_num_of_images))
             .font(.system(size: 16, weight: .medium))
             .opacity(0.8)
             .padding(20)
@@ -211,8 +223,13 @@ struct SettingsView: View {
                     Text("High")
                 }
             }.padding(20)
+            
+            Spacer()
+            
+            // TODO: A File picker
+            
         }
-        .frame(width: 350, height: 300)
+        .frame(width: 350)
         .navigationTitle("Preferences")
     }
 }
@@ -269,13 +286,10 @@ struct MyDropDelegate: DropDelegate {
             }
             
             // if a directory was drag-and-dropped, convert it to a list of urls
-            all_file_urls = optionally_convert_dir_to_urls(all_file_urls)
+            image_urls = optionally_convert_dir_to_urls(all_file_urls)
             
             // sort the urls alphabetically
-            all_file_urls.sort(by: {$0.path < $1.path})
-            
-            // update the app's list of urls
-            image_urls = all_file_urls
+            image_urls.sort(by: {$0.path < $1.path})
             
             // sync GUI
             DispatchQueue.main.async {
@@ -286,32 +300,16 @@ struct MyDropDelegate: DropDelegate {
             do {
                 // compute reference index (use the middle image)
                 let ref_idx = image_urls.count / 2
-                
-                // align and merge the burst
-                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
 
-                // set output image url
-                let in_url = image_urls[ref_idx]
-                let in_filename = in_url.deletingPathExtension().lastPathComponent
-                let out_filename = in_filename + "_merged"
-                let out_dir = NSHomeDirectory() + "/Pictures/Burst Photo/"
-                let out_path = out_dir + out_filename + ".dng"
-                out_url = URL(fileURLWithPath: out_path)
-                
-                // create output directory
-                if !FileManager.default.fileExists(atPath: out_dir) {
-                    try FileManager.default.createDirectory(atPath: out_dir, withIntermediateDirectories: true, attributes: nil)
-                }
-                
-                // save the output image
-                try texture_to_dng(output_texture, in_url, out_url)
+                // align and merge the burst
+                out_url = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
 
                 // inform the user about the saved image
                 app_state = .image_saved
 
             } catch ImageIOError.load_error {
                 my_alert.title = "Unsupported format"
-                my_alert.message = "Image format not supported. Please use RAW DNG images only, converted directly from RAW files using Adobe Lightroom or Adobe DNG Converter. Avoid using processed (demosaiced) DNG images."
+                my_alert.message = "Image format not supported. Please only use unprocessed RAW or DNG images. Using RAW images requires Adobe DNG Converter to be installed on your Mac."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch ImageIOError.save_error {
@@ -326,12 +324,22 @@ struct MyDropDelegate: DropDelegate {
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_extensions {
                 my_alert.title = "Inconsistent formats"
-                my_alert.message = "The dropped files heve inconsistent formats. Please make sure that all images are DNG files."
+                my_alert.message = "Please make sure that all images have the same format."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_resolutions {
                 my_alert.title = "Inconsistent resolution"
-                my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Converter."
+                my_alert.message = "Please make sure that all images have the same resolution."
+                my_alert.show = true
+                DispatchQueue.main.async { app_state = .main }
+            } catch AlignmentError.missing_dng_converter {
+                my_alert.title = "Missing Adobe DNG Converter"
+                my_alert.message = "Only DNG files are supported natively. If you wish to use other RAW formats, please download and install Adobe DNG Converter. Burst Photo will then be able to process most RAW formats automatically."
+                my_alert.show = true
+                DispatchQueue.main.async { app_state = .main }
+            } catch AlignmentError.conversion_failed {
+                my_alert.title = "Conversion Failed"
+                my_alert.message = "Image format not supported. Please only use unprocessed RAW or DNG images."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch {
