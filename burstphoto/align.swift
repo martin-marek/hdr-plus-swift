@@ -559,6 +559,10 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     ]
     let max_min_layer_res = search_distance_dict[search_distance]!
     
+    // for Fuji X-Trans, the Bayer patter has size 6x6 but for conversion to grayscale, we can pretend like it's just 3x3
+    // we assume that all 6x6 patterns behave this way - is that correct?
+    if (mosaic_pettern_width == 6) {mosaic_pettern_width = 3}
+    
     // set alignment params
     let min_image_dim = min(ref_texture.width, ref_texture.height)
     var downscale_factor_array = [mosaic_pettern_width]
