@@ -1834,7 +1834,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";
 				DEVELOPMENT_TEAM = H3NRAX7BS4;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1851,7 +1851,7 @@
 					"$(PROJECT_DIR)/dng_sdk/xmp_lib/Debug",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
 				PRODUCT_NAME = "Burst Photo";
 				SWIFT_VERSION = 5.0;
@@ -1867,7 +1867,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";
 				DEVELOPMENT_TEAM = H3NRAX7BS4;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1884,7 +1884,7 @@
 					"$(PROJECT_DIR)/dng_sdk/xmp_lib/Debug",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
 				PRODUCT_NAME = "Burst Photo";
 				SWIFT_VERSION = 5.0;
