@@ -61,8 +61,15 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
         // get size of mosaic patter
         // - this affects how raw pixels are aligned
         // - it is assumed that the pattern is square
-        dng_point mosaic_pettern_size = negative->fMosaicInfo->fCFAPatternSize;
-        *mosaic_pettern_width = mosaic_pettern_size.h;
+        const dng_mosaic_info* mosaic_info = negative->GetMosaicInfo();
+        if (mosaic_info == NULL) {
+            *mosaic_pettern_width = 1;
+            printf("ERROR: MosaicInfo is null.\n");
+            return 1;
+        } else {
+            dng_point mosaic_pettern_size = negative->fMosaicInfo->fCFAPatternSize;
+            *mosaic_pettern_width = mosaic_pettern_size.h;
+        }
         
     }
     catch(...) {

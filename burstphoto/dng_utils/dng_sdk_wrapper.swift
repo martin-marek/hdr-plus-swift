@@ -8,6 +8,8 @@ enum ImageIOError: Error {
     case save_error
 }
 
+
+
 func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture, Int) {
     
     // read image
