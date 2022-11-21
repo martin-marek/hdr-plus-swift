@@ -6,9 +6,9 @@ enum AppState {
 }
 
 class AppSettings: ObservableObject {
-    @AppStorage("tile_size") static var tile_size: Int = 16
+    @AppStorage("tile_size") static var tile_size: Int = 32
     @AppStorage("search_distance") static var search_distance: String = "Medium"
-    @AppStorage("robustness") static var robustness: Double = 0.5
+    @AppStorage("robustness") static var robustness: Double = 0.6
 }
 
 struct MyAlert {
@@ -53,7 +53,7 @@ struct ContentView: View {
                 dismissButton: .cancel()
             )
         })
-        .frame(width: 350, height: 400)
+        .frame(width: 400, height: 400)
     }
 }
 
@@ -83,7 +83,7 @@ struct MainView: View {
                 .multilineTextAlignment(.center)
                 .font(.system(size: 20, weight: .medium))
                 .opacity(0.8)
-                .frame(width: 200)
+                .frame(width: 200, height: 80)
                 .padding()
             
             Spacer()
@@ -99,9 +99,9 @@ struct MainView: View {
                 .frame(width: 200, height: 50)
             
             HStack {
-                SettingsButton().padding(10)
+                SettingsButton().padding(30)
                 Spacer()
-                HelpButton().padding(10)
+                HelpButton().padding(30)
             }
         }
     }
@@ -175,7 +175,7 @@ struct ProcessingView: View {
 
 
 struct SettingsView: View {
-    let tile_sizes = [8, 16, 32, 64]
+    let tile_sizes = [16, 32, 64]
     let search_distances = ["Low", "Medium", "High"]
 
     var body: some View {
@@ -205,15 +205,15 @@ struct SettingsView: View {
             Spacer()
             
             VStack(alignment: .leading) {
-                Text("Robustness").font(.system(size: 14, weight: .medium))
+                Text("Robustness / Noise level").font(.system(size: 14, weight: .medium))
                 HStack {
                     Text("Low")
-                    Slider(value: AppSettings.$robustness, in: 0...1, step: 0.1)
+                    Slider(value: AppSettings.$robustness, in: 0...1.200000000000001, step: 0.1)
                     Text("High")
                 }
             }.padding(20)
         }
-        .frame(width: 350, height: 300)
+        .frame(width: 400, height: 300)
         .navigationTitle("Preferences")
     }
 }
@@ -283,7 +283,7 @@ struct MyDropDelegate: DropDelegate {
                 let ref_idx = image_urls.count / 2
                 
                 // align and merge the burst
-                let output_texture = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
+                let output_texture = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
 
                 // set output image url
                 let in_url = image_urls[ref_idx]
@@ -321,12 +321,17 @@ struct MyDropDelegate: DropDelegate {
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_extensions {
                 my_alert.title = "Inconsistent formats"
-                my_alert.message = "The dropped files heve inconsistent formats. Please make sure that all images are DNG files."
+                my_alert.message = "The dropped files have inconsistent formats. Please make sure that all images are DNG files."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_resolutions {
                 my_alert.title = "Inconsistent resolution"
-                my_alert.message = "The dropped files heve inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Converter."
+                my_alert.message = "The dropped files have inconsistent resolutions. Please make sure that all images are DNG files generated directly from camera RAW files using Adobe Lightroom or Adobe DNG Converter."
+                my_alert.show = true
+                DispatchQueue.main.async { app_state = .main }
+            } catch AlignmentError.unsupported_mosaic_pattern {
+                my_alert.title = "Unsupported mosaic pattern size"
+                my_alert.message = "The dropped files have an unsupported mosaic pattern size. Please make sure that all images have a Bayer mosaic pattern of 2x2."
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch {
