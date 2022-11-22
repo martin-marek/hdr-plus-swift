@@ -15,11 +15,8 @@ struct MyProgram {
         
         // create a list of bursts to process
         let burst_dirs = [
-            //"/Users/martinmarek/Downloads/rafs mini/",
-            "/Users/martinmarek/My Drive/Coding/Burst/bursts/Fuji X-trans RAF/",
-            // "/Users/martinmarek/My Drive/Coding/Burst/bursts/33TJ_20150614_232110_642_dng/",
-            // "/Users/martinmarek/My Drive/Coding/Burst/bursts/Monika-HP-dng/",
-            // "/Users/martinmarek/My Drive/Coding/Burst/bursts/Monika-stars-DNG/",
+                     
+            "/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child/Test/",
         ]
         
         // iterate over bursts
@@ -36,13 +33,13 @@ struct MyProgram {
 
             // set alignment params
             let ref_idx = image_urls.count / 2
-            let robustness = 0.5
+            let robustness = 0.9
             let search_distance = "Medium"
-            let tile_size = 16
-            let kernel_size = 5
+            let tile_size = 32
             
             // align+merge
-            let out_url = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness)
+            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, robustness: robustness)
+            
             print("Image saved in:", out_url.relativePath)
             
         }
