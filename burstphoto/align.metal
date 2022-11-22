@@ -371,7 +371,7 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
     
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm++) {
-        for (int dn = 0; dn < tile_size; dn++) {
+        for (int dn = 0; dn <= tile_size/2; dn++) {
              
             int const m = m0 + dm;
             int const n = n0 + dn;
@@ -402,15 +402,18 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
     }
     
     // row-wise one-dimensional discrete Fourier transform along x-direction
-    for (int dn = 0; dn < tile_size; dn++) {
+    for (int dn = 0; dn <= tile_size/2; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
                        
             int const m = m0 + dm;
             int const n = n0 + dn;
+            int const n2 = n0 + tile_size-dn;
              
             // fill with zeros
-            simd_float4 Re = zeros;
-            simd_float4 Im = zeros;
+            simd_float4 Re1 = zeros;
+            simd_float4 Im1 = zeros;
+            simd_float4 Re2 = zeros;
+            simd_float4 Im2 = zeros;
             
             for (int dx = 0; dx < tile_size; dx++) {
                                   
@@ -422,13 +425,22 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                            
                 simd_float4 const dataRe = tmp_texture_Re.read(uint2(x, n));
                 simd_float4 const dataIm = tmp_texture_Im.read(uint2(x, n));
-                            
-                Re += (coefRe*dataRe - coefIm*dataIm);
-                Im += (coefIm*dataRe + coefRe*dataIm);
+                             
+                Re1 += (coefRe*dataRe - coefIm*dataIm);
+                Im1 += (coefIm*dataRe + coefRe*dataIm);
+                
+                Re2 += (coefRe*dataRe + coefIm*dataIm);
+                Im2 += (coefIm*dataRe - coefRe*dataIm);
             }
             
-            out_texture_Re.write(Re, uint2(m, n));
-            out_texture_Im.write(Im, uint2(m, n));
+            out_texture_Re.write(Re1, uint2(m, n));
+            out_texture_Im.write(Im1, uint2(m, n));
+            
+            if(n2 < n0+tile_size & n2 != n0+tile_size/2)
+            {
+                out_texture_Re.write(Re2, uint2(m, n2));
+                out_texture_Im.write(Im2, uint2(m, n2));
+            }
         }
     }
 }
@@ -555,7 +567,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     //float const max_motion_norm = pow(sqrt(2.0f), (1.0f-robustness)*10);
     
     // scaling parameter to control at which level of mismatch the increase of noise reduction vanishes (s smaller => increase of noise reduction smaller)
-    float const mismatch_norm = 1000.0f;
+    float const mismatch_norm = 500.0f;
         
     // compute tile positions from gid
     int const m0 = gid.x*tile_size;
@@ -610,7 +622,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
    
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm++) {
-        for (int dn = 0; dn < tile_size; dn++) {
+        for (int dn = 0; dn <= tile_size/2; dn++) {
              
             int const m = m0 + dm;
             int const n = n0 + dn;
@@ -641,15 +653,15 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     }
     
     // row-wise one-dimensional discrete Fourier transform along x-direction
-    for (int dn = 0; dn < tile_size; dn++) {
+    for (int dn = 0; dn <= tile_size/2; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
                        
             int const m = m0 + dm;
             int const n = n0 + dn;
-            
-            simd_float4 const Re1 = ref_texture_Re.read(uint2(m, n));
-            simd_float4 const Im1 = ref_texture_Im.read(uint2(m, n));
+            int const n2 = n0 + tile_size-dn;
              
+            simd_float4 Re1 = zeros;
+            simd_float4 Im1 = zeros;
             simd_float4 Re2 = zeros;
             simd_float4 Im2 = zeros;
             
@@ -664,24 +676,51 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                 simd_float4 const dataRe = tmp_texture_Re.read(uint2(x, n));
                 simd_float4 const dataIm = tmp_texture_Im.read(uint2(x, n));
                             
-                Re2 += (coefRe*dataRe - coefIm*dataIm);
-                Im2 += (coefIm*dataRe + coefRe*dataIm);
+                Re1 += (coefRe*dataRe - coefIm*dataIm);
+                Im1 += (coefIm*dataRe + coefRe*dataIm);
+                      
+                Re2 += (coefRe*dataRe + coefIm*dataIm);
+                Im2 += (coefIm*dataRe - coefRe*dataIm);
             }
    
+            simd_float4 Re3 = ref_texture_Re.read(uint2(m, n));
+            simd_float4 Im3 = ref_texture_Im.read(uint2(m, n));
+            
             // calculation of merging weight by Wiener shrinkage
-            simd_float4 weight4 = (Re1-Re2)*(Re1-Re2) + (Im1-Im2)*(Im1-Im2);
+            simd_float4 weight4 = (Re3-Re1)*(Re3-Re1) + (Im3-Im1)*(Im3-Im1);
             weight4 = weight4/(weight4 + motion_norm*noise_norm);
             
             // use the same weight for all color channels to reduce color artifacts. Use maximum of weight4 as this increases motion robustness.
             // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-            float const weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+            float weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
                         
             // merging of two textures
-            simd_float4 const merged_Re = out_texture_Re.read(uint2(m, n)) + (1.0f-weight)*Re2 + weight*Re1;
-            simd_float4 const merged_Im = out_texture_Im.read(uint2(m, n)) + (1.0f-weight)*Im2 + weight*Im1;
+            simd_float4 merged_Re = out_texture_Re.read(uint2(m, n)) + (1.0f-weight)*Re1 + weight*Re3;
+            simd_float4 merged_Im = out_texture_Im.read(uint2(m, n)) + (1.0f-weight)*Im1 + weight*Im3;
             
             out_texture_Re.write(merged_Re, uint2(m, n));
             out_texture_Im.write(merged_Im, uint2(m, n));
+            
+            if(n2 < n0+tile_size & n2 != n0+tile_size/2)
+            {
+                Re3 = ref_texture_Re.read(uint2(m, n2));
+                Im3 = ref_texture_Im.read(uint2(m, n2));
+                
+                // calculation of merging weight by Wiener shrinkage
+                weight4 = (Re3-Re2)*(Re3-Re2) + (Im3-Im2)*(Im3-Im2);
+                weight4 = weight4/(weight4 + motion_norm*noise_norm);
+                
+                // use the same weight for all color channels to reduce color artifacts. Use maximum of weight4 as this increases motion robustness.
+                // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
+                weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+                            
+                // merging of two textures
+                merged_Re = out_texture_Re.read(uint2(m, n2)) + (1.0f-weight)*Re2 + weight*Re3;
+                merged_Im = out_texture_Im.read(uint2(m, n2)) + (1.0f-weight)*Im2 + weight*Im3;
+                
+                out_texture_Re.write(merged_Re, uint2(m, n2));
+                out_texture_Im.write(merged_Im, uint2(m, n2));
+            }
         }
     }
 }
