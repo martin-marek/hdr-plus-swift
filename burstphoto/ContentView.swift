@@ -159,16 +159,25 @@ struct ProcessingView: View {
                 return "Converting images to DNG (this might take a while)..."
             } else if progress.int < 2*image_urls.count {
                 return "Loading \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
-            } else if progress.int < 3*image_urls.count {
-                return "Processing \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            } else if progress.int < 6*image_urls.count {
+                
+                var percent = Float(progress.int-2*image_urls.count)/Float(4*image_urls.count-5)*100.0
+                percent = round(percent*10)/10.0
+                
+                return "Processing images (\(percent)%)..."
+                
             } else {
                 return "Saving processed image..."
             }
         } else {
             if progress.int < image_urls.count {
                 return "Loading \(image_urls[progress.int].lastPathComponent)..."
-            } else if progress.int < 2*image_urls.count {
-                return "Processing \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            } else if progress.int < 5*image_urls.count-4 {
+                
+                var percent = Float(progress.int-image_urls.count)/Float(4*image_urls.count-5)*100.0
+                percent = round(percent*10)/10.0
+           
+                return "Processing images (\(percent)%)..."
             } else {
                 return "Saving processed image..."
             }
@@ -176,7 +185,7 @@ struct ProcessingView: View {
     }
     
     var body: some View {
-        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double((progress.includes_conversion ? 3 : 2)*image_urls.count + saving_as_num_of_images))
+        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double((progress.includes_conversion ? 6 : 5)*image_urls.count-4 + saving_as_num_of_images))
             .font(.system(size: 16, weight: .medium))
             .opacity(0.8)
             .padding(20)

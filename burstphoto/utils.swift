@@ -86,7 +86,7 @@ func safeShell(_ command: String) throws -> String {
     return output
 }
 
-func convert_images_to_dng(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String, _ progress: ProcessingProgress) throws -> [URL] {
+func convert_images_to_dng(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String) throws -> [URL] {
 
     // creade command string
     let executable_path = dng_converter_path + "/Contents/MacOS/Adobe DNG Converter"

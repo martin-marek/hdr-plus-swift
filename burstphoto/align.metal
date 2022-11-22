@@ -351,10 +351,8 @@ kernel void copy_texture(texture2d<float, access::read> in_texture [[texture(0)]
 
 
 kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]],
-                        texture2d<float, access::read_write> tmp_texture_Re [[texture(1)]],
-                        texture2d<float, access::read_write> tmp_texture_Im [[texture(2)]],
-                        texture2d<float, access::write> out_texture_Re [[texture(3)]],
-                        texture2d<float, access::write> out_texture_Im [[texture(4)]],
+                        texture2d<float, access::read_write> tmp_texture_fft [[texture(1)]],
+                        texture2d<float, access::write> out_texture_fft [[texture(2)]],
                         constant int& mosaic_pettern_width [[buffer(0)]],
                         constant int& tile_size [[buffer(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
@@ -367,7 +365,7 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
     float const angle = -2*PI/float(tile_size);
     
     // pre-initalize some vectors
-    simd_float4 const zeros = simd_float4(0.0f, 0.0f, 0.0f, 0.0f);
+    float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
     
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm++) {
@@ -377,8 +375,8 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
             int const n = n0 + dn;
             
             // fill with zeros
-            simd_float4 Re = zeros;
-            simd_float4 Im = zeros;
+            float4 Re = zeros;
+            float4 Im = zeros;
             
             for (int dy = 0; dy < tile_size; dy++) {
                                   
@@ -388,7 +386,7 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                 float const coefRe = cos(angle*dn*dy);
                 float const coefIm = sin(angle*dn*dy);
                 
-                simd_float4 const dataRe = in_texture.read(uint2(m, y));
+                float4 const dataRe = in_texture.read(uint2(m, y));
                 
                 Re += (coefRe * dataRe);
                 Im += (coefIm * dataRe);
@@ -396,8 +394,8 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
             }
             
             // write into temporary textures
-            tmp_texture_Re.write(Re, uint2(m, n));
-            tmp_texture_Im.write(Im, uint2(m, n));
+            tmp_texture_fft.write(Re, uint2(2*m+0, n));
+            tmp_texture_fft.write(Im, uint2(2*m+1, n));
         }
     }
     
@@ -405,26 +403,26 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
     for (int dn = 0; dn <= tile_size/2; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
                        
-            int const m = m0 + dm;
+            int const m = 2*(m0 + dm);
             int const n = n0 + dn;
             int const n2 = n0 + tile_size-dn;
              
             // fill with zeros
-            simd_float4 Re1 = zeros;
-            simd_float4 Im1 = zeros;
-            simd_float4 Re2 = zeros;
-            simd_float4 Im2 = zeros;
+            float4 Re1 = zeros;
+            float4 Im1 = zeros;
+            float4 Re2 = zeros;
+            float4 Im2 = zeros;
             
             for (int dx = 0; dx < tile_size; dx++) {
                                   
-                int const x = m0 + dx;
+                int const x = 2*(m0 + dx);
                 
                 // calculate coefficients
                 float const coefRe = cos(angle*dm*dx);
                 float const coefIm = sin(angle*dm*dx);
                            
-                simd_float4 const dataRe = tmp_texture_Re.read(uint2(x, n));
-                simd_float4 const dataIm = tmp_texture_Im.read(uint2(x, n));
+                float4 const dataRe = tmp_texture_fft.read(uint2(x+0, n));
+                float4 const dataIm = tmp_texture_fft.read(uint2(x+1, n));
                              
                 Re1 += (coefRe*dataRe - coefIm*dataIm);
                 Im1 += (coefIm*dataRe + coefRe*dataIm);
@@ -433,24 +431,22 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                 Im2 += (coefIm*dataRe - coefRe*dataIm);
             }
             
-            out_texture_Re.write(Re1, uint2(m, n));
-            out_texture_Im.write(Im1, uint2(m, n));
-            
+            out_texture_fft.write(Re1, uint2(m+0, n));
+            out_texture_fft.write(Im1, uint2(m+1, n));
+                   
             if(n2 < n0+tile_size & n2 != n0+tile_size/2)
             {
-                out_texture_Re.write(Re2, uint2(m, n2));
-                out_texture_Im.write(Im2, uint2(m, n2));
+                out_texture_fft.write(Re2, uint2(m+0, n2));
+                out_texture_fft.write(Im2, uint2(m+1, n2));
             }
         }
     }
 }
 
 
-kernel void backward_dft(texture2d<float, access::read> in_texture_Re [[texture(0)]],
-                         texture2d<float, access::read> in_texture_Im [[texture(1)]],
-                         texture2d<float, access::read_write> tmp_texture_Re [[texture(2)]],
-                         texture2d<float, access::read_write> tmp_texture_Im [[texture(3)]],
-                         texture2d<float, access::write> out_texture [[texture(4)]],
+kernel void backward_dft(texture2d<float, access::read> in_texture_fft [[texture(0)]],
+                         texture2d<float, access::read_write> tmp_texture_fft [[texture(1)]],
+                         texture2d<float, access::write> out_texture [[texture(2)]],
                          constant int& mosaic_pettern_width [[buffer(0)]],
                          constant int& tile_size [[buffer(1)]],
                          constant int& n_textures [[buffer(2)]],
@@ -464,38 +460,38 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_Re [[texture(
     float const angle = 2*PI/float(tile_size);
     
     // pre-initalize some vectors
-    simd_float4 const zeros       = simd_float4(0.0f, 0.0f, 0.0f, 0.0f);
-    simd_float4 const norm_factor = simd_float4(float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size));
+    float4 const zeros       = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    float4 const norm_factor = float4(float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size));
         
     // row-wise one-dimensional discrete Fourier transform along x-direction
     for (int dn = 0; dn < tile_size; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
              
-            int const m = m0 + dm;
+            int const m = 2*(m0 + dm);
             int const n = n0 + dn;
             
             // fill with zeros
-            simd_float4 Re = zeros;
-            simd_float4 Im = zeros;
+            float4 Re = zeros;
+            float4 Im = zeros;
             
             for (int dx = 0; dx < tile_size; dx++) {
                                   
-                int const x = m0 + dx;
+                int const x = 2*(m0 + dx);
                 
                 // calculate coefficients
                 float const coefRe = cos(angle*dm*dx);
                 float const coefIm = sin(angle*dm*dx);
                 
-                simd_float4 const dataRe = in_texture_Re.read(uint2(x, n));
-                simd_float4 const dataIm = in_texture_Im.read(uint2(x, n));
+                float4 const dataRe = in_texture_fft.read(uint2(x+0, n));
+                float4 const dataIm = in_texture_fft.read(uint2(x+1, n));
                 
                 Re += (coefRe*dataRe - coefIm*dataIm);
                 Im += (coefIm*dataRe + coefRe*dataIm);
             }
             
             // write into temporary textures
-            tmp_texture_Re.write(Re, uint2(m, n));
-            tmp_texture_Im.write(Im, uint2(m, n));
+            tmp_texture_fft.write(Re, uint2(m+0, n));
+            tmp_texture_fft.write(Im, uint2(m+1, n));
         }
     }
     
@@ -512,7 +508,7 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_Re [[texture(
             int const n = n0 + dn;
              
             // fill with zeros
-            simd_float4 Re = zeros;
+            float4 Re = zeros;
               
             for (int dy = 0; dy < tile_size; dy++) {
                                   
@@ -522,8 +518,8 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_Re [[texture(
                 float const coefRe = cos(angle*dn*dy);
                 float const coefIm = sin(angle*dn*dy);
                            
-                simd_float4 const dataRe = tmp_texture_Re.read(uint2(m, y));
-                simd_float4 const dataIm = tmp_texture_Im.read(uint2(m, y));
+                float4 const dataRe = tmp_texture_fft.read(uint2(2*m+0, y));
+                float4 const dataIm = tmp_texture_fft.read(uint2(2*m+1, y));
                             
                 Re += (coefRe*dataRe - coefIm*dataIm);
             }
@@ -538,14 +534,11 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_Re [[texture(
 
 
 kernel void merge_frequency_domain(texture2d<float, access::read> aligned_texture [[texture(0)]],
-                                   texture2d<float, access::read> ref_texture [[texture(1)]],
-                                   texture2d<float, access::read> ref_texture_Re [[texture(2)]],
-                                   texture2d<float, access::read> ref_texture_Im [[texture(3)]],
-                                   texture2d<float, access::read_write> tmp_texture_Re [[texture(4)]],
-                                   texture2d<float, access::read_write> tmp_texture_Im [[texture(5)]],
-                                   texture2d<float, access::read_write> out_texture_Re [[texture(6)]],
-                                   texture2d<float, access::read_write> out_texture_Im [[texture(7)]],
-                                   texture2d<float, access::read> rms_texture [[texture(8)]],
+                                   texture2d<float, access::read> diff_texture [[texture(1)]],
+                                   texture2d<float, access::read> ref_texture_fft [[texture(2)]],
+                                   texture2d<float, access::read_write> tmp_texture_fft [[texture(3)]],
+                                   texture2d<float, access::read_write> out_texture_fft [[texture(4)]],
+                                   texture2d<float, access::read> rms_texture [[texture(5)]],
                                    constant float& robustness [[buffer(0)]],
                                    constant int& mosaic_pettern_width [[buffer(1)]],
                                    constant int& tile_size [[buffer(2)]],
@@ -577,13 +570,13 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     float const angle = -2*PI/float(tile_size);
     
     // pre-initalize some vectors
-    simd_float4 const zeros = simd_float4(0.0f, 0.0f, 0.0f, 0.0f);
-    simd_float4 const ones  = simd_float4(1.0f, 1.0f, 1.0f, 1.0f);
+    float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    float4 const ones  = float4(1.0f, 1.0f, 1.0f, 1.0f);
     
     // combine estimated shot noise and read noise
-    simd_float4 const noise_est = rms_texture.read(gid).r + read_noise;
+    float4 const noise_est = rms_texture.read(gid).r + read_noise;
     // normalize with tile size and robustness norm
-    simd_float4 const noise_norm = noise_est*tile_size*tile_size*robustness_norm;
+    float4 const noise_norm = noise_est*tile_size*tile_size*robustness_norm;
     
     // estimate motion mismatch as the absolute difference of reference tile and comparison tile
     // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
@@ -591,18 +584,16 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     int const x_start = max(0, m0 + tile_size/2 - tile_size_align/2);
     int const y_start = max(0, n0 + tile_size/2 - tile_size_align/2);
     
-    int const x_end = min(int(ref_texture.get_width()-1),  m0 + tile_size/2 + tile_size_align/2);
-    int const y_end = min(int(ref_texture.get_height()-1), n0 + tile_size/2 + tile_size_align/2);
+    int const x_end = min(int(diff_texture.get_width()-1),  m0 + tile_size/2 + tile_size_align/2);
+    int const y_end = min(int(diff_texture.get_height()-1), n0 + tile_size/2 + tile_size_align/2);
     
     float tile_diff = 0.f;
     int n_total = 0;
     
     for (int dy = y_start; dy < y_end; dy++) {
         for (int dx = x_start; dx < x_end; dx++) {
-            
-            simd_float4 const diff = ref_texture.read(uint2(dx, dy)) - aligned_texture.read(uint2(dx, dy));
-          
-            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
+       
+            tile_diff += diff_texture.read(uint2(dx, dy)).r;
             
             n_total += 1;
         }
@@ -611,13 +602,13 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     tile_diff /= float(n_total);
 
     // calculation of mismatch of tiles by Wiener shrinkage
-    simd_float4 mismatch = (tile_diff*tile_diff) / (tile_diff*tile_diff + mismatch_norm*noise_est);
+    float4 mismatch = (tile_diff*tile_diff) / (tile_diff*tile_diff + mismatch_norm*noise_est);
     mismatch = clamp(mismatch, zeros, ones);
       
     // increase of noise reduction for small values of mismatch
     // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-    simd_float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm);
-    //float const motion_norm = 1.0f;
+    float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm);
+    //float4 const motion_norm = ones;
     
    
     // column-wise one-dimensional discrete Fourier transform along y-direction
@@ -628,8 +619,8 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
             int const n = n0 + dn;
             
             // fill with zeros
-            simd_float4 Re2 = zeros;
-            simd_float4 Im2 = zeros;
+            float4 Re1 = zeros;
+            float4 Im1 = zeros;
             
             for (int dy = 0; dy < tile_size; dy++) {
                                   
@@ -639,16 +630,16 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                 float const coefRe = cos(angle*dn*dy);
                 float const coefIm = sin(angle*dn*dy);
                 
-                simd_float4 const dataRe = aligned_texture.read(uint2(m, y));
+                float4 const dataRe = aligned_texture.read(uint2(m, y));
                 
-                Re2 += (coefRe * dataRe);
-                Im2 += (coefIm * dataRe);
+                Re1 += (coefRe * dataRe);
+                Im1 += (coefIm * dataRe);
                 
             }
             
             // write into temporary textures
-            tmp_texture_Re.write(Re2, uint2(m, n));
-            tmp_texture_Im.write(Im2, uint2(m, n));
+            tmp_texture_fft.write(Re1, uint2(2*m+0, n));
+            tmp_texture_fft.write(Im1, uint2(2*m+1, n));
         }
     }
     
@@ -656,25 +647,25 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     for (int dn = 0; dn <= tile_size/2; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
                        
-            int const m = m0 + dm;
+            int const m = 2*(m0 + dm);
             int const n = n0 + dn;
             int const n2 = n0 + tile_size-dn;
              
-            simd_float4 Re1 = zeros;
-            simd_float4 Im1 = zeros;
-            simd_float4 Re2 = zeros;
-            simd_float4 Im2 = zeros;
+            float4 Re1 = zeros;
+            float4 Im1 = zeros;
+            float4 Re2 = zeros;
+            float4 Im2 = zeros;
             
             for (int dx = 0; dx < tile_size; dx++) {
                                   
-                int const x = m0 + dx;
+                int const x = 2*(m0 + dx);
                 
                 // calculate coefficients
                 float const coefRe = cos(angle*dm*dx);
                 float const coefIm = sin(angle*dm*dx);
                            
-                simd_float4 const dataRe = tmp_texture_Re.read(uint2(x, n));
-                simd_float4 const dataIm = tmp_texture_Im.read(uint2(x, n));
+                float4 const dataRe = tmp_texture_fft.read(uint2(x+0, n));
+                float4 const dataIm = tmp_texture_fft.read(uint2(x+1, n));
                             
                 Re1 += (coefRe*dataRe - coefIm*dataIm);
                 Im1 += (coefIm*dataRe + coefRe*dataIm);
@@ -683,11 +674,11 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                 Im2 += (coefIm*dataRe - coefRe*dataIm);
             }
    
-            simd_float4 Re3 = ref_texture_Re.read(uint2(m, n));
-            simd_float4 Im3 = ref_texture_Im.read(uint2(m, n));
+            float4 Re3 = ref_texture_fft.read(uint2(m+0, n));
+            float4 Im3 = ref_texture_fft.read(uint2(m+1, n));
             
             // calculation of merging weight by Wiener shrinkage
-            simd_float4 weight4 = (Re3-Re1)*(Re3-Re1) + (Im3-Im1)*(Im3-Im1);
+            float4 weight4 = (Re3-Re1)*(Re3-Re1) + (Im3-Im1)*(Im3-Im1);
             weight4 = weight4/(weight4 + motion_norm*noise_norm);
             
             // use the same weight for all color channels to reduce color artifacts. Use maximum of weight4 as this increases motion robustness.
@@ -695,16 +686,16 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
             float weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
                         
             // merging of two textures
-            simd_float4 merged_Re = out_texture_Re.read(uint2(m, n)) + (1.0f-weight)*Re1 + weight*Re3;
-            simd_float4 merged_Im = out_texture_Im.read(uint2(m, n)) + (1.0f-weight)*Im1 + weight*Im3;
+            float4 merged_Re = out_texture_fft.read(uint2(m+0, n)) + (1.0f-weight)*Re1 + weight*Re3;
+            float4 merged_Im = out_texture_fft.read(uint2(m+1, n)) + (1.0f-weight)*Im1 + weight*Im3;
             
-            out_texture_Re.write(merged_Re, uint2(m, n));
-            out_texture_Im.write(merged_Im, uint2(m, n));
+            out_texture_fft.write(merged_Re, uint2(m+0, n));
+            out_texture_fft.write(merged_Im, uint2(m+1, n));
             
             if(n2 < n0+tile_size & n2 != n0+tile_size/2)
             {
-                Re3 = ref_texture_Re.read(uint2(m, n2));
-                Im3 = ref_texture_Im.read(uint2(m, n2));
+                Re3 = ref_texture_fft.read(uint2(m+0, n2));
+                Im3 = ref_texture_fft.read(uint2(m+1, n2));
                 
                 // calculation of merging weight by Wiener shrinkage
                 weight4 = (Re3-Re2)*(Re3-Re2) + (Im3-Im2)*(Im3-Im2);
@@ -715,11 +706,11 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                 weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
                             
                 // merging of two textures
-                merged_Re = out_texture_Re.read(uint2(m, n2)) + (1.0f-weight)*Re2 + weight*Re3;
-                merged_Im = out_texture_Im.read(uint2(m, n2)) + (1.0f-weight)*Im2 + weight*Im3;
+                merged_Re = out_texture_fft.read(uint2(m+0, n2)) + (1.0f-weight)*Re2 + weight*Re3;
+                merged_Im = out_texture_fft.read(uint2(m+1, n2)) + (1.0f-weight)*Im2 + weight*Im3;
                 
-                out_texture_Re.write(merged_Re, uint2(m, n2));
-                out_texture_Im.write(merged_Im, uint2(m, n2));
+                out_texture_fft.write(merged_Re, uint2(m+0, n2));
+                out_texture_fft.write(merged_Im, uint2(m+1, n2));
             }
         }
     }
@@ -736,7 +727,7 @@ kernel void calculate_rms(texture2d<float, access::read> ref_texture [[texture(0
     int const n0 = gid.y*tile_size;
     
     // fill with zeros
-    simd_float4 noise_est = simd_float4(0.0f, 0.0f, 0.0f, 0.0f);
+    float4 noise_est = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
     // use 16x16 tile size here
     for (int dy = 0; dy < tile_size; dy++) {
@@ -745,7 +736,7 @@ kernel void calculate_rms(texture2d<float, access::read> ref_texture [[texture(0
             int const x = m0 + dx;
             int const y = n0 + dy;
             
-            simd_float4 const data_noise = ref_texture.read(uint2(x, y));
+            float4 const data_noise = ref_texture.read(uint2(x, y));
             
             noise_est += (data_noise * data_noise);
         }
@@ -756,4 +747,17 @@ kernel void calculate_rms(texture2d<float, access::read> ref_texture [[texture(0
     rms_texture.write(noise_est, gid);
 }
 
+
+kernel void calculate_diff(texture2d<float, access::read> ref_texture [[texture(0)]],
+                           texture2d<float, access::read> aligned_texture [[texture(1)]],
+                           texture2d<float, access::write> diff_texture [[texture(2)]],
+                           uint2 gid [[thread_position_in_grid]]) {
+    
+    
+    float4 const diff = ref_texture.read(gid) - aligned_texture.read(gid);
+  
+    float const diff_combined = (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
+    
+    diff_texture.write(diff_combined, gid);
+}
     

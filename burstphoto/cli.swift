@@ -35,7 +35,7 @@ struct MyProgram {
             let ref_idx = image_urls.count / 2
             let robustness = 0.8
             let search_distance = "Medium"
-            let tile_size = 16
+            let tile_size = 32
             
             // align+merge
             let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, robustness: robustness)
