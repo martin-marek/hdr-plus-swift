@@ -319,10 +319,12 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     // ensure that all files are .dng, converting them if necessary
     var dng_urls = image_urls
     let convert_to_dng = image_extension != "dng"
+    DispatchQueue.main.async { progress.includes_conversion = convert_to_dng }
+    let dng_converter_path = "/Applications/Adobe DNG Converter.app"
+    let final_dng_conversion = FileManager.default.fileExists(atPath: dng_converter_path)
     
     if convert_to_dng {
         // check if dng converter is installed
-        let dng_converter_path = "/Applications/Adobe DNG Converter.app"
         if !FileManager.default.fileExists(atPath: dng_converter_path) {
             // if dng coverter is not installed, prompt user
             throw AlignmentError.missing_dng_converter
@@ -339,15 +341,15 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     let in_url = dng_urls[ref_idx]
     let in_filename = in_url.deletingPathExtension().lastPathComponent
     let out_filename = in_filename + "_merged"
-    let out_path = out_dir + out_filename + ".dng"
-    let out_url = URL(fileURLWithPath: out_path)
+    let out_path = (final_dng_conversion ? tmp_dir : out_dir) + out_filename + ".dng"
+    var out_url = URL(fileURLWithPath: out_path)
     
     // load images
     t = DispatchTime.now().uptimeNanoseconds
-    var (textures, mosaic_pettern_width) = try load_images(image_urls, progress)
+    var (textures, mosaic_pettern_width) = try load_images(dng_urls, progress)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
-    let t0 = DispatchTime.now().uptimeNanoseconds
-        
+    t = DispatchTime.now().uptimeNanoseconds
+    
     // convert images from uint16 to float16
     textures = textures.map{texture_uint16_to_float($0)}
      
@@ -369,15 +371,28 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         
         let output_texture_uint16 = convert_uint16(final_texture)
         
-        print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
+        print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
+        t = DispatchTime.now().uptimeNanoseconds
         
         // save the output image
         try texture_to_dng(output_texture_uint16, in_url, out_url)
             
-        // delete the temporary dng directory
-        try FileManager.default.removeItem(atPath: tmp_dir)
+        // check if dng converter is installed
+        if final_dng_conversion {
+            let path_delete = out_dir + in_filename + "_merged.dng"
             
-        return out_url
+            // delete dng file if an old version exists
+            if FileManager.default.fileExists(atPath: path_delete) {
+                try FileManager.default.removeItem(atPath: path_delete)
+            }
+            
+            // the dng converter is installed -> convert output DNG with Adobe DNG Converter for full compatibility
+            let final_url = try convert_images_to_dng([out_url], dng_converter_path, out_dir)
+                       
+            // update out URL to new file
+            out_url = final_url[0]
+        }
+        
      
     // sophisticated approach with alignment of tiles and merging of tiles in the spatial domain (when pattern is not 2x2 Bayer)
     } else if mosaic_pettern_width != 2 {
@@ -386,6 +401,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         //let robustness_norm = 0.08838835*pow(sqrt(2), robustness*10) // use this value as a replacement of robustness for control of motion robustness / noise level
         
         throw AlignmentError.unsupported_mosaic_pattern
+        
         
         
     // sophisticated approach with alignment of tiles and merging of tiles in frequency domain (only 2x2 Bayer pattern)
@@ -406,16 +422,35 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
                 
         let output_texture_uint16 = convert_uint16(final_texture)
           
-        print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
+        print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
+        t = DispatchTime.now().uptimeNanoseconds
         
         // save the output image
         try texture_to_dng(output_texture_uint16, in_url, out_url)
-            
-        // delete the temporary dng directory
-        try FileManager.default.removeItem(atPath: tmp_dir)
         
-        return out_url
+        // check if dng converter is installed
+        if final_dng_conversion {
+            let path_delete = out_dir + in_filename + "_merged.dng"
+            
+            // delete dng file if an old version exists
+            if FileManager.default.fileExists(atPath: path_delete) {
+                try FileManager.default.removeItem(atPath: path_delete)
+            }
+            
+            // the dng converter is installed -> convert output DNG with Adobe DNG Converter for full compatibility
+            let final_url = try convert_images_to_dng([out_url], dng_converter_path, out_dir)
+                       
+            // update out URL to new file
+            out_url = final_url[0]
+        }
     }
+    
+    // delete the temporary dng directory
+    try FileManager.default.removeItem(atPath: tmp_dir)
+    
+    print("Time to save final image: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
+    
+    return out_url
 }
 
 
@@ -477,13 +512,13 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array)
     
     // initialize textures to store real and imaginary parts of the reference texture, a temp texture for the Fourier transform and the final texture
-    let ref_texture_fft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+pad_left+pad_right-2*crop_merge_x), height: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/2, mipmapped: false)
-    ref_texture_fft_descriptor.usage = [.shaderRead, .shaderWrite]
-    let ref_texture_fft = device.makeTexture(descriptor: ref_texture_fft_descriptor)!
+    let ref_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+pad_left+pad_right-2*crop_merge_x), height: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/2, mipmapped: false)
+    ref_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
+    let ref_texture_ft = device.makeTexture(descriptor: ref_texture_ft_descriptor)!
     
-    let tmp_texture_fft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+pad_left+pad_right-2*crop_merge_x), height: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/2, mipmapped: false)
-    tmp_texture_fft_descriptor.usage = [.shaderRead, .shaderWrite]
-    let tmp_texture_fft = device.makeTexture(descriptor: tmp_texture_fft_descriptor)!
+    let tmp_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+pad_left+pad_right-2*crop_merge_x), height: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/2, mipmapped: false)
+    tmp_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
+    let tmp_texture_ft = device.makeTexture(descriptor: tmp_texture_ft_descriptor)!
            
     // transform ref_texture to frequency domain
     let tile_info_merge = TileInfo(tile_size: tile_size, tile_size_merge: tile_size_merge, search_dist: 0, n_tiles_x: (texture_width_orig+pad_left+pad_right-2*crop_merge_x)/tile_size_merge, n_tiles_y: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/tile_size_merge, n_pos_1d: 0, n_pos_2d: 0)
@@ -494,9 +529,9 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
 
     // transform reference texture into the Fourier space
     // to improve performance, convert textures into RGBA pixel format that SIMD instructions can be applied and crop image frame that unneccessary zeros are removed at the borders
-    forward_dft(convert_RGBA(ref_texture, crop_merge_x, crop_merge_y), ref_texture_fft, tmp_texture_fft, mosaic_pettern_width, tile_info_merge)
-
-    let final_texture_fft = copy_texture(ref_texture_fft)
+    forward_dft(convert_RGBA(ref_texture, crop_merge_x, crop_merge_y), ref_texture_ft, tmp_texture_ft, mosaic_pettern_width, tile_info_merge)
+    
+    let final_texture_ft = copy_texture(ref_texture_ft)
     
     // iterate over comparison images
     for comp_idx in 0..<textures.count {
@@ -573,7 +608,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         
         // merge aligned comparison texture with reference texture in the frequency domain
         // to improve performance, convert textures into RGBA pixel format that SIMD instructions can be applied and crop image frame that unneccessary zeros are removed at the borders
-        merge_frequency_domain(convert_RGBA(aligned_texture, crop_merge_x, crop_merge_y), ref_texture_rgba, ref_texture_fft, tmp_texture_fft, final_texture_fft, rms_texture, robustness, mosaic_pettern_width, tile_info_merge);
+        merge_frequency_domain(convert_RGBA(aligned_texture, crop_merge_x, crop_merge_y), ref_texture_rgba, ref_texture_ft, tmp_texture_ft, final_texture_ft, rms_texture, robustness, mosaic_pettern_width, tile_info_merge);
                
         // stop debug capture
         //capture_manager.stopCapture()
@@ -581,16 +616,16 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         print("Align+merge: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
         DispatchQueue.main.async { progress.int += 1 }
     }    
-
+    
     // transform output texture back to image space and convert back to the 2x2 pixel structure
-    let output_texture = crop_texture(convert_2x2(backward_dft(final_texture_fft, tmp_texture_fft, mosaic_pettern_width, tile_info_merge, textures.count)), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
-
+    let output_texture = crop_texture(convert_2x2(backward_dft(final_texture_ft, tmp_texture_ft, mosaic_pettern_width, tile_info_merge, textures.count)), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
+    
     // add output texture to the final texture to collect all textures of the four iterations
     add_texture(output_texture, final_texture, 1)
 }
 
 
-func forward_dft(_ in_texture: MTLTexture, _ out_texture_fft: MTLTexture, _ tmp_texture_fft: MTLTexture, _ mosaic_pettern_width: Int, _ tile_info: TileInfo) {
+func forward_dft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ mosaic_pettern_width: Int, _ tile_info: TileInfo) {
   
     // add textures
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -600,8 +635,8 @@ func forward_dft(_ in_texture: MTLTexture, _ out_texture_fft: MTLTexture, _ tmp_
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(tmp_texture_fft, index: 1)
-    command_encoder.setTexture(out_texture_fft, index: 2)
+    command_encoder.setTexture(tmp_texture_ft, index: 1)
+    command_encoder.setTexture(out_texture_ft, index: 2)
     command_encoder.setBytes([Int32(mosaic_pettern_width)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
@@ -610,10 +645,10 @@ func forward_dft(_ in_texture: MTLTexture, _ out_texture_fft: MTLTexture, _ tmp_
 }
 
 
-func backward_dft(_ in_texture_fft: MTLTexture, _ tmp_texture_fft: MTLTexture, _ mosaic_pettern_width: Int, _ tile_info: TileInfo, _ n_textures: Int) -> MTLTexture {
+func backward_dft(_ in_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ mosaic_pettern_width: Int, _ tile_info: TileInfo, _ n_textures: Int) -> MTLTexture {
     
     // create output texture
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: in_texture_fft.width/2, height: in_texture_fft.height, mipmapped: false)
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: in_texture_ft.width/2, height: in_texture_ft.height, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
@@ -624,8 +659,8 @@ func backward_dft(_ in_texture_fft: MTLTexture, _ tmp_texture_fft: MTLTexture, _
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(in_texture_fft, index: 0)
-    command_encoder.setTexture(tmp_texture_fft, index: 1)
+    command_encoder.setTexture(in_texture_ft, index: 0)
+    command_encoder.setTexture(tmp_texture_ft, index: 1)
     command_encoder.setTexture(out_texture, index: 2)
     command_encoder.setBytes([Int32(mosaic_pettern_width)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 1)
@@ -638,7 +673,7 @@ func backward_dft(_ in_texture_fft: MTLTexture, _ tmp_texture_fft: MTLTexture, _
 }
 
 
-func merge_frequency_domain(_ aligned_texture: MTLTexture, _ ref_texture: MTLTexture, _ ref_texture_fft: MTLTexture, _ tmp_texture_fft: MTLTexture, _ out_texture_fft: MTLTexture, _ rms_texture: MTLTexture, _ robustness: Double, _ mosaic_pettern_width: Int, _ tile_info: TileInfo) {
+func merge_frequency_domain(_ aligned_texture: MTLTexture, _ ref_texture: MTLTexture, _ ref_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ robustness: Double, _ mosaic_pettern_width: Int, _ tile_info: TileInfo) {
   
     // add textures
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -649,9 +684,9 @@ func merge_frequency_domain(_ aligned_texture: MTLTexture, _ ref_texture: MTLTex
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(aligned_texture, index: 0)
     command_encoder.setTexture(ref_texture, index: 1)
-    command_encoder.setTexture(ref_texture_fft, index: 2)
-    command_encoder.setTexture(tmp_texture_fft, index: 3)
-    command_encoder.setTexture(out_texture_fft, index: 4)
+    command_encoder.setTexture(ref_texture_ft, index: 2)
+    command_encoder.setTexture(tmp_texture_ft, index: 3)
+    command_encoder.setTexture(out_texture_ft, index: 4)
     command_encoder.setTexture(rms_texture, index: 5)
     command_encoder.setBytes([Float32(robustness)], length: MemoryLayout<Float32>.stride, index: 0)
     command_encoder.setBytes([Int32(mosaic_pettern_width)], length: MemoryLayout<Int32>.stride, index: 1)

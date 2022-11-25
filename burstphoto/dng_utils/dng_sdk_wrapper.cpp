@@ -91,15 +91,17 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
             info.PostParse(host);
             if(!info.IsValidDNG()) {return dng_error_bad_format;}
             negative.Reset(host.Make_dng_negative());
+            host.SetSaveDNGVersion(dngVersion_SaveDefault);
             negative->Parse(host, stream, info);
             negative->PostParse(host, stream, info);
         }
-        
+   
         // load pixel buffer
         dng_ifd& rawIFD = *info.fIFD [info.fMainIndex];
         AutoPtr<dng_simple_image> image_pointer (new dng_simple_image(rawIFD.Bounds(), rawIFD.fSamplesPerPixel, rawIFD.PixelType(), host.Allocator()));
         dng_simple_image& image = *image_pointer.Get();
         // rawIFD.ReadImage(host, stream, image);
+         
         
         // read opcode lists (required for lens calibration data)
         negative->ReadOpcodeLists(host, stream, info);
@@ -108,9 +110,10 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
         void* pixel_bytes = *pixel_bytes_pointer;
         int image_size = image.Width() * image.Height() * image.PixelSize();
         memcpy(image.fBuffer.DirtyPixel(0, 0), pixel_bytes, image_size);
-        
+                
         // store modified pixel buffer to the negative
         negative->fStage1Image.Reset(image_pointer.Release());
+    
         
         // validate the modified image
         // - this resets some of the image stats like md5 checksums
@@ -119,14 +122,15 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
         // - without running this function, the output dng file would be considered 'damaged'
         negative->ValidateRawImageDigest(host);
         
+              
         // read metadata
         // - this doesn't seem to affect my test dng files but maybe it makes
         //   a difference for other files
         // - this is used in the dng_validate script
         negative->SynchronizeMetadata();
-            
+        
+           
         // write dng
-        host.SetSaveDNGVersion(dngVersion_SaveDefault);
         host.SetSaveLinearDNG(false);
         host.SetKeepOriginalFile(false);
         dng_file_stream stream2(out_path, true); {

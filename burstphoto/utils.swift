@@ -31,10 +31,7 @@ func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> ([MTLT
     
             // asynchronously load texture
             if let (texture, _mosaic_pettern_width) = try? image_url_to_texture(urls[i], device) {
-    
-                // sync GUI progress
-                DispatchQueue.main.async { progress.int += 1 }
-    
+        
                 // thread-safely save the texture
                 access_queue.sync {
                     textures_dict[i] = texture
@@ -46,6 +43,9 @@ func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> ([MTLT
     
     // wait until all the images are loaded
     compute_group.wait()
+    
+    // sync GUI progress
+    DispatchQueue.main.async { progress.int += urls.count }
     
     // convert dict to list
     var textures_list: [MTLTexture] = []
@@ -90,7 +90,7 @@ func convert_images_to_dng(_ in_urls: [URL], _ dng_converter_path: String, _ tmp
 
     // creade command string
     let executable_path = dng_converter_path + "/Contents/MacOS/Adobe DNG Converter"
-    let args = "--args -u -p0 -d \"\(tmp_dir)\""
+    let args = "--args -c -p0 -d \"\(tmp_dir)\"" // let args = "--args -u -p0 -d \"\(tmp_dir)\""
     var command = "\"\(executable_path)\" \(args)"
     for url in in_urls {
         command += " \"\(url.relativePath)\""

@@ -17,6 +17,8 @@ struct MyProgram {
         let burst_dirs = [
                      
             "/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child/Test/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child Kopie/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Klavier/Test/",
         ]
         
         // iterate over bursts

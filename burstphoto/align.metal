@@ -351,8 +351,8 @@ kernel void copy_texture(texture2d<float, access::read> in_texture [[texture(0)]
 
 
 kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]],
-                        texture2d<float, access::read_write> tmp_texture_fft [[texture(1)]],
-                        texture2d<float, access::write> out_texture_fft [[texture(2)]],
+                        texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
+                        texture2d<float, access::write> out_texture_ft [[texture(2)]],
                         constant int& mosaic_pettern_width [[buffer(0)]],
                         constant int& tile_size [[buffer(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
@@ -369,6 +369,7 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
     
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm++) {
+        // exploit symmetry of real dft and calculate reduced number of rows
         for (int dn = 0; dn <= tile_size/2; dn++) {
              
             int const m = m0 + dm;
@@ -390,16 +391,16 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                 
                 Re += (coefRe * dataRe);
                 Im += (coefIm * dataRe);
-                
             }
             
             // write into temporary textures
-            tmp_texture_fft.write(Re, uint2(2*m+0, n));
-            tmp_texture_fft.write(Im, uint2(2*m+1, n));
+            tmp_texture_ft.write(Re, uint2(2*m+0, n));
+            tmp_texture_ft.write(Im, uint2(2*m+1, n));
         }
     }
     
     // row-wise one-dimensional discrete Fourier transform along x-direction
+    // exploit symmetry of real dft and calculate reduced number of rows
     for (int dn = 0; dn <= tile_size/2; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
                        
@@ -421,8 +422,8 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                 float const coefRe = cos(angle*dm*dx);
                 float const coefIm = sin(angle*dm*dx);
                            
-                float4 const dataRe = tmp_texture_fft.read(uint2(x+0, n));
-                float4 const dataIm = tmp_texture_fft.read(uint2(x+1, n));
+                float4 const dataRe = tmp_texture_ft.read(uint2(x+0, n));
+                float4 const dataIm = tmp_texture_ft.read(uint2(x+1, n));
                              
                 Re1 += (coefRe*dataRe - coefIm*dataIm);
                 Im1 += (coefIm*dataRe + coefRe*dataIm);
@@ -431,21 +432,22 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                 Im2 += (coefIm*dataRe - coefRe*dataIm);
             }
             
-            out_texture_fft.write(Re1, uint2(m+0, n));
-            out_texture_fft.write(Im1, uint2(m+1, n));
+            out_texture_ft.write(Re1, uint2(m+0, n));
+            out_texture_ft.write(Im1, uint2(m+1, n));
                    
+            // exploit symmetry of real dft and calculate values for remaining rows
             if(n2 < n0+tile_size & n2 != n0+tile_size/2)
             {
-                out_texture_fft.write(Re2, uint2(m+0, n2));
-                out_texture_fft.write(Im2, uint2(m+1, n2));
+                out_texture_ft.write(Re2, uint2(m+0, n2));
+                out_texture_ft.write(Im2, uint2(m+1, n2));
             }
         }
     }
 }
 
 
-kernel void backward_dft(texture2d<float, access::read> in_texture_fft [[texture(0)]],
-                         texture2d<float, access::read_write> tmp_texture_fft [[texture(1)]],
+kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(0)]],
+                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                          texture2d<float, access::write> out_texture [[texture(2)]],
                          constant int& mosaic_pettern_width [[buffer(0)]],
                          constant int& tile_size [[buffer(1)]],
@@ -482,16 +484,16 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_fft [[texture
                 float const coefRe = cos(angle*dm*dx);
                 float const coefIm = sin(angle*dm*dx);
                 
-                float4 const dataRe = in_texture_fft.read(uint2(x+0, n));
-                float4 const dataIm = in_texture_fft.read(uint2(x+1, n));
+                float4 const dataRe = in_texture_ft.read(uint2(x+0, n));
+                float4 const dataIm = in_texture_ft.read(uint2(x+1, n));
                 
                 Re += (coefRe*dataRe - coefIm*dataIm);
                 Im += (coefIm*dataRe + coefRe*dataIm);
             }
             
             // write into temporary textures
-            tmp_texture_fft.write(Re, uint2(m+0, n));
-            tmp_texture_fft.write(Im, uint2(m+1, n));
+            tmp_texture_ft.write(Re, uint2(m+0, n));
+            tmp_texture_ft.write(Im, uint2(m+1, n));
         }
     }
     
@@ -518,8 +520,8 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_fft [[texture
                 float const coefRe = cos(angle*dn*dy);
                 float const coefIm = sin(angle*dn*dy);
                            
-                float4 const dataRe = tmp_texture_fft.read(uint2(2*m+0, y));
-                float4 const dataIm = tmp_texture_fft.read(uint2(2*m+1, y));
+                float4 const dataRe = tmp_texture_ft.read(uint2(2*m+0, y));
+                float4 const dataIm = tmp_texture_ft.read(uint2(2*m+1, y));
                             
                 Re += (coefRe*dataRe - coefIm*dataIm);
             }
@@ -535,9 +537,9 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_fft [[texture
 
 kernel void merge_frequency_domain(texture2d<float, access::read> aligned_texture [[texture(0)]],
                                    texture2d<float, access::read> diff_texture [[texture(1)]],
-                                   texture2d<float, access::read> ref_texture_fft [[texture(2)]],
-                                   texture2d<float, access::read_write> tmp_texture_fft [[texture(3)]],
-                                   texture2d<float, access::read_write> out_texture_fft [[texture(4)]],
+                                   texture2d<float, access::read> ref_texture_ft [[texture(2)]],
+                                   texture2d<float, access::read_write> tmp_texture_ft [[texture(3)]],
+                                   texture2d<float, access::read_write> out_texture_ft [[texture(4)]],
                                    texture2d<float, access::read> rms_texture [[texture(5)]],
                                    constant float& robustness [[buffer(0)]],
                                    constant int& mosaic_pettern_width [[buffer(1)]],
@@ -613,6 +615,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
    
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm++) {
+        // exploit symmetry of real dft and calculate reduced number of rows
         for (int dn = 0; dn <= tile_size/2; dn++) {
              
             int const m = m0 + dm;
@@ -638,12 +641,13 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
             }
             
             // write into temporary textures
-            tmp_texture_fft.write(Re1, uint2(2*m+0, n));
-            tmp_texture_fft.write(Im1, uint2(2*m+1, n));
+            tmp_texture_ft.write(Re1, uint2(2*m+0, n));
+            tmp_texture_ft.write(Im1, uint2(2*m+1, n));
         }
     }
     
     // row-wise one-dimensional discrete Fourier transform along x-direction
+    // exploit symmetry of real dft and calculate reduced number of rows
     for (int dn = 0; dn <= tile_size/2; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
                        
@@ -664,8 +668,8 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                 float const coefRe = cos(angle*dm*dx);
                 float const coefIm = sin(angle*dm*dx);
                            
-                float4 const dataRe = tmp_texture_fft.read(uint2(x+0, n));
-                float4 const dataIm = tmp_texture_fft.read(uint2(x+1, n));
+                float4 const dataRe = tmp_texture_ft.read(uint2(x+0, n));
+                float4 const dataIm = tmp_texture_ft.read(uint2(x+1, n));
                             
                 Re1 += (coefRe*dataRe - coefIm*dataIm);
                 Im1 += (coefIm*dataRe + coefRe*dataIm);
@@ -674,8 +678,8 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                 Im2 += (coefIm*dataRe - coefRe*dataIm);
             }
    
-            float4 Re3 = ref_texture_fft.read(uint2(m+0, n));
-            float4 Im3 = ref_texture_fft.read(uint2(m+1, n));
+            float4 Re3 = ref_texture_ft.read(uint2(m+0, n));
+            float4 Im3 = ref_texture_ft.read(uint2(m+1, n));
             
             // calculation of merging weight by Wiener shrinkage
             float4 weight4 = (Re3-Re1)*(Re3-Re1) + (Im3-Im1)*(Im3-Im1);
@@ -686,16 +690,17 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
             float weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
                         
             // merging of two textures
-            float4 merged_Re = out_texture_fft.read(uint2(m+0, n)) + (1.0f-weight)*Re1 + weight*Re3;
-            float4 merged_Im = out_texture_fft.read(uint2(m+1, n)) + (1.0f-weight)*Im1 + weight*Im3;
+            float4 merged_Re = out_texture_ft.read(uint2(m+0, n)) + (1.0f-weight)*Re1 + weight*Re3;
+            float4 merged_Im = out_texture_ft.read(uint2(m+1, n)) + (1.0f-weight)*Im1 + weight*Im3;
             
-            out_texture_fft.write(merged_Re, uint2(m+0, n));
-            out_texture_fft.write(merged_Im, uint2(m+1, n));
+            out_texture_ft.write(merged_Re, uint2(m+0, n));
+            out_texture_ft.write(merged_Im, uint2(m+1, n));
             
+            // exploit symmetry of real dft and calculate values for remaining rows
             if(n2 < n0+tile_size & n2 != n0+tile_size/2)
             {
-                Re3 = ref_texture_fft.read(uint2(m+0, n2));
-                Im3 = ref_texture_fft.read(uint2(m+1, n2));
+                Re3 = ref_texture_ft.read(uint2(m+0, n2));
+                Im3 = ref_texture_ft.read(uint2(m+1, n2));
                 
                 // calculation of merging weight by Wiener shrinkage
                 weight4 = (Re3-Re2)*(Re3-Re2) + (Im3-Im2)*(Im3-Im2);
@@ -706,11 +711,11 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                 weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
                             
                 // merging of two textures
-                merged_Re = out_texture_fft.read(uint2(m+0, n2)) + (1.0f-weight)*Re2 + weight*Re3;
-                merged_Im = out_texture_fft.read(uint2(m+1, n2)) + (1.0f-weight)*Im2 + weight*Im3;
+                merged_Re = out_texture_ft.read(uint2(m+0, n2)) + (1.0f-weight)*Re2 + weight*Re3;
+                merged_Im = out_texture_ft.read(uint2(m+1, n2)) + (1.0f-weight)*Im2 + weight*Im3;
                 
-                out_texture_fft.write(merged_Re, uint2(m+0, n2));
-                out_texture_fft.write(merged_Im, uint2(m+1, n2));
+                out_texture_ft.write(merged_Re, uint2(m+0, n2));
+                out_texture_ft.write(merged_Im, uint2(m+1, n2));
             }
         }
     }

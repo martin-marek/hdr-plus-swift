@@ -158,8 +158,8 @@ struct ProcessingView: View {
             if progress.int < image_urls.count {
                 return "Converting images to DNG (this might take a while)..."
             } else if progress.int < 2*image_urls.count {
-                return "Loading \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
-            } else if progress.int < 6*image_urls.count {
+                return "Loading images..."
+            } else if progress.int < 6*image_urls.count-4 {
                 
                 var percent = Float(progress.int-2*image_urls.count)/Float(4*image_urls.count-5)*100.0
                 percent = round(percent*10)/10.0
@@ -171,7 +171,7 @@ struct ProcessingView: View {
             }
         } else {
             if progress.int < image_urls.count {
-                return "Loading \(image_urls[progress.int].lastPathComponent)..."
+                return "Loading images..."
             } else if progress.int < 5*image_urls.count-4 {
                 
                 var percent = Float(progress.int-image_urls.count)/Float(4*image_urls.count-5)*100.0
