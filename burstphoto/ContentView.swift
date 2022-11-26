@@ -151,31 +151,29 @@ struct ImageSavedView: View {
 struct ProcessingView: View {
     @Binding var image_urls: [URL]
     @ObservedObject var progress: ProcessingProgress
-    let saving_as_num_of_images = 0
-    
+        
     func progress_int_to_str(_ int: Int) -> String {
+                
         if progress.includes_conversion {
-            if progress.int < image_urls.count {
+            if progress.int < 10000000 {
                 return "Converting images to DNG (this might take a while)..."
-            } else if progress.int < 2*image_urls.count {
+            } else if progress.int < 20000000 {
                 return "Loading images..."
-            } else if progress.int < 6*image_urls.count-4 {
+            } else if progress.int < 100000000 {
                 
-                var percent = Float(progress.int-2*image_urls.count)/Float(4*image_urls.count-5)*100.0
-                percent = round(percent*10)/10.0
-                
+                let percent = round(Double(progress.int-20000000)/800000*10)/10.0
+                           
                 return "Processing images (\(percent)%)..."
                 
             } else {
                 return "Saving processed image..."
             }
         } else {
-            if progress.int < image_urls.count {
+            if progress.int < 20000000 {
                 return "Loading images..."
-            } else if progress.int < 5*image_urls.count-4 {
+            } else if progress.int < 100000000 {
                 
-                var percent = Float(progress.int-image_urls.count)/Float(4*image_urls.count-5)*100.0
-                percent = round(percent*10)/10.0
+                let percent = round(Double(progress.int-20000000)/800000*10)/10.0
            
                 return "Processing images (\(percent)%)..."
             } else {
@@ -185,7 +183,7 @@ struct ProcessingView: View {
     }
     
     var body: some View {
-        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double((progress.includes_conversion ? 6 : 5)*image_urls.count-4 + saving_as_num_of_images))
+        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: 110000000.0)
             .font(.system(size: 16, weight: .medium))
             .opacity(0.8)
             .padding(20)

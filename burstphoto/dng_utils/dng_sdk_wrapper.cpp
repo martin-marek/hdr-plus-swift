@@ -113,23 +113,20 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
                 
         // store modified pixel buffer to the negative
         negative->fStage1Image.Reset(image_pointer.Release());
-    
-        
+            
         // validate the modified image
         // - this resets some of the image stats like md5 checksums
         // - running this function will print a warning "NewRawImageDigest does not match raw image"
         //   but won't halt the program
         // - without running this function, the output dng file would be considered 'damaged'
         negative->ValidateRawImageDigest(host);
-        
-              
+                      
         // read metadata
         // - this doesn't seem to affect my test dng files but maybe it makes
         //   a difference for other files
         // - this is used in the dng_validate script
         negative->SynchronizeMetadata();
-        
-           
+                   
         // write dng
         host.SetSaveLinearDNG(false);
         host.SetKeepOriginalFile(false);

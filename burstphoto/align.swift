@@ -332,7 +332,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
             // the dng converter is installed -> use it
             dng_urls = try convert_images_to_dng(image_urls, dng_converter_path, tmp_dir)
             print("Time to convert images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
-            DispatchQueue.main.async { progress.int += n_images }
+            DispatchQueue.main.async { progress.int += 10000000 }
             t = DispatchTime.now().uptimeNanoseconds
         }
     }
@@ -346,9 +346,10 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     
     // load images
     t = DispatchTime.now().uptimeNanoseconds
-    var (textures, mosaic_pettern_width) = try load_images(dng_urls, progress)
+    var (textures, mosaic_pettern_width) = try load_images(dng_urls)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
+    DispatchQueue.main.async { progress.int += (convert_to_dng ? 10000000 : 20000000) }
     
     // convert images from uint16 to float16
     textures = textures.map{texture_uint16_to_float($0)}
@@ -367,6 +368,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         for comp_idx in 0..<image_urls.count {
             
             add_texture(textures[comp_idx], final_texture, image_urls.count)
+            DispatchQueue.main.async { progress.int += Int(80000000/Double(image_urls.count)) }
         }
         
         let output_texture_uint16 = convert_uint16(final_texture)
@@ -374,9 +376,11 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
         t = DispatchTime.now().uptimeNanoseconds
         
+        DispatchQueue.main.async { progress.int += 10000000 }
+        
         // save the output image
         try texture_to_dng(output_texture_uint16, in_url, out_url)
-            
+        
         // check if dng converter is installed
         if final_dng_conversion {
             let path_delete = out_dir + in_filename + "_merged.dng"
@@ -425,6 +429,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
         t = DispatchTime.now().uptimeNanoseconds
         
+        DispatchQueue.main.async { progress.int += 10000000 }
+        
         // save the output image
         try texture_to_dng(output_texture_uint16, in_url, out_url)
         
@@ -447,7 +453,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     
     // delete the temporary dng directory
     try FileManager.default.removeItem(atPath: tmp_dir)
-    
+  
     print("Time to save final image: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     
     return out_url
@@ -511,7 +517,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     // build reference pyramid
     let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array)
     
-    // initialize textures to store real and imaginary parts of the reference texture, a temp texture for the Fourier transform and the final texture
+    // initialize textures to store real and imaginary parts of the reference texture and a temp texture for the Fourier transform
     let ref_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+pad_left+pad_right-2*crop_merge_x), height: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/2, mipmapped: false)
     ref_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
     let ref_texture_ft = device.makeTexture(descriptor: ref_texture_ft_descriptor)!
@@ -614,7 +620,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         //capture_manager.stopCapture()
       
         print("Align+merge: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
-        DispatchQueue.main.async { progress.int += 1 }
+        DispatchQueue.main.async { progress.int += Int(80000000/Double(4*(textures.count-1))) }
     }    
     
     // transform output texture back to image space and convert back to the 2x2 pixel structure

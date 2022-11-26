@@ -18,7 +18,7 @@ func optionally_convert_dir_to_urls(_ urls: [URL]) -> [URL] {
     return urls
 }
 
-func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> ([MTLTexture], Int) {
+func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int) {
     
     var textures_dict: [Int: MTLTexture] = [:]
     let compute_group = DispatchGroup()
@@ -43,9 +43,6 @@ func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> ([MTLT
     
     // wait until all the images are loaded
     compute_group.wait()
-    
-    // sync GUI progress
-    DispatchQueue.main.async { progress.int += urls.count }
     
     // convert dict to list
     var textures_list: [MTLTexture] = []
