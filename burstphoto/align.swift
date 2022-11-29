@@ -61,6 +61,8 @@ let convert_2x2_state = try! device.makeComputePipelineState(function: mfl.makeF
 let fill_with_zeros_RGBA_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros_RGBA")!)
 let calculate_rms_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_rms")!)
 let calculate_diff_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_diff")!)
+let blur_mosaic_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_mosaic_x")!)
+let blur_mosaic_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_mosaic_y")!)
 
 
 
@@ -186,7 +188,40 @@ func avg_pool(_ input_texture: MTLTexture, _ scale: Int) -> MTLTexture {
 }
 
 
-func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<Int>) -> Array<MTLTexture> {
+func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_pettern_width: Int) -> MTLTexture {
+    
+    // create a temp texture blurred along x-axis only and the output texture, blurred along both x- and y-axis
+    let blur_x = texture_like(in_texture)
+    let blur_xy = texture_like(in_texture)
+    
+    // blur the texture along the x-axis
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = blur_mosaic_x_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(blur_x, index: 1)
+    command_encoder.setBytes([Int32(kernel_size)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(mosaic_pettern_width)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+
+    // blur the texture along the y-axis
+    let state2 = blur_mosaic_y_state
+    command_encoder.setComputePipelineState(state2)
+    command_encoder.setTexture(blur_x, index: 0)
+    command_encoder.setTexture(blur_xy, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    return blur_xy
+}
+
+
+func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<Int>, _ mosaic_pettern_width: Int) -> Array<MTLTexture> {
     
     // iteratively resize the current layer in the pyramid
     var pyramid: Array<MTLTexture> = []
@@ -194,7 +229,8 @@ func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<I
         if i == 0 {
             pyramid.append(avg_pool(input_texture, downscale_factor))
         } else {
-            pyramid.append(avg_pool(pyramid.last!, downscale_factor))
+            //pyramid.append(avg_pool(pyramid.last!, downscale_factor))
+            pyramid.append(avg_pool(blur_mosaic_texture(pyramid.last!, 2, 1), downscale_factor))
         }
     }
     return pyramid
@@ -515,7 +551,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     let ref_texture = extend_texture(textures[ref_idx], pad_left, pad_right, pad_top, pad_bottom)
         
     // build reference pyramid
-    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array)
+    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, mosaic_pettern_width)
     
     // initialize textures to store real and imaginary parts of the reference texture and a temp texture for the Fourier transform
     let ref_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+pad_left+pad_right-2*crop_merge_x), height: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/2, mipmapped: false)
@@ -556,7 +592,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         }
         
         // build comparison pyramid
-        let comp_pyramid = build_pyramid(comp_texture, downscale_factor_array)
+        let comp_pyramid = build_pyramid(comp_texture, downscale_factor_array, mosaic_pettern_width)
               
         // initiazite tile alignments
         let alignment_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg16Sint, width: 1, height: 1, mipmapped: false)
@@ -700,7 +736,7 @@ func merge_frequency_domain(_ aligned_texture: MTLTexture, _ ref_texture: MTLTex
     command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
-    command_buffer.commit()   
+    command_buffer.commit()
 }
 
 

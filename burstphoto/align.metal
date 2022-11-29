@@ -95,6 +95,84 @@ kernel void avg_pool(texture2d<float, access::read> in_texture [[texture(0)]],
 }
 
 
+kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)]],
+                          texture2d<float, access::write> out_texture [[texture(1)]],
+                          constant int& kernel_size [[buffer(0)]],
+                          constant int& mosaic_pettern_width [[buffer(1)]],
+                          uint2 gid [[thread_position_in_grid]]) {
+    
+    // load args
+    int texture_width = in_texture.get_width();
+    
+    // set kernel weights of binomial filter and clamp kernel_size to a maximum of 3
+    int const kernel_size_clamped = clamp(kernel_size, 0, 3);
+    float4 kernel_weights = float4(1, 0, 0, 0);
+    
+    if(kernel_size_clamped == 1)
+        kernel_weights = float4(2, 1, 0, 0);
+    else if(kernel_size_clamped == 2)
+        kernel_weights = float4(6, 4, 1, 0);
+    else if(kernel_size_clamped == 3)
+        kernel_weights = float4(20, 15, 6, 1);
+    
+    // compute a sigle output pixel
+    float total_intensity = 0;
+    float total_weight = 0;
+    int y = gid.y;
+    for (int dx = -kernel_size_clamped; dx <= kernel_size_clamped; dx++) {
+        int x = gid.x + mosaic_pettern_width*dx;
+        if (0 <= x && x < texture_width) {
+            float const weight = kernel_weights[abs(dx)];
+            total_intensity += weight * in_texture.read(uint2(x, y)).r;
+            total_weight += weight;
+        }
+    }
+    
+    // write output pixel
+    float out_intensity = total_intensity / total_weight;
+    out_texture.write(out_intensity, gid);
+}
+
+
+kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)]],
+                          texture2d<float, access::write> out_texture [[texture(1)]],
+                          constant int& kernel_size [[buffer(0)]],
+                          constant int& mosaic_pettern_width [[buffer(1)]],
+                          uint2 gid [[thread_position_in_grid]]) {
+    
+    // load args
+    int texture_height = in_texture.get_height();
+    
+    // set kernel weights of binomial filter and clamp kernel_size to a maximum of 3
+    int const kernel_size_clamped = clamp(kernel_size, 0, 3);
+    float4 kernel_weights = float4(1, 0, 0, 0);
+    
+    if(kernel_size_clamped == 1)
+        kernel_weights = float4(2, 1, 0, 0);
+    else if(kernel_size_clamped == 2)
+        kernel_weights = float4(6, 4, 1, 0);
+    else if(kernel_size_clamped == 3)
+        kernel_weights = float4(20, 15, 6, 1);
+    
+    // compute a sigle output pixel
+    float total_intensity = 0;
+    float total_weight = 0;
+    int x = gid.x;
+    for (int dy = -kernel_size_clamped; dy <= kernel_size_clamped; dy++) {
+        int y = gid.y + mosaic_pettern_width*dy;
+        if (0 <= y && y < texture_height) {
+            float const weight = kernel_weights[abs(dy)];
+            total_intensity += weight * in_texture.read(uint2(x, y)).r;
+            total_weight += weight;
+        }
+    }
+    
+    // write output pixel
+    float out_intensity = total_intensity / total_weight;
+    out_texture.write(out_intensity, gid);
+}
+
+
 kernel void compute_tile_differences(texture2d<float, access::read> ref_texture [[texture(0)]],
                                      texture2d<float, access::read> comp_texture [[texture(1)]],
                                      texture2d<int, access::read> prev_alignment [[texture(2)]],
@@ -576,13 +654,14 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     float4 const ones  = float4(1.0f, 1.0f, 1.0f, 1.0f);
     
     // combine estimated shot noise and read noise
-    float4 const noise_est = rms_texture.read(gid).r + read_noise;
+    float4 const noise_est = rms_texture.read(gid) + read_noise;
     // normalize with tile size and robustness norm
     float4 const noise_norm = noise_est*tile_size*tile_size*robustness_norm;
     
     // estimate motion mismatch as the absolute difference of reference tile and comparison tile
     // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
     // use 16x16, 32x32 or 64x64 tile size here as used for alignment
+
     int const x_start = max(0, m0 + tile_size/2 - tile_size_align/2);
     int const y_start = max(0, n0 + tile_size/2 - tile_size_align/2);
     
@@ -602,7 +681,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     }
      
     tile_diff /= float(n_total);
-
+        
     // calculation of mismatch of tiles by Wiener shrinkage
     float4 mismatch = (tile_diff*tile_diff) / (tile_diff*tile_diff + mismatch_norm*noise_est);
     mismatch = clamp(mismatch, zeros, ones);
