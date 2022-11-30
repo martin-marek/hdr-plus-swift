@@ -5,15 +5,14 @@ using namespace simd;
 constant uint UINT16_MAX_VAL = 65535;
 constant float PI = 3.14159265358979323846;
 
+
+// ===========================================================================================================
+// Helper functions
+// ===========================================================================================================
+
 kernel void fill_with_zeros(texture2d<float, access::write> texture [[texture(0)]],
                             uint2 gid [[thread_position_in_grid]]) {
     texture.write(0, gid);
-}
-
-
-kernel void fill_with_zeros_RGBA(texture2d<float, access::write> texture [[texture(0)]],
-                                 uint2 gid [[thread_position_in_grid]]) {
-    texture.write(float4(0.0f, 0.0f, 0.0f, 0.0f), gid);
 }
 
 
@@ -23,6 +22,20 @@ kernel void texture_uint16_to_float(texture2d<uint, access::read> in_texture [[t
     uint4 val_unint = in_texture.read(gid);
     float4 val_float = float4(val_unint); // removed scaling to the range 0 to 1
     out_texture.write(val_float, gid); 
+}
+
+
+kernel void convert_uint16(texture2d<float, access::read> in_texture [[texture(0)]],
+                           texture2d<uint, access::write> out_texture [[texture(1)]],
+                           uint2 gid [[thread_position_in_grid]]) {
+      
+    float color_value = in_texture.read(gid).r;
+        
+    color_value = clamp(color_value, 0.0f, float(UINT16_MAX_VAL));
+    
+    uint out = int(round(color_value));
+    
+    out_texture.write(out, gid);
 }
 
 
@@ -104,17 +117,28 @@ kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)
     // load args
     int texture_width = in_texture.get_width();
     
-    // set kernel weights of binomial filter and clamp kernel_size to a maximum of 3
-    int const kernel_size_clamped = clamp(kernel_size, 0, 3);
-    float4 kernel_weights = float4(1, 0, 0, 0);
-    
+    // set kernel weights of binomial filter and clamp kernel_size to a maximum of 8
+    int const kernel_size_clamped = clamp(kernel_size, 0, 8);
+   
+    float3x3 binomial_weights = float3x3({1, 0, 0}, {0, 0, 0}, {0, 0, 0});
+
     if(kernel_size_clamped == 1)
-        kernel_weights = float4(2, 1, 0, 0);
+        binomial_weights = float3x3({2, 1, 0}, {0, 0, 0}, {0, 0, 0});
     else if(kernel_size_clamped == 2)
-        kernel_weights = float4(6, 4, 1, 0);
+        binomial_weights = float3x3({6, 4, 1}, {0, 0, 0}, {0, 0, 0});
     else if(kernel_size_clamped == 3)
-        kernel_weights = float4(20, 15, 6, 1);
-    
+        binomial_weights = float3x3({20, 15, 6}, {1, 0, 0}, {0, 0, 0});
+    else if(kernel_size_clamped == 4)
+        binomial_weights = float3x3({70, 56, 28}, {8, 1, 0}, {0, 0, 0});
+    else if(kernel_size_clamped == 5)
+        binomial_weights = float3x3({252, 210, 120}, {45, 10, 1}, {0, 0, 0});
+    else if(kernel_size_clamped == 6)
+        binomial_weights = float3x3({924, 792, 495}, {220, 66, 12}, {1, 0, 0});
+    else if(kernel_size_clamped == 7)
+        binomial_weights = float3x3({3432, 3003, 2002}, {1001, 364, 91}, {14, 1, 0});
+    else if(kernel_size_clamped == 8)
+        binomial_weights = float3x3({12870, 11440, 8008}, {4368, 1820, 560}, {120, 16, 1});
+        
     // compute a sigle output pixel
     float total_intensity = 0;
     float total_weight = 0;
@@ -122,7 +146,11 @@ kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)
     for (int dx = -kernel_size_clamped; dx <= kernel_size_clamped; dx++) {
         int x = gid.x + mosaic_pettern_width*dx;
         if (0 <= x && x < texture_width) {
-            float const weight = kernel_weights[abs(dx)];
+            
+            int const m = int(abs(dx)/3.0f+0.1f);
+            int const n = int(abs(dx) % 3);
+            
+            float const weight = float(binomial_weights[m][n]);
             total_intensity += weight * in_texture.read(uint2(x, y)).r;
             total_weight += weight;
         }
@@ -143,17 +171,28 @@ kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)
     // load args
     int texture_height = in_texture.get_height();
     
-    // set kernel weights of binomial filter and clamp kernel_size to a maximum of 3
-    int const kernel_size_clamped = clamp(kernel_size, 0, 3);
-    float4 kernel_weights = float4(1, 0, 0, 0);
-    
+    // set kernel weights of binomial filter and clamp kernel_size to a maximum of 8
+    int const kernel_size_clamped = clamp(kernel_size, 0, 8);
+   
+    float3x3 binomial_weights = float3x3({1, 0, 0}, {0, 0, 0}, {0, 0, 0});
+
     if(kernel_size_clamped == 1)
-        kernel_weights = float4(2, 1, 0, 0);
+        binomial_weights = float3x3({2, 1, 0}, {0, 0, 0}, {0, 0, 0});
     else if(kernel_size_clamped == 2)
-        kernel_weights = float4(6, 4, 1, 0);
+        binomial_weights = float3x3({6, 4, 1}, {0, 0, 0}, {0, 0, 0});
     else if(kernel_size_clamped == 3)
-        kernel_weights = float4(20, 15, 6, 1);
-    
+        binomial_weights = float3x3({20, 15, 6}, {1, 0, 0}, {0, 0, 0});
+    else if(kernel_size_clamped == 4)
+        binomial_weights = float3x3({70, 56, 28}, {8, 1, 0}, {0, 0, 0});
+    else if(kernel_size_clamped == 5)
+        binomial_weights = float3x3({252, 210, 120}, {45, 10, 1}, {0, 0, 0});
+    else if(kernel_size_clamped == 6)
+        binomial_weights = float3x3({924, 792, 495}, {220, 66, 12}, {1, 0, 0});
+    else if(kernel_size_clamped == 7)
+        binomial_weights = float3x3({3432, 3003, 2002}, {1001, 364, 91}, {14, 1, 0});
+    else if(kernel_size_clamped == 8)
+        binomial_weights = float3x3({12870, 11440, 8008}, {4368, 1820, 560}, {120, 16, 1});
+        
     // compute a sigle output pixel
     float total_intensity = 0;
     float total_weight = 0;
@@ -161,7 +200,11 @@ kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)
     for (int dy = -kernel_size_clamped; dy <= kernel_size_clamped; dy++) {
         int y = gid.y + mosaic_pettern_width*dy;
         if (0 <= y && y < texture_height) {
-            float const weight = kernel_weights[abs(dy)];
+           
+            int const m = int(abs(dy)/3.0f+0.1f);
+            int const n = int(abs(dy) % 3);
+            
+            float const weight = float(binomial_weights[m][n]);
             total_intensity += weight * in_texture.read(uint2(x, y)).r;
             total_weight += weight;
         }
@@ -172,6 +215,93 @@ kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)
     out_texture.write(out_intensity, gid);
 }
 
+
+kernel void extend_texture(texture2d<float, access::read> in_texture [[texture(0)]],
+                           texture2d<float, access::write> out_texture [[texture(1)]],
+                           constant int& pad_left [[buffer(0)]],
+                           constant int& pad_top [[buffer(1)]],
+                           uint2 gid [[thread_position_in_grid]]) {
+        
+    int x = gid.x + pad_left;
+    int y = gid.y + pad_top;
+ 
+    float color_value = in_texture.read(gid).r;
+    
+    out_texture.write(color_value, uint2(x, y));
+}
+
+
+kernel void crop_texture(texture2d<float, access::read> in_texture [[texture(0)]],
+                         texture2d<float, access::write> out_texture [[texture(1)]],
+                         constant int& pad_left [[buffer(0)]],
+                         constant int& pad_top [[buffer(1)]],
+                         uint2 gid [[thread_position_in_grid]]) {
+      
+    int x = gid.x + pad_left;
+    int y = gid.y + pad_top;
+  
+    float color_value = in_texture.read(uint2(x, y)).r;
+    
+    out_texture.write(color_value, gid);
+}
+
+
+
+
+kernel void add_texture(texture2d<float, access::read> in_texture [[texture(0)]],
+                        texture2d<float, access::read_write> out_texture [[texture(1)]],
+                        constant int& n_textures [[buffer(0)]],
+                        uint2 gid [[thread_position_in_grid]]) {
+    
+    float color_value = out_texture.read(gid).r + in_texture.read(gid).r/float(n_textures);
+    
+    out_texture.write(color_value, gid);
+}
+
+
+kernel void copy_texture(texture2d<float, access::read> in_texture [[texture(0)]],
+                         texture2d<float, access::write> out_texture [[texture(1)]],
+                         uint2 gid [[thread_position_in_grid]]) {
+
+    out_texture.write(in_texture.read(gid), gid);
+}
+
+
+kernel void convert_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
+                         texture2d<float, access::write> out_texture [[texture(1)]],
+                         constant int& crop_merge_x [[buffer(0)]],
+                         constant int& crop_merge_y [[buffer(1)]],
+                         uint2 gid [[thread_position_in_grid]]) {
+    
+    int const m = gid.x*2 + crop_merge_x;
+    int const n = gid.y*2 + crop_merge_y;
+    
+    float4 color_value = float4(in_texture.read(uint2(m, n)).r,   in_texture.read(uint2(m+1, n)).r,
+                                in_texture.read(uint2(m, n+1)).r, in_texture.read(uint2(m+1, n+1)).r);
+    
+    out_texture.write(color_value, gid);
+}
+
+
+kernel void convert_bayer(texture2d<float, access::read> in_texture [[texture(0)]],
+                          texture2d<float, access::write> out_texture [[texture(1)]],
+                          uint2 gid [[thread_position_in_grid]]) {
+    
+    int const m = gid.x*2;
+    int const n = gid.y*2;
+    
+    float4 color_value = float4(in_texture.read(gid));
+     
+    out_texture.write(color_value[0], uint2(m,   n));
+    out_texture.write(color_value[1], uint2(m+1, n));
+    out_texture.write(color_value[2], uint2(m,   n+1));
+    out_texture.write(color_value[3], uint2(m+1, n+1));
+}
+
+
+// ===========================================================================================================
+// Functions specific to image alignment
+// ===========================================================================================================
 
 kernel void compute_tile_differences(texture2d<float, access::read> ref_texture [[texture(0)]],
                                      texture2d<float, access::read> comp_texture [[texture(1)]],
@@ -333,100 +463,154 @@ kernel void warp_texture(texture2d<float, access::read> in_texture [[texture(0)]
 }
 
 
-kernel void extend_texture(texture2d<float, access::read> in_texture [[texture(0)]],
-                           texture2d<float, access::write> out_texture [[texture(1)]],
-                           constant int& pad_left [[buffer(0)]],
-                           constant int& pad_top [[buffer(1)]],
-                           uint2 gid [[thread_position_in_grid]]) {
-        
-    int x = gid.x + pad_left;
-    int y = gid.y + pad_top;
- 
-    float color_value = in_texture.read(gid).r;
-    
-    out_texture.write(color_value, uint2(x, y));
+// ===========================================================================================================
+// Function specific to merging in the spatial domain
+// ===========================================================================================================
+
+kernel void add_textures_weighted(texture2d<float, access::read> texture1 [[texture(0)]],
+                                  texture2d<float, access::read> texture2 [[texture(1)]],
+                                  texture2d<float, access::read> weight_texture [[texture(2)]],
+                                  texture2d<float, access::write> out_texture [[texture(3)]],
+                                  uint2 gid [[thread_position_in_grid]]) {
+    float intensity1 = texture1.read(gid).r;
+    float intensity2 = texture2.read(gid).r;
+    float weight = weight_texture.read(gid).r;
+    float out_intensity = weight * intensity2 + (1 - weight) * intensity1;
+    out_texture.write(out_intensity, gid);
 }
 
 
-kernel void crop_texture(texture2d<float, access::read> in_texture [[texture(0)]],
-                         texture2d<float, access::write> out_texture [[texture(1)]],
-                         constant int& pad_left [[buffer(0)]],
-                         constant int& pad_top [[buffer(1)]],
-                         uint2 gid [[thread_position_in_grid]]) {
-      
-    int x = gid.x + pad_left;
-    int y = gid.y + pad_top;
+kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
+                      device float *out_buffer [[buffer(0)]],
+                      constant int& width [[buffer(1)]],
+                      uint gid [[thread_position_in_grid]]) {
+    float total = 0;
+    for (int x = 0; x < width; x++) {
+        total += in_texture.read(uint(x)).r;
+    }
+    float avg = total / width;
+    out_buffer[0] = avg;
+}
+
+
+kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
+                      texture1d<float, access::write> out_texture [[texture(1)]],
+                      uint gid [[thread_position_in_grid]]) {
+    uint x = gid;
+    int texture_height = in_texture.get_height();
+    float total = 0;
+    for (int y = 0; y < texture_height; y++) {
+        total += in_texture.read(uint2(x, y)).r;
+    }
+    float avg = total / texture_height;
+    out_texture.write(avg, x);
+}
+
+
+kernel void color_difference(texture2d<float, access::read> texture1 [[texture(0)]],
+                             texture2d<float, access::read> texture2 [[texture(1)]],
+                             texture2d<float, access::write> out_texture [[texture(2)]],
+                             constant int& mosaic_pettern_width [[buffer(0)]],
+                             uint2 gid [[thread_position_in_grid]]) {
+    float total_diff = 0;
+    int x0 = gid.x * mosaic_pettern_width;
+    int y0 = gid.y * mosaic_pettern_width;
+    for (int dx = 0; dx < mosaic_pettern_width; dx++) {
+        for (int dy = 0; dy < mosaic_pettern_width; dy++) {
+            int x = x0 + dx;
+            int y = y0 + dy;
+            float i1 = texture1.read(uint2(x, y)).r;
+            float i2 = texture2.read(uint2(x, y)).r;
+            total_diff += abs(i1 - i2);
+        }
+    }
+    out_texture.write(total_diff, gid);
+}
+
+
+kernel void compute_merge_weight(texture2d<float, access::read> texture_diff [[texture(0)]],
+                                 texture2d<float, access::write> weight_texture [[texture(1)]],
+                                 constant float* noise_sd_buffer [[buffer(0)]],
+                                 constant float& robustness [[buffer(1)]],
+                                 uint2 gid [[thread_position_in_grid]]) {
+    
+    // load args
+    float noise_sd = noise_sd_buffer[0];
+    
+    // load texture difference
+    float diff = texture_diff.read(gid).r;
+    
+    // compute the weight to assign to the comparison frame
+    // weight == 0 means that the aligned image is ignored
+    // weight == 1 means that the aligned image has full weight
+    float weight;
+    if (robustness == 0) {
+        // robustness == 0 means that robust merge is turned off
+        weight = 1;
+    } else {
+        // compare the difference to image noise
+        // as diff increases, the weight of the aligned image will continuously decrease from 1.0 to 0.0
+        // the two extreme cases are:
+        // diff == 0                   --> aligned image will have weight 1.0
+        // diff >= noise_sd/robustness --> aligned image will have weight 0.0
+        float max_diff = noise_sd / robustness;
+        weight =  1 - diff / max_diff;
+        weight = clamp(weight, 0.0, 1.0);
+    }
+    
+    // write weight
+    weight_texture.write(weight, gid);
+}
+
+
+// ===========================================================================================================
+// Function specific to merging in the frequency domain
+// ===========================================================================================================
+
+kernel void calculate_rms(texture2d<float, access::read> ref_texture [[texture(0)]],
+                          texture2d<float, access::write> rms_texture [[texture(1)]],
+                          constant int& tile_size [[buffer(0)]],
+                          uint2 gid [[thread_position_in_grid]]) {
+    
+    // compute tile positions from gid
+    int const m0 = gid.x*tile_size;
+    int const n0 = gid.y*tile_size;
+    
+    // fill with zeros
+    float4 noise_est = float4(0.0f, 0.0f, 0.0f, 0.0f);
+
+    // use 16x16 tile size here
+    for (int dy = 0; dy < tile_size; dy++) {
+        for (int dx = 0; dx < tile_size; dx++) {
+            
+            int const x = m0 + dx;
+            int const y = n0 + dy;
+            
+            float4 const data_noise = ref_texture.read(uint2(x, y));
+            
+            noise_est += (data_noise * data_noise);
+        }
+    }
+
+    noise_est = sqrt(noise_est)/float(tile_size);
+    
+    rms_texture.write(noise_est, gid);
+}
+
+
+kernel void calculate_diff_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
+                                texture2d<float, access::read> aligned_texture [[texture(1)]],
+                                texture2d<float, access::write> diff_texture [[texture(2)]],
+                                uint2 gid [[thread_position_in_grid]]) {
+    
+    
+    float4 const diff = ref_texture.read(gid) - aligned_texture.read(gid);
   
-    float color_value = in_texture.read(uint2(x, y)).r;
+    float const diff_combined = (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
     
-    out_texture.write(color_value, gid);
+    diff_texture.write(diff_combined, gid);
 }
-
-
-kernel void convert_uint16(texture2d<float, access::read> in_texture [[texture(0)]],
-                           texture2d<uint, access::write> out_texture [[texture(1)]],
-                           uint2 gid [[thread_position_in_grid]]) {
-      
-    float color_value = in_texture.read(gid).r;
-        
-    color_value = clamp(color_value, 0.0f, float(UINT16_MAX_VAL));
     
-    uint out = int(round(color_value));
-    
-    out_texture.write(out, gid);
-}
-
-
-kernel void convert_RGBA(texture2d<float, access::read> in_texture [[texture(0)]],
-                         texture2d<float, access::write> out_texture [[texture(1)]],
-                         constant int& crop_merge_x [[buffer(0)]],
-                         constant int& crop_merge_y [[buffer(1)]],
-                         uint2 gid [[thread_position_in_grid]]) {
-    
-    int const m = gid.x*2 + crop_merge_x;
-    int const n = gid.y*2 + crop_merge_y;
-    
-    float4 color_value = float4(in_texture.read(uint2(m, n)).r,   in_texture.read(uint2(m+1, n)).r,
-                                in_texture.read(uint2(m, n+1)).r, in_texture.read(uint2(m+1, n+1)).r);
-    
-    out_texture.write(color_value, gid);
-}
-
-
-kernel void convert_2x2(texture2d<float, access::read> in_texture [[texture(0)]],
-                        texture2d<float, access::write> out_texture [[texture(1)]],
-                        uint2 gid [[thread_position_in_grid]]) {
-    
-    int const m = gid.x*2;
-    int const n = gid.y*2;
-    
-    float4 color_value = float4(in_texture.read(gid));
-     
-    out_texture.write(color_value[0], uint2(m,   n));
-    out_texture.write(color_value[1], uint2(m+1, n));
-    out_texture.write(color_value[2], uint2(m,   n+1));
-    out_texture.write(color_value[3], uint2(m+1, n+1));
-}
-
-
-kernel void add_texture(texture2d<float, access::read> in_texture [[texture(0)]],
-                        texture2d<float, access::read_write> out_texture [[texture(1)]],
-                        constant int& n_textures [[buffer(0)]],
-                        uint2 gid [[thread_position_in_grid]]) {
-    
-    float color_value = out_texture.read(gid).r + in_texture.read(gid).r/float(n_textures);
-    
-    out_texture.write(color_value, gid);
-}
-
-
-kernel void copy_texture(texture2d<float, access::read> in_texture [[texture(0)]],
-                         texture2d<float, access::write> out_texture [[texture(1)]],
-                         uint2 gid [[thread_position_in_grid]]) {
-
-    out_texture.write(in_texture.read(gid), gid);
-}
-
 
 kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]],
                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
@@ -627,17 +811,14 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     
     // derive normalized robustness value: each step yields another factor of two with the idea that the variance of shot noise increases by a factor of two per iso level
     float const robustness_norm = pow(2.0f, (-robustness*10 + 9.0f));
-    //float const robustness_norm = pow(2.0f, (-robustness*10 + 6.0f));
     
     // derive read noise with the idea that read noise increases stronger than a factor of two per iso level to increase noise reduction in darker regions relative to bright regions
-    float const read_noise = pow(pow(2.0f, (-robustness*10 + 11.0f)), 1.5f); // or use 10.0f?
-    //float const read_noise = pow(pow(2.0f, (-robustness*10 + 7.0f)), 1.5f);
+    float const read_noise = pow(pow(2.0f, (-robustness*10 + 11.0f)), 1.5); // or use 10.0f?
     
     // derive a maximum value for the motion norm with the idea that denoising can be inscreased in static regions with good alignment
     // Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a linear scaling derived from the robustness value
     // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
     float const max_motion_norm = max(1.0f, pow(1.36f, (1.2f-robustness)*10));
-    //float const max_motion_norm = pow(sqrt(2.0f), (1.0f-robustness)*10);
     
     // scaling parameter to control at which level of mismatch the increase of noise reduction vanishes (s smaller => increase of noise reduction smaller)
     float const mismatch_norm = 500.0f;
@@ -801,47 +982,4 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
 }
 
 
-kernel void calculate_rms(texture2d<float, access::read> ref_texture [[texture(0)]],
-                          texture2d<float, access::write> rms_texture [[texture(1)]],
-                          constant int& tile_size [[buffer(0)]],
-                          uint2 gid [[thread_position_in_grid]]) {
-    
-    // compute tile positions from gid
-    int const m0 = gid.x*tile_size;
-    int const n0 = gid.y*tile_size;
-    
-    // fill with zeros
-    float4 noise_est = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    // use 16x16 tile size here
-    for (int dy = 0; dy < tile_size; dy++) {
-        for (int dx = 0; dx < tile_size; dx++) {
-            
-            int const x = m0 + dx;
-            int const y = n0 + dy;
-            
-            float4 const data_noise = ref_texture.read(uint2(x, y));
-            
-            noise_est += (data_noise * data_noise);
-        }
-    }
-
-    noise_est = sqrt(noise_est)/float(tile_size);
-    
-    rms_texture.write(noise_est, gid);
-}
-
-
-kernel void calculate_diff(texture2d<float, access::read> ref_texture [[texture(0)]],
-                           texture2d<float, access::read> aligned_texture [[texture(1)]],
-                           texture2d<float, access::write> diff_texture [[texture(2)]],
-                           uint2 gid [[thread_position_in_grid]]) {
-    
-    
-    float4 const diff = ref_texture.read(gid) - aligned_texture.read(gid);
-  
-    float const diff_combined = (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
-    
-    diff_texture.write(diff_combined, gid);
-}
-    
