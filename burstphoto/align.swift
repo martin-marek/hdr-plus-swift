@@ -53,20 +53,21 @@ let add_texture_state = try! device.makeComputePipelineState(function: mfl.makeF
 let copy_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "copy_texture")!)
 let convert_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_rgba")!)
 let convert_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_bayer")!)
+let average_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x")!)
+let average_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y")!)
 let compute_tile_differences_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences")!)
 let compute_tile_alignments_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_alignments")!)
+let correct_upsampling_error_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_upsampling_error")!)
 let warp_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture")!)
 let add_textures_weighted_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_textures_weighted")!)
 let color_difference_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "color_difference")!)
-let average_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y")!)
-let average_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x")!)
 let compute_merge_weight_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_merge_weight")!)
-let calculate_rms_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_rms")!)
-let calculate_diff_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_diff_rgba")!)
+let calculate_rms_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_rms_rgba")!)
 let forward_dft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "forward_dft")!)
 let backward_dft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "backward_dft")!)
 let merge_frequency_domain_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "merge_frequency_domain")!)
-
+let calculate_mismatch_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_mismatch_rgba")!)
+let normalize_mismatch_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_mismatch")!)
 
 
 // ===========================================================================================================
@@ -183,7 +184,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         print("Merging in the spatial domain...")
     
         let kernel_size = Int(8) // kernel size of binomial filterung used for blurring the image
-        let robustness_norm = 0.10*pow(sqrt(2), robustness*10) // use this value as a replacement of robustness for control of motion robustness / noise level
+        let robustness_norm = 0.08*pow(sqrt(2), robustness*10) // use this value as a replacement of robustness for control of motion robustness / noise level
     
         try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
     }
@@ -236,7 +237,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
     var search_dist_array = [2]
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]
-    var div = 2
+    var div = mosaic_pettern_width
     while (res > search_distance) {
         downscale_factor_array.append(2)
         search_dist_array.append(2)
@@ -248,23 +249,17 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
     // calculate shifts for extension of the image frame with zeros in such a way that each resolution level of alignment exactly fits within the frame and nearest neighbor upsampling of motion vector fields is sufficient
     let tile_factor = div*Int(tile_size_array.last!)
     
-    var shift_align_x = Int(ceil(Float(texture_width_orig)/Float(tile_factor)))
-    shift_align_x = (shift_align_x*Int(tile_factor) - texture_width_orig)/2
+    var pad_align_x = Int(ceil(Float(texture_width_orig)/Float(tile_factor)))
+    pad_align_x = (pad_align_x*Int(tile_factor) - texture_width_orig)/2
     
-    var shift_align_y = Int(ceil(Float(texture_height_orig)/Float(tile_factor)))
-    shift_align_y = (shift_align_y*Int(tile_factor) - texture_height_orig)/2
-  
-    // add padding for artifact suppression
-    let pad_left   = shift_align_x
-    let pad_right  = shift_align_x
-    let pad_top    = shift_align_y
-    let pad_bottom = shift_align_y
-    
+    var pad_align_y = Int(ceil(Float(texture_height_orig)/Float(tile_factor)))
+    pad_align_y = (pad_align_y*Int(tile_factor) - texture_height_orig)/2
+      
     // set reference texture
-    let ref_texture = extend_texture(textures[ref_idx], pad_left, pad_right, pad_top, pad_bottom)
+    let ref_texture = extend_texture(textures[ref_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
     
     // build reference pyramid
-    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, mosaic_pettern_width)
+    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array)
     
     // blur reference texure and estimate noise standard deviation
     // -  the computation is done here to avoid repeating the same computation in 'robust_merge()'
@@ -282,18 +277,15 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
             continue
         }
             
-        let comp_texture = extend_texture(textures[comp_idx], pad_left, pad_right, pad_top, pad_bottom)
+        let comp_texture = extend_texture(textures[comp_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
         
         // check that the comparison image has the same resolution as the reference image
         if (ref_texture.width != comp_texture.width) || (ref_texture.height != comp_texture.height) {
             throw AlignmentError.inconsistent_resolutions
         }
-        
-        // build comparison pyramid
-        let comp_pyramid = build_pyramid(comp_texture, downscale_factor_array, mosaic_pettern_width)
-      
+       
         // align comparison texture
-        let aligned_texture = crop_texture(align_texture(ref_pyramid, comp_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array), pad_left, pad_right, pad_top, pad_bottom)
+        let aligned_texture = crop_texture(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array), pad_align_x, pad_align_x, pad_align_y, pad_align_y)
         
         // robust-merge the texture
         let merged_texture = robust_merge(textures[ref_idx], ref_texture_blurred, aligned_texture, kernel_size, robustness, noise_sd, mosaic_pettern_width)
@@ -319,7 +311,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     var search_dist_array = [2]
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]
-    var div = 2
+    var div = mosaic_pettern_width
     while (res > search_distance) {
         downscale_factor_array.append(2)
         search_dist_array.append(2)
@@ -328,52 +320,56 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         div *= 2
     }
      
-    // calculate shifts for extension of the image frame with zeros in such a way that each resolution level of alignment exactly fits within the frame and nearest neighbor upsampling of motion vector fields is sufficient
+    // calculate padding for extension of the image frame with zeros in such a way that each resolution level of alignment exactly fits within the frame and nearest neighbor upsampling of motion vector fields is sufficient
     let tile_factor = div*Int(tile_size_array.last!)
     
-    var shift_align_x = Int(ceil(Float(texture_width_orig+tile_size_merge)/Float(tile_factor)))
-    shift_align_x = (shift_align_x*Int(tile_factor) - texture_width_orig - tile_size_merge)/2
+    var pad_align_x = Int(ceil(Float(texture_width_orig+tile_size_merge)/Float(tile_factor)))
+    pad_align_x = (pad_align_x*Int(tile_factor) - texture_width_orig - tile_size_merge)/2
     
-    var shift_align_y = Int(ceil(Float(texture_height_orig+tile_size_merge)/Float(tile_factor)))
-    shift_align_y = (shift_align_y*Int(tile_factor) - texture_height_orig - tile_size_merge)/2
+    var pad_align_y = Int(ceil(Float(texture_height_orig+tile_size_merge)/Float(tile_factor)))
+    pad_align_y = (pad_align_y*Int(tile_factor) - texture_height_orig - tile_size_merge)/2
   
-    // add padding for artifact suppression
-    let pad_left   = shift_align_x + shift_left
-    let pad_right  = shift_align_x + shift_right
-    let pad_top    = shift_align_y + shift_top
-    let pad_bottom = shift_align_y + shift_bottom
+    // add shifts for artifact suppression
+    let pad_left   = pad_align_x + shift_left
+    let pad_right  = pad_align_x + shift_right
+    let pad_top    = pad_align_y + shift_top
+    let pad_bottom = pad_align_y + shift_bottom
 
-    // calculate shifts for smaller frame that merging in the frequency domain is only applied to the actual image
-    var crop_merge_x = Int(floor(Float(shift_align_x)/Float(2*tile_size_merge)))
-    crop_merge_x = crop_merge_x*2*tile_size_merge
-    var crop_merge_y = Int(floor(Float(shift_align_y)/Float(2*tile_size_merge)))
-    crop_merge_y = crop_merge_y*2*tile_size_merge
+    var shift_merge_x = Int(ceil(Float(texture_width_orig+tile_size_merge)/Float(2*tile_size_merge)))
+    shift_merge_x = (shift_merge_x*Int(2*tile_size_merge) - texture_width_orig - tile_size_merge)/2
+    
+    var shift_merge_y = Int(ceil(Float(texture_height_orig+tile_size_merge)/Float(2*tile_size_merge)))
+    shift_merge_y = (shift_merge_y*Int(2*tile_size_merge) - texture_height_orig - tile_size_merge)/2
+    
+    // calculate shifts for smaller frame that merging in the frequency domain is only applied to the actual image + a small margin
+    let crop_merge_x = pad_align_x - shift_merge_x
+    let crop_merge_y = pad_align_y - shift_merge_y
          
     // set reference texture
     let ref_texture = extend_texture(textures[ref_idx], pad_left, pad_right, pad_top, pad_bottom)
         
     // build reference pyramid
-    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, mosaic_pettern_width)
+    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array)
     
     // initialize textures to store real and imaginary parts of the reference texture and a temp texture for the Fourier transform
-    let ref_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+pad_left+pad_right-2*crop_merge_x), height: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/2, mipmapped: false)
+    let ref_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+tile_size_merge+2*shift_merge_x), height: (texture_height_orig+tile_size_merge+2*shift_merge_y)/2, mipmapped: false)
     ref_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
     let ref_texture_ft = device.makeTexture(descriptor: ref_texture_ft_descriptor)!
     
-    let tmp_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+pad_left+pad_right-2*crop_merge_x), height: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/2, mipmapped: false)
+    let tmp_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+tile_size_merge+2*shift_merge_x), height: (texture_height_orig+tile_size_merge+2*shift_merge_y)/2, mipmapped: false)
     tmp_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
     let tmp_texture_ft = device.makeTexture(descriptor: tmp_texture_ft_descriptor)!
            
     // transform ref_texture to frequency domain
-    let tile_info_merge = TileInfo(tile_size: tile_size, tile_size_merge: tile_size_merge, search_dist: 0, n_tiles_x: (texture_width_orig+pad_left+pad_right-2*crop_merge_x)/tile_size_merge, n_tiles_y: (texture_height_orig+pad_top+pad_bottom-2*crop_merge_y)/tile_size_merge, n_pos_1d: 0, n_pos_2d: 0)
-    
+    let tile_info_merge = TileInfo(tile_size: tile_size, tile_size_merge: tile_size_merge, search_dist: 0, n_tiles_x: (texture_width_orig+tile_size_merge+2*shift_merge_x)/(2*tile_size_merge), n_tiles_y: (texture_height_orig+tile_size_merge+2*shift_merge_y)/(2*tile_size_merge), n_pos_1d: 0, n_pos_2d: 0)
+  
     // estimate noise level of tiles
     let ref_texture_rgba = convert_rgba(ref_texture, crop_merge_x, crop_merge_y)
-    let rms_texture = calculate_rms(ref_texture_rgba, tile_info_merge)
-
+    let rms_texture = calculate_rms_rgba(ref_texture_rgba, tile_info_merge)
+    
     // transform reference texture into the Fourier space
-    // to improve performance, convert textures into RGBA pixel format that SIMD instructions can be applied and crop image frame that unneccessary zeros are removed at the borders
-    forward_dft(convert_rgba(ref_texture, crop_merge_x, crop_merge_y), ref_texture_ft, tmp_texture_ft, mosaic_pettern_width, tile_info_merge)
+    // to improve performance, textures are converted into RGBA pixel format that SIMD instructions can be applied
+    forward_dft(ref_texture_rgba, ref_texture_ft, tmp_texture_ft, mosaic_pettern_width, tile_info_merge)
     
     let final_texture_ft = copy_texture(ref_texture_ft)
     
@@ -393,21 +389,25 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
             throw AlignmentError.inconsistent_resolutions
         }
         
-        // build comparison pyramid
-        let comp_pyramid = build_pyramid(comp_texture, downscale_factor_array, mosaic_pettern_width)
-        
         // align comparison texture
-        let aligned_texture = align_texture(ref_pyramid, comp_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array)
-             
+        let aligned_texture_rgba = convert_rgba(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array), crop_merge_x, crop_merge_y)
+                 
+        // calculate mismatch texture
+        let mismatch_texture = calculate_mismatch_rgba(aligned_texture_rgba, ref_texture_rgba, rms_texture, robustness, tile_info_merge)
+
+        // normalize mismatch texture
+        let mean_mismatch = texture_mean(crop_texture(mismatch_texture, shift_left/tile_size_merge, shift_right/tile_size_merge, shift_top/tile_size_merge, shift_bottom/tile_size_merge))
+        normalize_mismatch(mismatch_texture, mean_mismatch)
+                  
         // start debug capture
         //let capture_manager = MTLCaptureManager.shared()
         //let capture_descriptor = MTLCaptureDescriptor()
         //capture_descriptor.captureObject = device
         //try! capture_manager.startCapture(with: capture_descriptor)
-        
+                
         // merge aligned comparison texture with reference texture in the frequency domain
         // to improve performance, convert textures into RGBA pixel format that SIMD instructions can be applied and crop image frame that unneccessary zeros are removed at the borders
-        merge_frequency_domain(convert_rgba(aligned_texture, crop_merge_x, crop_merge_y), ref_texture_rgba, ref_texture_ft, tmp_texture_ft, final_texture_ft, rms_texture, robustness, mosaic_pettern_width, tile_info_merge);
+        merge_frequency_domain(aligned_texture_rgba, ref_texture_rgba, ref_texture_ft, tmp_texture_ft, final_texture_ft, rms_texture, mismatch_texture, robustness, tile_info_merge);
                
         // stop debug capture
         //capture_manager.stopCapture()
@@ -445,6 +445,7 @@ func get_threads_per_thread_group(_ state: MTLComputePipelineState, _ threads_pe
 
 
 func fill_with_zeros(_ texture: MTLTexture) {
+    
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = fill_with_zeros_state
@@ -464,7 +465,6 @@ func texture_uint16_to_float(_ in_texture: MTLTexture) -> MTLTexture {
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
-    // run kernel
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = texture_uint16_to_float_state
@@ -488,7 +488,6 @@ func convert_uint16(_ in_texture: MTLTexture) -> MTLTexture {
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
-    // run the metal kernel
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_uint16_state
@@ -516,7 +515,6 @@ func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
     
-    // run the metal kernel
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = mode == "bilinear" ? upsample_bilinear_float_state : upsample_nearest_int_state
@@ -601,7 +599,6 @@ func extend_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int,
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     fill_with_zeros(out_texture)
         
-    // run the metal kernel
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = extend_texture_state
@@ -627,7 +624,6 @@ func crop_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
-    // run the metal kernel
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = crop_texture_state
@@ -703,7 +699,6 @@ func convert_rgba(_ in_texture: MTLTexture, _ crop_merge_x: Int, _ crop_merge_y:
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
         
-    // add textures
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_rgba_state
@@ -729,7 +724,6 @@ func convert_bayer(_ in_texture: MTLTexture) -> MTLTexture {
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
         
-    // add textures
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_bayer_state
@@ -746,11 +740,49 @@ func convert_bayer(_ in_texture: MTLTexture) -> MTLTexture {
 }
 
 
+func texture_mean(_ in_texture: MTLTexture) -> MTLBuffer {
+    
+    // create a 1d texture that will contain the averages of the input texture along the x-axis
+    let texture_descriptor = MTLTextureDescriptor()
+    texture_descriptor.textureType = .type1D
+    texture_descriptor.pixelFormat = in_texture.pixelFormat
+    texture_descriptor.width = in_texture.width
+    texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let avg_y = device.makeTexture(descriptor: texture_descriptor)!
+    
+    // average the input texture along the y-axis
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = average_y_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
+    let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
+    let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(avg_y, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    
+    // average the generated 1d texture along the x-axis
+    let state2 = average_x_state
+    command_encoder.setComputePipelineState(state2)
+    let avg_buffer = device.makeBuffer(length: MemoryLayout<Float32>.size, options: .storageModeShared)!
+    command_encoder.setTexture(avg_y, index: 0)
+    command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    // return the average of all pixels in the input array
+    return avg_buffer
+}
+
+
 // ===========================================================================================================
 // Functions specific to image alignment
 // ===========================================================================================================
 
-func align_texture(_ ref_pyramid: [MTLTexture], _ comp_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ downscale_factor_array: Array<Int>, _ tile_size_array: Array<Int>, _ search_dist_array: Array<Int>) -> MTLTexture {
+func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ downscale_factor_array: Array<Int>, _ tile_size_array: Array<Int>, _ search_dist_array: Array<Int>) -> MTLTexture {
         
     // initiazite tile alignments
     let alignment_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg16Sint, width: 1, height: 1, mipmapped: false)
@@ -758,6 +790,9 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_pyramid: [MTLTexture], _ 
     var prev_alignment = device.makeTexture(descriptor: alignment_descriptor)!
     var current_alignment = device.makeTexture(descriptor: alignment_descriptor)!
     var tile_info = TileInfo(tile_size: 0, tile_size_merge: 0, search_dist: 0, n_tiles_x: 0, n_tiles_y: 0, n_pos_1d: 0, n_pos_2d: 0)
+    
+    // build comparison pyramid
+    let comp_pyramid = build_pyramid(comp_texture, downscale_factor_array)
     
     // align tiles
     for i in (0 ... downscale_factor_array.count-1).reversed() {
@@ -787,10 +822,12 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_pyramid: [MTLTexture], _ 
         }
         
         prev_alignment = upsample(current_alignment, width: n_tiles_x, height: n_tiles_y, mode: "nearest")
-        current_alignment = texture_like(prev_alignment)
+        prev_alignment = correct_upsampling_error(ref_layer, comp_layer, prev_alignment, downscale_factor, tile_info)
         
         // compute tile differences
         let tile_diff = compute_tile_diff(ref_layer, comp_layer, prev_alignment, downscale_factor, tile_info)
+      
+        current_alignment = texture_like(prev_alignment)
         
         // compute tile alignment based on tile differnces
         compute_tile_alignment(tile_diff, prev_alignment, current_alignment, downscale_factor, tile_info)
@@ -804,7 +841,7 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_pyramid: [MTLTexture], _ 
 }
 
 
-func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<Int>, _ mosaic_pettern_width: Int) -> Array<MTLTexture> {
+func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<Int>) -> Array<MTLTexture> {
     
     // iteratively resize the current layer in the pyramid
     var pyramid: Array<MTLTexture> = []
@@ -857,6 +894,7 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
 
 
 func compute_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLTexture, _ current_alignment: MTLTexture, _ downscale_factor: Int, _ tile_info: TileInfo) {
+    
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = compute_tile_alignments_state
@@ -871,6 +909,36 @@ func compute_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLTextur
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
+}
+
+
+func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev_alignment: MTLTexture, _ downscale_factor: Int, _ tile_info: TileInfo) -> MTLTexture {
+    
+    // create texture for corrected alignment
+    let prev_alignment_corrected_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: prev_alignment.pixelFormat, width: prev_alignment.width, height: prev_alignment.height, mipmapped: false)
+    prev_alignment_corrected_descriptor.usage = [.shaderRead, .shaderWrite]
+    let prev_alignment_corrected = device.makeTexture(descriptor: prev_alignment_corrected_descriptor)!
+        
+    // compute tile differences
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = correct_upsampling_error_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(ref_layer, index: 0)
+    command_encoder.setTexture(comp_layer, index: 1)
+    command_encoder.setTexture(prev_alignment, index: 2)
+    command_encoder.setTexture(prev_alignment_corrected, index: 3)
+    command_encoder.setBytes([Int32(downscale_factor)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(tile_info.n_tiles_x)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(tile_info.n_tiles_y)], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    return prev_alignment_corrected
 }
 
 
@@ -959,48 +1027,10 @@ func color_difference(_ texture1: MTLTexture, _ texture2: MTLTexture, _ mosaic_p
 }
 
 
-func texture_mean(_ in_texture: MTLTexture) -> MTLBuffer {
-    
-    // create a 1d texture that will contain the averages of the input texture along the x-axis
-    let texture_descriptor = MTLTextureDescriptor()
-    texture_descriptor.textureType = .type1D
-    texture_descriptor.pixelFormat = in_texture.pixelFormat
-    texture_descriptor.width = in_texture.width
-    texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let avg_y = device.makeTexture(descriptor: texture_descriptor)!
-    
-    // average the input texture along the y-axis
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = average_y_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
-    let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
-    let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
-    command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(avg_y, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    
-    // average the generated 1d texture along the x-axis
-    let state2 = average_x_state
-    command_encoder.setComputePipelineState(state2)
-    let avg_buffer = device.makeBuffer(length: MemoryLayout<Float32>.size, options: .storageModeShared)!
-    command_encoder.setTexture(avg_y, index: 0)
-    command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
-    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-    
-    // return the average of all pixels in the input array
-    return avg_buffer
-}
-
-
-func estimate_color_noise(_ texure: MTLTexture, _ texture_blurred: MTLTexture, _ mosaic_pettern_width: Int) -> MTLBuffer {
+func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, _ mosaic_pettern_width: Int) -> MTLBuffer {
     
     // compute the color difference of each mosaic superpixel between the original and the blurred texture
-    let texture_diff = color_difference(texure, texture_blurred, mosaic_pettern_width)
+    let texture_diff = color_difference(texture, texture_blurred, mosaic_pettern_width)
     
     // compute the average of the difference between the original and the blurred texture
     let mean_diff = texture_mean(texture_diff)
@@ -1052,17 +1082,16 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
 // Functions specific to merging in the frequency domain
 // ===========================================================================================================
 
-func calculate_rms(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLTexture {
+func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLTexture {
     
     // create output texture
     let rms_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, mipmapped: false)
     rms_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let rms_texture = device.makeTexture(descriptor: rms_texture_descriptor)!
     
-    // copy texture
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = calculate_rms_state
+    let state = calculate_rms_rgba_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: rms_texture.width, height: rms_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
@@ -1077,34 +1106,8 @@ func calculate_rms(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLTextur
 }
 
 
-func calculate_diff_rgba(_ ref_texture: MTLTexture, _ aligned_texture: MTLTexture) -> MTLTexture {
-    
-    // create output texture
-    let diff_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: ref_texture.width, height: ref_texture.height, mipmapped: false)
-    diff_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let diff_texture = device.makeTexture(descriptor: diff_texture_descriptor)!
-    
-    // copy texture
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = calculate_diff_rgba_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: diff_texture.width, height: diff_texture.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(ref_texture, index: 0)
-    command_encoder.setTexture(aligned_texture, index: 1)
-    command_encoder.setTexture(diff_texture, index: 2)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-    
-    return(diff_texture)
-}
-
-
 func forward_dft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ mosaic_pettern_width: Int, _ tile_info: TileInfo) {
   
-    // add textures
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = forward_dft_state
@@ -1129,7 +1132,6 @@ func backward_dft(_ in_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ m
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
-    // add textures
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = backward_dft_state
@@ -1150,9 +1152,8 @@ func backward_dft(_ in_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ m
 }
 
 
-func merge_frequency_domain(_ aligned_texture: MTLTexture, _ ref_texture: MTLTexture, _ ref_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ robustness: Double, _ mosaic_pettern_width: Int, _ tile_info: TileInfo) {
+func merge_frequency_domain(_ aligned_texture: MTLTexture, _ ref_texture: MTLTexture, _ ref_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ mismatch_texture: MTLTexture, _ robustness: Double, _ tile_info: TileInfo) {
   
-    // add textures
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = merge_frequency_domain_state
@@ -1165,10 +1166,54 @@ func merge_frequency_domain(_ aligned_texture: MTLTexture, _ ref_texture: MTLTex
     command_encoder.setTexture(tmp_texture_ft, index: 3)
     command_encoder.setTexture(out_texture_ft, index: 4)
     command_encoder.setTexture(rms_texture, index: 5)
+    command_encoder.setTexture(mismatch_texture, index: 6)
     command_encoder.setBytes([Float32(robustness)], length: MemoryLayout<Float32>.stride, index: 0)
-    command_encoder.setBytes([Int32(mosaic_pettern_width)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+}
+
+
+func calculate_mismatch_rgba(_ aligned_texture: MTLTexture, _ ref_texture: MTLTexture, _ rms_texture: MTLTexture, _ robustness: Double, _ tile_info: TileInfo) -> MTLTexture {
+  
+    // create mismatch texture map
+    let mismatch_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, mipmapped: false)
+    mismatch_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let mismatch_texture = device.makeTexture(descriptor: mismatch_texture_descriptor)!
+               
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = calculate_mismatch_rgba_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(aligned_texture, index: 0)
+    command_encoder.setTexture(ref_texture, index: 1)
+    command_encoder.setTexture(rms_texture, index: 2)
+    command_encoder.setTexture(mismatch_texture, index: 3)
+    command_encoder.setBytes([Float32(robustness)], length: MemoryLayout<Float32>.stride, index: 0)
+    command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    return(mismatch_texture)
+}
+
+
+func normalize_mismatch(_ mismatch_texture: MTLTexture, _ mean_mismatch_buffer: MTLBuffer) {
+   
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = normalize_mismatch_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: mismatch_texture.width, height: mismatch_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(mismatch_texture, index: 0)
+    command_encoder.setBuffer(mean_mismatch_buffer, offset: 0, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()

@@ -340,8 +340,9 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
             // compute the indices of the pixels to compare
             int ref_tile_x = x0 + dx1;
             int ref_tile_y = y0 + dy1;
-            int comp_tile_x = x0 + dx0 + dx1;
-            int comp_tile_y = y0 + dy0 + dy1;
+            int comp_tile_x = ref_tile_x + dx0;
+            int comp_tile_y = ref_tile_y + dy0;
+            
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
                 diff += (2*UINT16_MAX_VAL); // value has to be increased as scaling of values to the range of 0 to 1 was removed
@@ -390,6 +391,73 @@ kernel void compute_tile_alignments(texture3d<float, access::read> tile_diff [[t
     // store alignment
     int4 out = int4(dx, dy, 0, 0);
     current_alignment.write(out, gid);
+}
+
+
+kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture [[texture(0)]],
+                                     texture2d<float, access::read> comp_texture [[texture(1)]],
+                                     texture2d<int, access::read> prev_alignment [[texture(2)]],
+                                     texture2d<int, access::write> prev_alignment_corrected [[texture(3)]],
+                                     constant int& downscale_factor [[buffer(0)]],
+                                     constant int& tile_size [[buffer(1)]],
+                                     constant int& n_tiles_x [[buffer(2)]],
+                                     constant int& n_tiles_y [[buffer(3)]],
+                                     uint2 gid [[thread_position_in_grid]]) {
+    
+    // load args
+    int texture_width = ref_texture.get_width();
+    int texture_height = ref_texture.get_height();
+    int tile_half_size = tile_size / 2;
+    
+    // compute tile position if previous alignment were 0
+    int x0 = int(floor( tile_half_size + float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
+    int y0 = int(floor( tile_half_size + float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
+
+    // calculate shifts for 3 candidate alignments to evaluate
+    int3 const x_shift = int3(0, ((gid.x%2 == 0) ? -1 : 1), 0);
+    int3 const y_shift = int3(0, 0, ((gid.y%2 == 0) ? -1 : 1));
+    
+    float best_diff = float(1e20);
+    int4 best_align = int4(0, 0, 0, 0);
+    
+    int3 const x = clamp(int3(gid.x+x_shift), 0, n_tiles_x-1);
+    int3 const y = clamp(int3(gid.y+y_shift), 0, n_tiles_y-1);
+    
+    for (int i=0; i < 3; i++)
+    {
+        // factor in previous alignmnet
+        int4 prev_align = prev_alignment.read(uint2(x[i], y[i]));
+        int dx0 = downscale_factor * prev_align.x;
+        int dy0 = downscale_factor * prev_align.y;
+        
+        // compute tile difference
+        float diff = 0;
+        for (int dx1 = -tile_half_size; dx1 < tile_half_size; dx1++){
+            for (int dy1 = -tile_half_size; dy1 < tile_half_size; dy1++){
+                // compute the indices of the pixels to compare
+                int ref_tile_x = x0 + dx1;
+                int ref_tile_y = y0 + dy1;
+                int comp_tile_x = ref_tile_x + dx0;
+                int comp_tile_y = ref_tile_y + dy0;
+                
+                // if the comparison pixels are outside of the frame, attach a high loss to them
+                if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                    diff += (2*UINT16_MAX_VAL); // value has to be increased as scaling of values to the range of 0 to 1 was removed
+                } else {
+                    diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+                }
+            }
+        }
+        
+        if(diff < best_diff)
+        {
+            best_diff = diff;
+            best_align = prev_align;
+        }
+    }
+    
+    // store corrected alignment
+    prev_alignment_corrected.write(best_align, gid);
 }
 
 
@@ -567,10 +635,10 @@ kernel void compute_merge_weight(texture2d<float, access::read> texture_diff [[t
 // Function specific to merging in the frequency domain
 // ===========================================================================================================
 
-kernel void calculate_rms(texture2d<float, access::read> ref_texture [[texture(0)]],
-                          texture2d<float, access::write> rms_texture [[texture(1)]],
-                          constant int& tile_size [[buffer(0)]],
-                          uint2 gid [[thread_position_in_grid]]) {
+kernel void calculate_rms_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
+                               texture2d<float, access::write> rms_texture [[texture(1)]],
+                               constant int& tile_size [[buffer(0)]],
+                               uint2 gid [[thread_position_in_grid]]) {
     
     // compute tile positions from gid
     int const m0 = gid.x*tile_size;
@@ -592,23 +660,9 @@ kernel void calculate_rms(texture2d<float, access::read> ref_texture [[texture(0
         }
     }
 
-    noise_est = sqrt(noise_est)/float(tile_size);
+    noise_est = 0.25f*sqrt(noise_est)/float(tile_size);
     
     rms_texture.write(noise_est, gid);
-}
-
-
-kernel void calculate_diff_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
-                                texture2d<float, access::read> aligned_texture [[texture(1)]],
-                                texture2d<float, access::write> diff_texture [[texture(2)]],
-                                uint2 gid [[thread_position_in_grid]]) {
-    
-    
-    float4 const diff = ref_texture.read(gid) - aligned_texture.read(gid);
-  
-    float const diff_combined = (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
-    
-    diff_texture.write(diff_combined, gid);
 }
     
 
@@ -645,11 +699,16 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                                   
                 int const y = n0 + dy;
                 
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts
+                float const norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
+                //float const norm_cosine = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
+                
                 // calculate coefficients
                 float const coefRe = cos(angle*dn*dy);
                 float const coefIm = sin(angle*dn*dy);
                 
-                float4 const dataRe = in_texture.read(uint2(m, y));
+                float4 const dataRe = norm_cosine*in_texture.read(uint2(m, y));
                 
                 Re += (coefRe * dataRe);
                 Im += (coefIm * dataRe);
@@ -741,7 +800,7 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(
             for (int dx = 0; dx < tile_size; dx++) {
                                   
                 int const x = 2*(m0 + dx);
-                
+              
                 // calculate coefficients
                 float const coefRe = cos(angle*dm*dx);
                 float const coefIm = sin(angle*dm*dx);
@@ -763,11 +822,6 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(
     for (int dm = 0; dm < tile_size; dm++) {
         for (int dn = 0; dn < tile_size; dn++) {
               
-            // calculate modified raised cosine window weight for blending tiles to suppress artifacts
-            //float const norm_cosine = (0.5f-0.500f*cos(angle*(dm+0.5f)))*(0.5f-0.500f*cos(angle*(dn+0.5f)));
-            // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
-            float const norm_cosine = (0.5f-0.505f*cos(angle*(dm+0.5f)))*(0.5f-0.505f*cos(angle*(dn+0.5f)));
-            
             int const m = m0 + dm;
             int const n = n0 + dn;
              
@@ -789,7 +843,7 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(
             }
             
             // normalize result and apply cosine window weight
-            Re = Re*norm_cosine/norm_factor;
+            Re = Re/norm_factor;
                           
             out_texture.write(Re, uint2(m, n));
         }
@@ -803,76 +857,43 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                                    texture2d<float, access::read_write> tmp_texture_ft [[texture(3)]],
                                    texture2d<float, access::read_write> out_texture_ft [[texture(4)]],
                                    texture2d<float, access::read> rms_texture [[texture(5)]],
+                                   texture2d<float, access::read> mismatch_texture [[texture(6)]],
                                    constant float& robustness [[buffer(0)]],
-                                   constant int& mosaic_pettern_width [[buffer(1)]],
-                                   constant int& tile_size [[buffer(2)]],
-                                   constant int& tile_size_align [[buffer(3)]],
+                                   constant int& tile_size [[buffer(1)]],
+                                   constant int& tile_size_align [[buffer(2)]],
                                    uint2 gid [[thread_position_in_grid]]) {
     
     // derive normalized robustness value: each step yields another factor of two with the idea that the variance of shot noise increases by a factor of two per iso level
-    float const robustness_norm = pow(2.0f, (-robustness*10 + 9.0f));
+    float const robustness_norm = pow(2.0f, (-robustness*10 + 8.0f));
     
     // derive read noise with the idea that read noise increases stronger than a factor of two per iso level to increase noise reduction in darker regions relative to bright regions
-    float const read_noise = pow(pow(2.0f, (-robustness*10 + 11.0f)), 1.5); // or use 10.0f?
-    
-    // derive a maximum value for the motion norm with the idea that denoising can be inscreased in static regions with good alignment
-    // Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a linear scaling derived from the robustness value
-    // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-    float const max_motion_norm = max(1.0f, pow(1.36f, (1.2f-robustness)*10));
-    
-    // scaling parameter to control at which level of mismatch the increase of noise reduction vanishes (s smaller => increase of noise reduction smaller)
-    float const mismatch_norm = 500.0f;
-        
-    // compute tile positions from gid
-    int const m0 = gid.x*tile_size;
-    int const n0 = gid.y*tile_size;
-    
-    // pre-calculate factors for sine and cosine calculation
-    float const angle = -2*PI/float(tile_size);
-    
-    // pre-initalize some vectors
-    float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float4 const ones  = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    float const read_noise = pow(pow(2.0f, (-robustness*10 + 10.0f)), 1.6);
     
     // combine estimated shot noise and read noise
     float4 const noise_est = rms_texture.read(gid) + read_noise;
     // normalize with tile size and robustness norm
     float4 const noise_norm = noise_est*tile_size*tile_size*robustness_norm;
     
-    // estimate motion mismatch as the absolute difference of reference tile and comparison tile
+    float4 const mismatch = mismatch_texture.read(gid);
+    
+    // derive a maximum value for the motion norm with the idea that denoising can be inscreased in static regions with good alignment
+    // Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a linear scaling derived from the robustness value
     // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-    // use 16x16, 32x32 or 64x64 tile size here as used for alignment
-
-    int const x_start = max(0, m0 + tile_size/2 - tile_size_align/2);
-    int const y_start = max(0, n0 + tile_size/2 - tile_size_align/2);
-    
-    int const x_end = min(int(diff_texture.get_width()-1),  m0 + tile_size/2 + tile_size_align/2);
-    int const y_end = min(int(diff_texture.get_height()-1), n0 + tile_size/2 + tile_size_align/2);
-    
-    float tile_diff = 0.f;
-    int n_total = 0;
-    
-    for (int dy = y_start; dy < y_end; dy++) {
-        for (int dx = x_start; dx < x_end; dx++) {
-       
-            tile_diff += diff_texture.read(uint2(dx, dy)).r;
-            
-            n_total += 1;
-        }
-    }
-     
-    tile_diff /= float(n_total);
-        
-    // calculation of mismatch of tiles by Wiener shrinkage
-    float4 mismatch = (tile_diff*tile_diff) / (tile_diff*tile_diff + mismatch_norm*noise_est);
-    mismatch = clamp(mismatch, zeros, ones);
-      
+    float const max_motion_norm = max(1.0f, pow(1.35f, (1.2f-robustness)*10-1.35f));
     // increase of noise reduction for small values of mismatch
-    // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-    float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm);
-    //float4 const motion_norm = ones;
+    float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm)/sqrt(2.0f);
+    //float4 const motion_norm = float4(1.0f, 1.0f, 1.0f, 1.0f);
+        
+    // compute tile positions from gid
+    int const m0 = gid.x*tile_size;
+    int const n0 = gid.y*tile_size;
+
+    // pre-calculate factors for sine and cosine calculation
+    float const angle = -2*PI/float(tile_size);
+
+    // pre-initalize some vectors
+    float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
     
-   
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm++) {
         // exploit symmetry of real dft and calculate reduced number of rows
@@ -888,16 +909,20 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
             for (int dy = 0; dy < tile_size; dy++) {
                                   
                 int const y = n0 + dy;
-                
+            
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts
+                float const norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
+                //float const norm_cosine = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
+                                
                 // calculate coefficients
                 float const coefRe = cos(angle*dn*dy);
                 float const coefIm = sin(angle*dn*dy);
                 
-                float4 const dataRe = aligned_texture.read(uint2(m, y));
+                float4 const dataRe = norm_cosine*aligned_texture.read(uint2(m, y));
                 
                 Re1 += (coefRe * dataRe);
                 Im1 += (coefIm * dataRe);
-                
             }
             
             // write into temporary textures
@@ -952,7 +977,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
             // merging of two textures
             float4 merged_Re = out_texture_ft.read(uint2(m+0, n)) + (1.0f-weight)*Re1 + weight*Re3;
             float4 merged_Im = out_texture_ft.read(uint2(m+1, n)) + (1.0f-weight)*Im1 + weight*Im3;
-            
+         
             out_texture_ft.write(merged_Re, uint2(m+0, n));
             out_texture_ft.write(merged_Im, uint2(m+1, n));
             
@@ -973,7 +998,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                 // merging of two textures
                 merged_Re = out_texture_ft.read(uint2(m+0, n2)) + (1.0f-weight)*Re2 + weight*Re3;
                 merged_Im = out_texture_ft.read(uint2(m+1, n2)) + (1.0f-weight)*Im2 + weight*Im3;
-                
+              
                 out_texture_ft.write(merged_Re, uint2(m+0, n2));
                 out_texture_ft.write(merged_Im, uint2(m+1, n2));
             }
@@ -982,4 +1007,154 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
 }
 
 
+kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
+                                    texture2d<float, access::read> aligned_texture [[texture(1)]],
+                                    texture2d<float, access::read> rms_texture [[texture(2)]],
+                                    texture2d<float, access::write> mismatch_texture [[texture(3)]],
+                                    constant float& robustness [[buffer(0)]],
+                                    constant int& tile_size [[buffer(1)]],
+                                    constant int& tile_size_align [[buffer(2)]],
+                                    uint2 gid [[thread_position_in_grid]]) {
+        
+    // compute tile positions from gid
+    int const m0 = gid.x*tile_size;
+    int const n0 = gid.y*tile_size;
+    
+    // use only estimated shot noise here
+    float4 const noise_est = rms_texture.read(gid);
+    
+    float const angle = 2*PI/float(tile_size);
+    
+    // estimate motion mismatch as the absolute difference of reference tile and comparison tile
+    // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
+    // use 16x16, 32x32 or 64x64 tile size here as used for alignment
+    
+    int const x_start = max(0, m0 + tile_size/2 - tile_size_align/2);
+    int const y_start = max(0, n0 + tile_size/2 - tile_size_align/2);
+    
+    int const x_end = min(int(ref_texture.get_width()-1),  m0 + tile_size/2 + tile_size_align/2);
+    int const y_end = min(int(ref_texture.get_height()-1), n0 + tile_size/2 + tile_size_align/2);
+    
+    float tile_diff = 0.f;
+    float n_total = 0.f;
+     
+    for (int dy = y_start; dy < y_end; dy++) {
+        for (int dx = x_start; dx < x_end; dx++) {
+        
+            float4 const diff = float4(ref_texture.read(uint2(dx, dy))) - float4(aligned_texture.read(uint2(dx, dy)));
+             
+            // calculate modified raised cosine window weight for blending tiles to suppress artifacts
+            float const weight = (0.5f-0.500f*cos(angle*(dx+0.5f)))*(0.5f-0.500f*cos(angle*(dy+0.5f)));
+            // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
+            //float const weight = (0.5f-0.505f*cos(angle*(dx+0.5f)))*(0.5f-0.505f*cos(angle*(dy+0.5f)));
+                 
+            tile_diff += weight*(0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
+             
+            n_total += weight;
+        }
+    }
+     
+    tile_diff /= float(n_total);
+    
+    /* // potential additional correction of artifacts around highlights
+    float tile_diff = 0.f;
+    float tile_int1 = 0.f;
+    float tile_int2 = 0.f;
+    float tile_int3 = 0.f;
+    float tile_int4 = 0.f;
+    
+    for (int dy = 0; dy < tile_size/2; dy++) {
+        for (int dx = 0; dx < tile_size/2; dx++) {
+            
+            int const x = m0 + dx;
+            int const y = n0 + dy;
+            
+            float4 const ref_val = ref_texture.read(uint2(x, y));
+            float4 const diff = ref_val - aligned_texture.read(uint2(x, y));
+               
+            tile_int1 += (0.25f * (ref_val[0]+ref_val[1]+ref_val[2]+ref_val[3]));
+            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
+        }
+    }
+    
+    for (int dy = 0; dy < tile_size/2; dy++) {
+        for (int dx = tile_size/2; dx < tile_size; dx++) {
+            
+            int const x = m0 + dx;
+            int const y = n0 + dy;
+            
+            float4 const ref_val = ref_texture.read(uint2(x, y));
+            float4 const diff = ref_val - aligned_texture.read(uint2(x, y));
+               
+            tile_int2 += (0.25f * (ref_val[0]+ref_val[1]+ref_val[2]+ref_val[3]));
+            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
+        }
+    }
 
+    for (int dy = tile_size/2; dy < tile_size; dy++) {
+        for (int dx = 0; dx < tile_size/2; dx++) {
+            
+            int const x = m0 + dx;
+            int const y = n0 + dy;
+            
+            float4 const ref_val = ref_texture.read(uint2(x, y));
+            float4 const diff = ref_val - aligned_texture.read(uint2(x, y));
+               
+            tile_int3 += (0.25f * (ref_val[0]+ref_val[1]+ref_val[2]+ref_val[3]));
+            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
+        }
+    }
+    
+    for (int dy = tile_size/2; dy < tile_size; dy++) {
+        for (int dx = tile_size/2; dx < tile_size; dx++) {
+            
+            int const x = m0 + dx;
+            int const y = n0 + dy;
+            
+            float4 const ref_val = ref_texture.read(uint2(x, y));
+            float4 const diff = ref_val - aligned_texture.read(uint2(x, y));
+               
+            tile_int4 += (0.25f * (ref_val[0]+ref_val[1]+ref_val[2]+ref_val[3]));
+            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
+        }
+    }
+        
+    tile_diff /= float(tile_size*tile_size);
+    
+    float const min_int = min(tile_int1, min(tile_int2, min(tile_int3, tile_int4)));
+    float const max_int = max(tile_int1, max(tile_int2, max(tile_int3, tile_int4)));
+    
+    float const ratio = max_int/min_int;
+    float factor = 1.0f;
+    
+    if(ratio > 2.0f)
+    {
+        //factor = min(sqrt(ratio-1.0f), 10.0f);
+    }
+    */
+    // calculation of mismatch ratio
+    //float4 const mismatch4 = (tile_diff*tile_diff) / (tile_diff*tile_diff + noise_est);
+    //float4 const mismatch4 = (tile_diff*tile_diff) / (noise_est+1e-12);
+    //float4 const mismatch4 = tile_diff / (factor*sqrt(noise_est+1e-12));
+    float4 const mismatch4 = tile_diff / sqrt(noise_est+1e-12);
+    float const mismatch = 0.25f*(mismatch4[0] + mismatch4[1] + mismatch4[2] + mismatch4[3]);
+    
+    mismatch_texture.write(mismatch, gid);
+}
+
+
+kernel void normalize_mismatch(texture2d<float, access::read_write> mismatch_texture [[texture(0)]],
+                               constant float* mean_mismatch_buffer [[buffer(0)]],
+                               uint2 gid [[thread_position_in_grid]]) {
+    
+    // load args
+    float const mean_mismatch = mean_mismatch_buffer[0];
+    
+    float mismatch_norm = mismatch_texture.read(gid).r;
+    
+    mismatch_norm /= (mean_mismatch*5.0f + 1e-12f);
+    
+    mismatch_norm = clamp(mismatch_norm, 0.0f, 1.0f);
+    
+    mismatch_texture.write(mismatch_norm, gid);
+}

@@ -19,6 +19,12 @@ struct MyProgram {
             "/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child/Test/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child Kopie/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Klavier/Test/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/33TJ_20150614_232110_642_dng order/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/bench-1/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/martin 7/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Dark Sky/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Jozef-1-dng/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/mountains-1/",
         ]
         
         // iterate over bursts
@@ -35,15 +41,14 @@ struct MyProgram {
 
             // set alignment params
             let ref_idx = image_urls.count / 2
-            let robustness = 0.8
+            let robustness = 0.8 //0.8 for child, 0.5 for bench-1, 0.4 for martin 7, 0.6 for Google test, 0.9 for Klavier
             let search_distance = "Medium"
             let tile_size = 32
             
             // align+merge
             let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, robustness: robustness)
             
-            print("Image saved in:", out_url.relativePath)
-            
+            print("Image saved in:", out_url.relativePath)            
         }
         
         // terminate Adobe XMP SDK
