@@ -864,10 +864,10 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                                    uint2 gid [[thread_position_in_grid]]) {
     
     // derive normalized robustness value: each step yields another factor of two with the idea that the variance of shot noise increases by a factor of two per iso level
-    float const robustness_norm = pow(2.0f, (-robustness*10 + 8.0f));
+    float const robustness_norm = pow(2.0f, (-robustness + 8.0f));
     
     // derive read noise with the idea that read noise increases stronger than a factor of two per iso level to increase noise reduction in darker regions relative to bright regions
-    float const read_noise = pow(pow(2.0f, (-robustness*10 + 10.0f)), 1.6);
+    float const read_noise = pow(pow(2.0f, (-robustness + 10.0f)), 1.6);
     
     // combine estimated shot noise and read noise
     float4 const noise_est = rms_texture.read(gid) + read_noise;
@@ -879,7 +879,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     // derive a maximum value for the motion norm with the idea that denoising can be inscreased in static regions with good alignment
     // Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a linear scaling derived from the robustness value
     // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-    float const max_motion_norm = max(1.0f, pow(1.35f, (1.2f-robustness)*10-1.35f));
+    float const max_motion_norm = max(1.0f, pow(1.35f, (12.0f-robustness-1.35f)));
     // increase of noise reduction for small values of mismatch
     float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm)/sqrt(2.0f);
     //float4 const motion_norm = float4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -1011,9 +1011,8 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
                                     texture2d<float, access::read> aligned_texture [[texture(1)]],
                                     texture2d<float, access::read> rms_texture [[texture(2)]],
                                     texture2d<float, access::write> mismatch_texture [[texture(3)]],
-                                    constant float& robustness [[buffer(0)]],
-                                    constant int& tile_size [[buffer(1)]],
-                                    constant int& tile_size_align [[buffer(2)]],
+                                    constant int& tile_size [[buffer(0)]],
+                                    constant int& tile_size_align [[buffer(1)]],
                                     uint2 gid [[thread_position_in_grid]]) {
         
     // compute tile positions from gid

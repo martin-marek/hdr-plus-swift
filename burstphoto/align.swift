@@ -122,8 +122,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     // set output location
     let in_url = dng_urls[ref_idx]
     let in_filename = in_url.deletingPathExtension().lastPathComponent
-    let out_filename = in_filename + "_merged"
-    let out_path = (final_dng_conversion ? tmp_dir : out_dir) + out_filename + ".dng"
+    let out_filename = in_filename + "_merged_r\(Int(robustness+0.1)).dng"
+    let out_path = (final_dng_conversion ? tmp_dir : out_dir) + out_filename
     var out_url = URL(fileURLWithPath: out_path)
     
     // load images
@@ -184,7 +184,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         print("Merging in the spatial domain...")
     
         let kernel_size = Int(8) // kernel size of binomial filterung used for blurring the image
-        let robustness_norm = 0.08*pow(sqrt(2), robustness*10) // use this value as a replacement of robustness for control of motion robustness / noise level
+        let robustness_norm = 0.08*pow(sqrt(2), robustness) // use this value as a replacement of robustness for control of motion robustness / noise level
     
         try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
     }
@@ -202,7 +202,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     
     // check if dng converter is installed
     if final_dng_conversion {
-        let path_delete = out_dir + in_filename + "_merged.dng"
+        let path_delete = out_dir + in_filename + "_merged_r\(Int(robustness+0.1)).dng"
         
         // delete dng file if an old version exists
         if FileManager.default.fileExists(atPath: path_delete) {
@@ -335,16 +335,15 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     let pad_top    = pad_align_y + shift_top
     let pad_bottom = pad_align_y + shift_bottom
 
-    var shift_merge_x = Int(ceil(Float(texture_width_orig+tile_size_merge)/Float(2*tile_size_merge)))
-    shift_merge_x = (shift_merge_x*Int(2*tile_size_merge) - texture_width_orig - tile_size_merge)/2
-    
-    var shift_merge_y = Int(ceil(Float(texture_height_orig+tile_size_merge)/Float(2*tile_size_merge)))
-    shift_merge_y = (shift_merge_y*Int(2*tile_size_merge) - texture_height_orig - tile_size_merge)/2
-    
     // calculate shifts for smaller frame that merging in the frequency domain is only applied to the actual image + a small margin
-    let crop_merge_x = pad_align_x - shift_merge_x
-    let crop_merge_y = pad_align_y - shift_merge_y
-         
+    var crop_merge_x = Int(floor(Float(pad_align_x)/Float(2*tile_size_merge)))
+    crop_merge_x = crop_merge_x*2*tile_size_merge
+    var crop_merge_y = Int(floor(Float(pad_align_y)/Float(2*tile_size_merge)))
+    crop_merge_y = crop_merge_y*2*tile_size_merge
+    
+    let pad_merge_x = pad_align_x - crop_merge_x
+    let pad_merge_y = pad_align_y - crop_merge_y
+             
     // set reference texture
     let ref_texture = extend_texture(textures[ref_idx], pad_left, pad_right, pad_top, pad_bottom)
         
@@ -352,16 +351,16 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array)
     
     // initialize textures to store real and imaginary parts of the reference texture and a temp texture for the Fourier transform
-    let ref_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+tile_size_merge+2*shift_merge_x), height: (texture_height_orig+tile_size_merge+2*shift_merge_y)/2, mipmapped: false)
+    let ref_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+tile_size_merge+2*pad_merge_x), height: (texture_height_orig+tile_size_merge+2*pad_merge_y)/2, mipmapped: false)
     ref_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
     let ref_texture_ft = device.makeTexture(descriptor: ref_texture_ft_descriptor)!
     
-    let tmp_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+tile_size_merge+2*shift_merge_x), height: (texture_height_orig+tile_size_merge+2*shift_merge_y)/2, mipmapped: false)
+    let tmp_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+tile_size_merge+2*pad_merge_x), height: (texture_height_orig+tile_size_merge+2*pad_merge_y)/2, mipmapped: false)
     tmp_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
     let tmp_texture_ft = device.makeTexture(descriptor: tmp_texture_ft_descriptor)!
            
     // transform ref_texture to frequency domain
-    let tile_info_merge = TileInfo(tile_size: tile_size, tile_size_merge: tile_size_merge, search_dist: 0, n_tiles_x: (texture_width_orig+tile_size_merge+2*shift_merge_x)/(2*tile_size_merge), n_tiles_y: (texture_height_orig+tile_size_merge+2*shift_merge_y)/(2*tile_size_merge), n_pos_1d: 0, n_pos_2d: 0)
+    let tile_info_merge = TileInfo(tile_size: tile_size, tile_size_merge: tile_size_merge, search_dist: 0, n_tiles_x: (texture_width_orig+tile_size_merge+2*pad_merge_x)/(2*tile_size_merge), n_tiles_y: (texture_height_orig+tile_size_merge+2*pad_merge_y)/(2*tile_size_merge), n_pos_1d: 0, n_pos_2d: 0)
   
     // estimate noise level of tiles
     let ref_texture_rgba = convert_rgba(ref_texture, crop_merge_x, crop_merge_y)
@@ -393,7 +392,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         let aligned_texture_rgba = convert_rgba(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array), crop_merge_x, crop_merge_y)
                  
         // calculate mismatch texture
-        let mismatch_texture = calculate_mismatch_rgba(aligned_texture_rgba, ref_texture_rgba, rms_texture, robustness, tile_info_merge)
+        let mismatch_texture = calculate_mismatch_rgba(aligned_texture_rgba, ref_texture_rgba, rms_texture, tile_info_merge)
 
         // normalize mismatch texture
         let mean_mismatch = texture_mean(crop_texture(mismatch_texture, shift_left/tile_size_merge, shift_right/tile_size_merge, shift_top/tile_size_merge, shift_bottom/tile_size_merge))
@@ -1176,7 +1175,7 @@ func merge_frequency_domain(_ aligned_texture: MTLTexture, _ ref_texture: MTLTex
 }
 
 
-func calculate_mismatch_rgba(_ aligned_texture: MTLTexture, _ ref_texture: MTLTexture, _ rms_texture: MTLTexture, _ robustness: Double, _ tile_info: TileInfo) -> MTLTexture {
+func calculate_mismatch_rgba(_ aligned_texture: MTLTexture, _ ref_texture: MTLTexture, _ rms_texture: MTLTexture, _ tile_info: TileInfo) -> MTLTexture {
   
     // create mismatch texture map
     let mismatch_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, mipmapped: false)
@@ -1193,9 +1192,8 @@ func calculate_mismatch_rgba(_ aligned_texture: MTLTexture, _ ref_texture: MTLTe
     command_encoder.setTexture(ref_texture, index: 1)
     command_encoder.setTexture(rms_texture, index: 2)
     command_encoder.setTexture(mismatch_texture, index: 3)
-    command_encoder.setBytes([Float32(robustness)], length: MemoryLayout<Float32>.stride, index: 0)
-    command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
