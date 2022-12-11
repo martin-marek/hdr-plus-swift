@@ -16,10 +16,10 @@ struct MyProgram {
         // create a list of bursts to process
         let burst_dirs = [
                      
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child/Test/",
+            "/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child/Test/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child Kopie/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Klavier/Test/",
-            "/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/33TJ_20150614_232110_642_dng order/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/33TJ_20150614_232110_642_dng order/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/bench-1/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/martin 7/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Dark Sky/",
@@ -41,7 +41,7 @@ struct MyProgram {
 
             // set alignment params
             let ref_idx = image_urls.count / 2
-            let robustness = 6.0 //8.0 for child, 5.0 for bench-1, 4.0 for martin 7, 6.0 for Google test, 9.0 for Klavier
+            let robustness = 8.0 //8.0 for child, 5.0 for bench-1, 4.0 for martin 7, 6.0 for Google test, 9.0 for Klavier
             let search_distance = "Medium"
             let tile_size = 32
             

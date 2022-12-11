@@ -409,6 +409,8 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
     int texture_height = ref_texture.get_height();
     int tile_half_size = tile_size / 2;
     
+    int comp_tile_x, comp_tile_y;
+    
     // compute tile position if previous alignment were 0
     int x0 = int(floor( tile_half_size + float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
     int y0 = int(floor( tile_half_size + float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
@@ -417,47 +419,76 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
     int3 const x_shift = int3(0, ((gid.x%2 == 0) ? -1 : 1), 0);
     int3 const y_shift = int3(0, 0, ((gid.y%2 == 0) ? -1 : 1));
     
-    float best_diff = float(1e20);
-    int4 best_align = int4(0, 0, 0, 0);
-    
     int3 const x = clamp(int3(gid.x+x_shift), 0, n_tiles_x-1);
     int3 const y = clamp(int3(gid.y+y_shift), 0, n_tiles_y-1);
     
-    for (int i=0; i < 3; i++)
-    {
-        // factor in previous alignmnet
-        int4 prev_align = prev_alignment.read(uint2(x[i], y[i]));
-        int dx0 = downscale_factor * prev_align.x;
-        int dy0 = downscale_factor * prev_align.y;
-        
-        // compute tile difference
-        float diff = 0;
-        for (int dx1 = -tile_half_size; dx1 < tile_half_size; dx1++){
-            for (int dy1 = -tile_half_size; dy1 < tile_half_size; dy1++){
-                // compute the indices of the pixels to compare
-                int ref_tile_x = x0 + dx1;
-                int ref_tile_y = y0 + dy1;
-                int comp_tile_x = ref_tile_x + dx0;
-                int comp_tile_y = ref_tile_y + dy0;
-                
-                // if the comparison pixels are outside of the frame, attach a high loss to them
-                if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                    diff += (2*UINT16_MAX_VAL); // value has to be increased as scaling of values to the range of 0 to 1 was removed
-                } else {
-                    diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
-                }
+    // factor in previous alignmnet
+    int4 prev_align0 = prev_alignment.read(uint2(x[0], y[0]));
+    int dx00 = downscale_factor * prev_align0.x;
+    int dy00 = downscale_factor * prev_align0.y;
+    
+    int4 prev_align1 = prev_alignment.read(uint2(x[1], y[1]));
+    int dx01 = downscale_factor * prev_align1.x;
+    int dy01 = downscale_factor * prev_align1.y;
+    
+    int4 prev_align2 = prev_alignment.read(uint2(x[2], y[2]));
+    int dx02 = downscale_factor * prev_align2.x;
+    int dy02 = downscale_factor * prev_align2.y;
+    
+    // compute tile difference
+    float diff0 = 0;
+    float diff1 = 0;
+    float diff2 = 0;
+    
+    for (int dx1 = -tile_half_size; dx1 < tile_half_size; dx1++){
+        for (int dy1 = -tile_half_size; dy1 < tile_half_size; dy1++){
+            // compute the indices of the pixels to compare
+            int const ref_tile_x = x0 + dx1;
+            int const ref_tile_y = y0 + dy1;
+            float const ref_val = ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r;
+                      
+            comp_tile_x = ref_tile_x + dx00;
+            comp_tile_y = ref_tile_y + dy00;
+            
+            // if the comparison pixels are outside of the frame, attach a high loss to them
+            if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                diff0 += (2*UINT16_MAX_VAL);
+            } else {
+                diff0 += abs(ref_val - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
             }
-        }
-        
-        if(diff < best_diff)
-        {
-            best_diff = diff;
-            best_align = prev_align;
+            
+            comp_tile_x = ref_tile_x + dx01;
+            comp_tile_y = ref_tile_y + dy01;
+            
+            // if the comparison pixels are outside of the frame, attach a high loss to them
+            if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                diff1 += (2*UINT16_MAX_VAL);
+            } else {
+                diff1 += abs(ref_val - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+            }
+            
+            comp_tile_x = ref_tile_x + dx02;
+            comp_tile_y = ref_tile_y + dy02;
+            
+            // if the comparison pixels are outside of the frame, attach a high loss to them
+            if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                diff2 += (2*UINT16_MAX_VAL);
+            } else {
+                diff2 += abs(ref_val - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+            }
         }
     }
     
-    // store corrected alignment
-    prev_alignment_corrected.write(best_align, gid);
+    // store corrected (best) alignment
+    if(diff0 < diff1 & diff0 < diff2) {
+        prev_alignment_corrected.write(prev_align0, gid);
+        
+    } else if(diff1 < diff2) {
+        prev_alignment_corrected.write(prev_align1, gid);
+        
+    } else {
+        prev_alignment_corrected.write(prev_align2, gid);
+    }
 }
 
 
@@ -669,8 +700,7 @@ kernel void calculate_rms_rgba(texture2d<float, access::read> ref_texture [[text
 kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]],
                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                         texture2d<float, access::write> out_texture_ft [[texture(2)]],
-                        constant int& mosaic_pettern_width [[buffer(0)]],
-                        constant int& tile_size [[buffer(1)]],
+                        constant int& tile_size [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]]) {
     
     // compute tile positions from gid
@@ -683,6 +713,9 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
     // pre-initalize some vectors
     float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
     
+    float coefRe, coefIm, norm_cosine;
+    float4 Re0, Re1, Im0, Im1, dataRe, dataIm;
+    
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm++) {
         // exploit symmetry of real dft and calculate reduced number of rows
@@ -692,31 +725,31 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
             int const n = n0 + dn;
             
             // fill with zeros
-            float4 Re = zeros;
-            float4 Im = zeros;
+            Re0 = zeros;
+            Im0 = zeros;
             
             for (int dy = 0; dy < tile_size; dy++) {
                                   
                 int const y = n0 + dy;
                 
                 // calculate modified raised cosine window weight for blending tiles to suppress artifacts
-                float const norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
+                norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
                 // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
-                //float const norm_cosine = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
+                //norm_cosine = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
                 
                 // calculate coefficients
-                float const coefRe = cos(angle*dn*dy);
-                float const coefIm = sin(angle*dn*dy);
+                coefRe = cos(angle*dn*dy);
+                coefIm = sin(angle*dn*dy);
                 
-                float4 const dataRe = norm_cosine*in_texture.read(uint2(m, y));
+                dataRe = norm_cosine*in_texture.read(uint2(m, y));
                 
-                Re += (coefRe * dataRe);
-                Im += (coefIm * dataRe);
+                Re0 += (coefRe * dataRe);
+                Im0 += (coefIm * dataRe);
             }
             
             // write into temporary textures
-            tmp_texture_ft.write(Re, uint2(2*m+0, n));
-            tmp_texture_ft.write(Im, uint2(2*m+1, n));
+            tmp_texture_ft.write(Re0, uint2(2*m+0, n));
+            tmp_texture_ft.write(Im0, uint2(2*m+1, n));
         }
     }
     
@@ -730,37 +763,37 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
             int const n2 = n0 + tile_size-dn;
              
             // fill with zeros
-            float4 Re1 = zeros;
-            float4 Im1 = zeros;
-            float4 Re2 = zeros;
-            float4 Im2 = zeros;
+            Re0 = zeros;
+            Im0 = zeros;
+            Re1 = zeros;
+            Im1 = zeros;
             
             for (int dx = 0; dx < tile_size; dx++) {
                                   
                 int const x = 2*(m0 + dx);
                 
                 // calculate coefficients
-                float const coefRe = cos(angle*dm*dx);
-                float const coefIm = sin(angle*dm*dx);
+                coefRe = cos(angle*dm*dx);
+                coefIm = sin(angle*dm*dx);
                            
-                float4 const dataRe = tmp_texture_ft.read(uint2(x+0, n));
-                float4 const dataIm = tmp_texture_ft.read(uint2(x+1, n));
+                dataRe = tmp_texture_ft.read(uint2(x+0, n));
+                dataIm = tmp_texture_ft.read(uint2(x+1, n));
                              
-                Re1 += (coefRe*dataRe - coefIm*dataIm);
-                Im1 += (coefIm*dataRe + coefRe*dataIm);
+                Re0 += (coefRe*dataRe - coefIm*dataIm);
+                Im0 += (coefIm*dataRe + coefRe*dataIm);
                 
-                Re2 += (coefRe*dataRe + coefIm*dataIm);
-                Im2 += (coefIm*dataRe - coefRe*dataIm);
+                Re1 += (coefRe*dataRe + coefIm*dataIm);
+                Im1 += (coefIm*dataRe - coefRe*dataIm);
             }
             
-            out_texture_ft.write(Re1, uint2(m+0, n));
-            out_texture_ft.write(Im1, uint2(m+1, n));
+            out_texture_ft.write(Re0, uint2(m+0, n));
+            out_texture_ft.write(Im0, uint2(m+1, n));
                    
             // exploit symmetry of real dft and calculate values for remaining rows
             if(n2 < n0+tile_size & n2 != n0+tile_size/2)
             {
-                out_texture_ft.write(Re2, uint2(m+0, n2));
-                out_texture_ft.write(Im2, uint2(m+1, n2));
+                out_texture_ft.write(Re1, uint2(m+0, n2));
+                out_texture_ft.write(Im1, uint2(m+1, n2));
             }
         }
     }
@@ -770,9 +803,8 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
 kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(0)]],
                          texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                          texture2d<float, access::write> out_texture [[texture(2)]],
-                         constant int& mosaic_pettern_width [[buffer(0)]],
-                         constant int& tile_size [[buffer(1)]],
-                         constant int& n_textures [[buffer(2)]],
+                         constant int& tile_size [[buffer(0)]],
+                         constant int& n_textures [[buffer(1)]],
                          uint2 gid [[thread_position_in_grid]]) {
     
     // compute tile positions from gid
@@ -785,7 +817,10 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(
     // pre-initalize some vectors
     float4 const zeros       = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float4 const norm_factor = float4(float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size));
-        
+       
+    float coefRe, coefIm;
+    float4 Re, Im, dataRe, dataIm;
+    
     // row-wise one-dimensional discrete Fourier transform along x-direction
     for (int dn = 0; dn < tile_size; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
@@ -794,19 +829,19 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(
             int const n = n0 + dn;
             
             // fill with zeros
-            float4 Re = zeros;
-            float4 Im = zeros;
+            Re = zeros;
+            Im = zeros;
             
             for (int dx = 0; dx < tile_size; dx++) {
                                   
                 int const x = 2*(m0 + dx);
               
                 // calculate coefficients
-                float const coefRe = cos(angle*dm*dx);
-                float const coefIm = sin(angle*dm*dx);
+                coefRe = cos(angle*dm*dx);
+                coefIm = sin(angle*dm*dx);
                 
-                float4 const dataRe = in_texture_ft.read(uint2(x+0, n));
-                float4 const dataIm = in_texture_ft.read(uint2(x+1, n));
+                dataRe = in_texture_ft.read(uint2(x+0, n));
+                dataIm = in_texture_ft.read(uint2(x+1, n));
                 
                 Re += (coefRe*dataRe - coefIm*dataIm);
                 Im += (coefIm*dataRe + coefRe*dataIm);
@@ -826,18 +861,18 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(
             int const n = n0 + dn;
              
             // fill with zeros
-            float4 Re = zeros;
+            Re = zeros;
               
             for (int dy = 0; dy < tile_size; dy++) {
                                   
                 int const y = n0 + dy;
                 
                 // calculate coefficients
-                float const coefRe = cos(angle*dn*dy);
-                float const coefIm = sin(angle*dn*dy);
+                coefRe = cos(angle*dn*dy);
+                coefIm = sin(angle*dn*dy);
                            
-                float4 const dataRe = tmp_texture_ft.read(uint2(2*m+0, y));
-                float4 const dataIm = tmp_texture_ft.read(uint2(2*m+1, y));
+                dataRe = tmp_texture_ft.read(uint2(2*m+0, y));
+                dataIm = tmp_texture_ft.read(uint2(2*m+1, y));
                             
                 Re += (coefRe*dataRe - coefIm*dataIm);
             }
@@ -851,36 +886,27 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(
 }
 
 
-kernel void merge_frequency_domain(texture2d<float, access::read> aligned_texture [[texture(0)]],
-                                   texture2d<float, access::read> diff_texture [[texture(1)]],
-                                   texture2d<float, access::read> ref_texture_ft [[texture(2)]],
-                                   texture2d<float, access::read_write> tmp_texture_ft [[texture(3)]],
-                                   texture2d<float, access::read_write> out_texture_ft [[texture(4)]],
-                                   texture2d<float, access::read> rms_texture [[texture(5)]],
-                                   texture2d<float, access::read> mismatch_texture [[texture(6)]],
-                                   constant float& robustness [[buffer(0)]],
-                                   constant int& tile_size [[buffer(1)]],
-                                   constant int& tile_size_align [[buffer(2)]],
-                                   uint2 gid [[thread_position_in_grid]]) {
-    
-    // derive normalized robustness value: each step yields another factor of two with the idea that the variance of shot noise increases by a factor of two per iso level
-    float const robustness_norm = pow(2.0f, (-robustness + 8.0f));
-    
-    // derive read noise with the idea that read noise increases stronger than a factor of two per iso level to increase noise reduction in darker regions relative to bright regions
-    float const read_noise = pow(pow(2.0f, (-robustness + 10.0f)), 1.6);
+kernel void merge_frequency_domain_dft(texture2d<float, access::read> aligned_texture [[texture(0)]],
+                                       texture2d<float, access::read> diff_texture [[texture(1)]],
+                                       texture2d<float, access::read> ref_texture_ft [[texture(2)]],
+                                       texture2d<float, access::read_write> tmp_texture_ft [[texture(3)]],
+                                       texture2d<float, access::read_write> out_texture_ft [[texture(4)]],
+                                       texture2d<float, access::read> rms_texture [[texture(5)]],
+                                       texture2d<float, access::read> mismatch_texture [[texture(6)]],
+                                       constant float& robustness_norm [[buffer(0)]],
+                                       constant float& read_noise [[buffer(1)]],
+                                       constant float& max_motion_norm [[buffer(2)]],
+                                       constant int& tile_size [[buffer(3)]],
+                                       uint2 gid [[thread_position_in_grid]]) {
     
     // combine estimated shot noise and read noise
     float4 const noise_est = rms_texture.read(gid) + read_noise;
     // normalize with tile size and robustness norm
     float4 const noise_norm = noise_est*tile_size*tile_size*robustness_norm;
-    
-    float4 const mismatch = mismatch_texture.read(gid);
-    
-    // derive a maximum value for the motion norm with the idea that denoising can be inscreased in static regions with good alignment
-    // Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a linear scaling derived from the robustness value
-    // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-    float const max_motion_norm = max(1.0f, pow(1.35f, (12.0f-robustness-1.35f)));
+          
     // increase of noise reduction for small values of mismatch
+    // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
+    float4 const mismatch = mismatch_texture.read(gid);
     float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm)/sqrt(2.0f);
     //float4 const motion_norm = float4(1.0f, 1.0f, 1.0f, 1.0f);
         
@@ -894,6 +920,9 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
     // pre-initalize some vectors
     float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
     
+    float coefRe, coefIm, weight, norm_cosine;
+    float4 Re0, Re1, Im0, Im1, refRe, refIm, dataRe, dataIm, weight4, mergedRe, mergedIm;
+    
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm++) {
         // exploit symmetry of real dft and calculate reduced number of rows
@@ -903,34 +932,34 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
             int const n = n0 + dn;
             
             // fill with zeros
-            float4 Re1 = zeros;
-            float4 Im1 = zeros;
+            Re0 = zeros;
+            Im0 = zeros;
             
             for (int dy = 0; dy < tile_size; dy++) {
                                   
                 int const y = n0 + dy;
             
                 // calculate modified raised cosine window weight for blending tiles to suppress artifacts
-                float const norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
+                norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
                 // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
-                //float const norm_cosine = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
+                //norm_cosine = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
                                 
                 // calculate coefficients
-                float const coefRe = cos(angle*dn*dy);
-                float const coefIm = sin(angle*dn*dy);
+                coefRe = cos(angle*dn*dy);
+                coefIm = sin(angle*dn*dy);
                 
-                float4 const dataRe = norm_cosine*aligned_texture.read(uint2(m, y));
+                dataRe = norm_cosine*aligned_texture.read(uint2(m, y));
                 
-                Re1 += (coefRe * dataRe);
-                Im1 += (coefIm * dataRe);
+                Re0 += (coefRe * dataRe);
+                Im0 += (coefIm * dataRe);
             }
             
             // write into temporary textures
-            tmp_texture_ft.write(Re1, uint2(2*m+0, n));
-            tmp_texture_ft.write(Im1, uint2(2*m+1, n));
+            tmp_texture_ft.write(Re0, uint2(2*m+0, n));
+            tmp_texture_ft.write(Im0, uint2(2*m+1, n));
         }
     }
-    
+        
     // row-wise one-dimensional discrete Fourier transform along x-direction
     // exploit symmetry of real dft and calculate reduced number of rows
     for (int dn = 0; dn <= tile_size/2; dn++) {
@@ -940,55 +969,55 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
             int const n = n0 + dn;
             int const n2 = n0 + tile_size-dn;
              
-            float4 Re1 = zeros;
-            float4 Im1 = zeros;
-            float4 Re2 = zeros;
-            float4 Im2 = zeros;
+            Re0 = zeros;
+            Im0 = zeros;
+            Re1 = zeros;
+            Im1 = zeros;
             
             for (int dx = 0; dx < tile_size; dx++) {
                                   
                 int const x = 2*(m0 + dx);
                 
                 // calculate coefficients
-                float const coefRe = cos(angle*dm*dx);
-                float const coefIm = sin(angle*dm*dx);
+                coefRe = cos(angle*dm*dx);
+                coefIm = sin(angle*dm*dx);
                            
-                float4 const dataRe = tmp_texture_ft.read(uint2(x+0, n));
-                float4 const dataIm = tmp_texture_ft.read(uint2(x+1, n));
+                dataRe = tmp_texture_ft.read(uint2(x+0, n));
+                dataIm = tmp_texture_ft.read(uint2(x+1, n));
                             
-                Re1 += (coefRe*dataRe - coefIm*dataIm);
-                Im1 += (coefIm*dataRe + coefRe*dataIm);
+                Re0 += (coefRe*dataRe - coefIm*dataIm);
+                Im0 += (coefIm*dataRe + coefRe*dataIm);
                       
-                Re2 += (coefRe*dataRe + coefIm*dataIm);
-                Im2 += (coefIm*dataRe - coefRe*dataIm);
+                Re1 += (coefRe*dataRe + coefIm*dataIm);
+                Im1 += (coefIm*dataRe - coefRe*dataIm);
             }
    
-            float4 Re3 = ref_texture_ft.read(uint2(m+0, n));
-            float4 Im3 = ref_texture_ft.read(uint2(m+1, n));
+            refRe = ref_texture_ft.read(uint2(m+0, n));
+            refIm = ref_texture_ft.read(uint2(m+1, n));
             
             // calculation of merging weight by Wiener shrinkage
-            float4 weight4 = (Re3-Re1)*(Re3-Re1) + (Im3-Im1)*(Im3-Im1);
+            weight4 = (refRe-Re0)*(refRe-Re0) + (refIm-Im0)*(refIm-Im0);
             weight4 = weight4/(weight4 + motion_norm*noise_norm);
             
             // use the same weight for all color channels to reduce color artifacts. Use maximum of weight4 as this increases motion robustness.
             // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-            float weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+            weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
                         
             // merging of two textures
-            float4 merged_Re = out_texture_ft.read(uint2(m+0, n)) + (1.0f-weight)*Re1 + weight*Re3;
-            float4 merged_Im = out_texture_ft.read(uint2(m+1, n)) + (1.0f-weight)*Im1 + weight*Im3;
+            mergedRe = out_texture_ft.read(uint2(m+0, n)) + (1.0f-weight)*Re0 + weight*refRe;
+            mergedIm = out_texture_ft.read(uint2(m+1, n)) + (1.0f-weight)*Im0 + weight*refIm;
          
-            out_texture_ft.write(merged_Re, uint2(m+0, n));
-            out_texture_ft.write(merged_Im, uint2(m+1, n));
+            out_texture_ft.write(mergedRe, uint2(m+0, n));
+            out_texture_ft.write(mergedIm, uint2(m+1, n));
             
             // exploit symmetry of real dft and calculate values for remaining rows
             if(n2 < n0+tile_size & n2 != n0+tile_size/2)
             {
-                Re3 = ref_texture_ft.read(uint2(m+0, n2));
-                Im3 = ref_texture_ft.read(uint2(m+1, n2));
+                refRe = ref_texture_ft.read(uint2(m+0, n2));
+                refIm = ref_texture_ft.read(uint2(m+1, n2));
                 
                 // calculation of merging weight by Wiener shrinkage
-                weight4 = (Re3-Re2)*(Re3-Re2) + (Im3-Im2)*(Im3-Im2);
+                weight4 = (refRe-Re1)*(refRe-Re1) + (refIm-Im1)*(refIm-Im1);
                 weight4 = weight4/(weight4 + motion_norm*noise_norm);
                 
                 // use the same weight for all color channels to reduce color artifacts. Use maximum of weight4 as this increases motion robustness.
@@ -996,11 +1025,11 @@ kernel void merge_frequency_domain(texture2d<float, access::read> aligned_textur
                 weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
                             
                 // merging of two textures
-                merged_Re = out_texture_ft.read(uint2(m+0, n2)) + (1.0f-weight)*Re2 + weight*Re3;
-                merged_Im = out_texture_ft.read(uint2(m+1, n2)) + (1.0f-weight)*Im2 + weight*Im3;
+                mergedRe = out_texture_ft.read(uint2(m+0, n2)) + (1.0f-weight)*Re1 + weight*refRe;
+                mergedIm = out_texture_ft.read(uint2(m+1, n2)) + (1.0f-weight)*Im1 + weight*refIm;
               
-                out_texture_ft.write(merged_Re, uint2(m+0, n2));
-                out_texture_ft.write(merged_Im, uint2(m+1, n2));
+                out_texture_ft.write(mergedRe, uint2(m+0, n2));
+                out_texture_ft.write(mergedIm, uint2(m+1, n2));
             }
         }
     }
@@ -1055,86 +1084,9 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
      
     tile_diff /= float(n_total);
     
-    /* // potential additional correction of artifacts around highlights
-    float tile_diff = 0.f;
-    float tile_int1 = 0.f;
-    float tile_int2 = 0.f;
-    float tile_int3 = 0.f;
-    float tile_int4 = 0.f;
-    
-    for (int dy = 0; dy < tile_size/2; dy++) {
-        for (int dx = 0; dx < tile_size/2; dx++) {
-            
-            int const x = m0 + dx;
-            int const y = n0 + dy;
-            
-            float4 const ref_val = ref_texture.read(uint2(x, y));
-            float4 const diff = ref_val - aligned_texture.read(uint2(x, y));
-               
-            tile_int1 += (0.25f * (ref_val[0]+ref_val[1]+ref_val[2]+ref_val[3]));
-            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
-        }
-    }
-    
-    for (int dy = 0; dy < tile_size/2; dy++) {
-        for (int dx = tile_size/2; dx < tile_size; dx++) {
-            
-            int const x = m0 + dx;
-            int const y = n0 + dy;
-            
-            float4 const ref_val = ref_texture.read(uint2(x, y));
-            float4 const diff = ref_val - aligned_texture.read(uint2(x, y));
-               
-            tile_int2 += (0.25f * (ref_val[0]+ref_val[1]+ref_val[2]+ref_val[3]));
-            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
-        }
-    }
-
-    for (int dy = tile_size/2; dy < tile_size; dy++) {
-        for (int dx = 0; dx < tile_size/2; dx++) {
-            
-            int const x = m0 + dx;
-            int const y = n0 + dy;
-            
-            float4 const ref_val = ref_texture.read(uint2(x, y));
-            float4 const diff = ref_val - aligned_texture.read(uint2(x, y));
-               
-            tile_int3 += (0.25f * (ref_val[0]+ref_val[1]+ref_val[2]+ref_val[3]));
-            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
-        }
-    }
-    
-    for (int dy = tile_size/2; dy < tile_size; dy++) {
-        for (int dx = tile_size/2; dx < tile_size; dx++) {
-            
-            int const x = m0 + dx;
-            int const y = n0 + dy;
-            
-            float4 const ref_val = ref_texture.read(uint2(x, y));
-            float4 const diff = ref_val - aligned_texture.read(uint2(x, y));
-               
-            tile_int4 += (0.25f * (ref_val[0]+ref_val[1]+ref_val[2]+ref_val[3]));
-            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
-        }
-    }
-        
-    tile_diff /= float(tile_size*tile_size);
-    
-    float const min_int = min(tile_int1, min(tile_int2, min(tile_int3, tile_int4)));
-    float const max_int = max(tile_int1, max(tile_int2, max(tile_int3, tile_int4)));
-    
-    float const ratio = max_int/min_int;
-    float factor = 1.0f;
-    
-    if(ratio > 2.0f)
-    {
-        //factor = min(sqrt(ratio-1.0f), 10.0f);
-    }
-    */
     // calculation of mismatch ratio
     //float4 const mismatch4 = (tile_diff*tile_diff) / (tile_diff*tile_diff + noise_est);
     //float4 const mismatch4 = (tile_diff*tile_diff) / (noise_est+1e-12);
-    //float4 const mismatch4 = tile_diff / (factor*sqrt(noise_est+1e-12));
     float4 const mismatch4 = tile_diff / sqrt(noise_est+1e-12);
     float const mismatch = 0.25f*(mismatch4[0] + mismatch4[1] + mismatch4[2] + mismatch4[3]);
     
@@ -1156,4 +1108,663 @@ kernel void normalize_mismatch(texture2d<float, access::read_write> mismatch_tex
     mismatch_norm = clamp(mismatch_norm, 0.0f, 1.0f);
     
     mismatch_texture.write(mismatch_norm, gid);
+}
+
+
+kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]],
+                        texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
+                        texture2d<float, access::write> out_texture_ft [[texture(2)]],
+                        constant int& tile_size [[buffer(0)]],
+                        uint2 gid [[thread_position_in_grid]]) {
+    
+    // compute tile positions from gid
+    int const m0 = gid.x*tile_size;
+    int const n0 = gid.y*tile_size;
+    
+    int const tile_size_14 = tile_size/4;
+    int const tile_size_24 = tile_size/2;
+    int const tile_size_34 = tile_size/4*3;
+    
+    // pre-calculate factors for sine and cosine calculation
+    float const angle = -2*PI/float(tile_size);
+    
+    // pre-initalize some vectors
+    float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    
+    float coefRe, coefIm, norm_cosine;
+    float4 Re0, Re1, Re2, Re3, Re00, Re11, Re22, Re33, Im0, Im1, Im2, Im3, Im00, Im11, Im22, Im33, dataRe, dataIm;
+    float4 Re0_cs, Re1_cs, Re2_cs, Re3_cs, Re00_cs, Re11_cs, Re22_cs, Re33_cs, Im0_cs, Im1_cs, Im2_cs, Im3_cs, Im00_cs, Im11_cs, Im22_cs, Im33_cs;
+    
+    // column-wise one-dimensional discrete Fourier transform along y-direction
+    for (int dm = 0; dm < tile_size; dm++) {
+        // exploit symmetry of real dft and calculate reduced number of rows
+        for (int dn = 0; dn <= tile_size/2; dn++) {
+             
+            int const m = m0 + dm;
+            int const n = n0 + dn;
+            
+            // fill with zeros
+            Re0 = zeros;
+            Im0 = zeros;
+            
+            for (int dy = 0; dy < tile_size; dy++) {
+                                  
+                int const y = n0 + dy;
+                
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts
+                norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
+                //norm_cosine = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
+                
+                // calculate coefficients
+                coefRe = cos(angle*dn*dy);
+                coefIm = sin(angle*dn*dy);
+                
+                dataRe = norm_cosine*in_texture.read(uint2(m, y));
+                
+                Re0 += (coefRe * dataRe);
+                Im0 += (coefIm * dataRe);
+            }
+            
+            // write into temporary textures
+            tmp_texture_ft.write(Re0, uint2(2*m+0, n));
+            tmp_texture_ft.write(Im0, uint2(2*m+1, n));
+        }
+    }
+        
+    // row-wise one-dimensional fast Fourier transform along x-direction
+    // exploit symmetry of real dft and calculate reduced number of rows
+    for (int dn = 0; dn <= tile_size/2; dn++) {
+        // calculate 4 small discrete Fourier transforms
+        for (int dm = 0; dm < tile_size/4; dm++) {
+             
+            int const m = 2*(m0 + dm);
+            int const n = n0 + dn;
+            int const n2 = n0 + tile_size-dn;
+            
+            // fill with zeros
+            Re0 = Im0 = Re1 = Im1 = Re2 = Im2 = Re3 = Im3 = zeros;
+            Re0_cs = Im0_cs = Re1_cs = Im1_cs = Re2_cs = Im2_cs = Re3_cs = Im3_cs = zeros;
+            
+            for (int dx = 0; dx < tile_size; dx+=4) {
+                                  
+                int const x = 2*(m0 + dx);
+              
+                // calculate coefficients
+                coefRe = cos(angle*dm*dx);
+                coefIm = sin(angle*dm*dx);
+                
+                dataRe = tmp_texture_ft.read(uint2(x+0, n));
+                dataIm = tmp_texture_ft.read(uint2(x+1, n));
+                Re0   += (coefRe*dataRe - coefIm*dataIm);
+                Im0   += (coefIm*dataRe + coefRe*dataIm);
+                Re0_cs+= (coefRe*dataRe + coefIm*dataIm);
+                Im0_cs+= (coefIm*dataRe - coefRe*dataIm);
+                       
+                dataRe = tmp_texture_ft.read(uint2(x+2, n));
+                dataIm = tmp_texture_ft.read(uint2(x+3, n));
+                Re2   += (coefRe*dataRe - coefIm*dataIm);
+                Im2   += (coefIm*dataRe + coefRe*dataIm);
+                Re2_cs+= (coefRe*dataRe + coefIm*dataIm);
+                Im2_cs+= (coefIm*dataRe - coefRe*dataIm);
+                
+                dataRe = tmp_texture_ft.read(uint2(x+4, n));
+                dataIm = tmp_texture_ft.read(uint2(x+5, n));
+                Re1   += (coefRe*dataRe - coefIm*dataIm);
+                Im1   += (coefIm*dataRe + coefRe*dataIm);
+                Re1_cs+= (coefRe*dataRe + coefIm*dataIm);
+                Im1_cs+= (coefIm*dataRe - coefRe*dataIm);
+                
+                dataRe = tmp_texture_ft.read(uint2(x+6, n));
+                dataIm = tmp_texture_ft.read(uint2(x+7, n));
+                Re3   += (coefRe*dataRe - coefIm*dataIm);
+                Im3   += (coefIm*dataRe + coefRe*dataIm);
+                Re3_cs+= (coefRe*dataRe + coefIm*dataIm);
+                Im3_cs+= (coefIm*dataRe - coefRe*dataIm);
+            }
+            
+            // first butterfly
+            coefRe  = cos(angle*2*dm);
+            coefIm  = sin(angle*2*dm);
+            Re00    = Re0    + coefRe*Re1    - coefIm*Im1;
+            Im00    = Im0    + coefIm*Re1    + coefRe*Im1;
+            Re22    = Re2    + coefRe*Re3    - coefIm*Im3;
+            Im22    = Im2    + coefIm*Re3    + coefRe*Im3;
+            Re00_cs = Re0_cs + coefRe*Re1_cs - coefIm*Im1_cs;
+            Im00_cs = Im0_cs + coefIm*Re1_cs + coefRe*Im1_cs;
+            Re22_cs = Re2_cs + coefRe*Re3_cs - coefIm*Im3_cs;
+            Im22_cs = Im2_cs + coefIm*Re3_cs + coefRe*Im3_cs;
+                        
+            coefRe  = cos(angle*2*(dm+tile_size_14));
+            coefIm  = sin(angle*2*(dm+tile_size_14));
+            Re11    = Re0    + coefRe*Re1    - coefIm*Im1;
+            Im11    = Im0    + coefIm*Re1    + coefRe*Im1;
+            Re33    = Re2    + coefRe*Re3    - coefIm*Im3;
+            Im33    = Im2    + coefIm*Re3    + coefRe*Im3;
+            Re11_cs = Re0_cs + coefRe*Re1_cs - coefIm*Im1_cs;
+            Im11_cs = Im0_cs + coefIm*Re1_cs + coefRe*Im1_cs;
+            Re33_cs = Re2_cs + coefRe*Re3_cs - coefIm*Im3_cs;
+            Im33_cs = Im2_cs + coefIm*Re3_cs + coefRe*Im3_cs;
+            
+            // second butterfly
+            coefRe = cos(angle*dm);
+            coefIm = sin(angle*dm);
+            Re0    = Re00    + coefRe*Re22    - coefIm*Im22;
+            Im0    = Im00    + coefIm*Re22    + coefRe*Im22;
+            Re0_cs = Re00_cs + coefRe*Re22_cs - coefIm*Im22_cs;
+            Im0_cs = Im00_cs + coefIm*Re22_cs + coefRe*Im22_cs;
+            
+            coefRe = cos(angle*(dm+tile_size_24));
+            coefIm = sin(angle*(dm+tile_size_24));
+            Re2    = Re00    + coefRe*Re22    - coefIm*Im22;
+            Im2    = Im00    + coefIm*Re22    + coefRe*Im22;
+            Re2_cs = Re00_cs + coefRe*Re22_cs - coefIm*Im22_cs;
+            Im2_cs = Im00_cs + coefIm*Re22_cs + coefRe*Im22_cs;
+            
+            coefRe = cos(angle*(dm+tile_size_14));
+            coefIm = sin(angle*(dm+tile_size_14));
+            Re1    = Re11    + coefRe*Re33    - coefIm*Im33;
+            Im1    = Im11    + coefIm*Re33    + coefRe*Im33;
+            Re1_cs = Re11_cs + coefRe*Re33_cs - coefIm*Im33_cs;
+            Im1_cs = Im11_cs + coefIm*Re33_cs + coefRe*Im33_cs;
+            
+            coefRe = cos(angle*(dm+tile_size_34));
+            coefIm = sin(angle*(dm+tile_size_34));
+            Re3    = Re11    + coefRe*Re33    - coefIm*Im33;
+            Im3    = Im11    + coefIm*Re33    + coefRe*Im33;
+            Re3_cs = Re11_cs + coefRe*Re33_cs - coefIm*Im33_cs;
+            Im3_cs = Im11_cs + coefIm*Re33_cs + coefRe*Im33_cs;
+                           
+            // write into output texture
+            out_texture_ft.write(Re0, uint2(m+0, n));
+            out_texture_ft.write(Im0, uint2(m+1, n));
+            out_texture_ft.write(Re1, uint2(m+tile_size_24+0, n));
+            out_texture_ft.write(Im1, uint2(m+tile_size_24+1, n));
+            out_texture_ft.write(Re2, uint2(m+tile_size+0, n));
+            out_texture_ft.write(Im2, uint2(m+tile_size+1, n));
+            out_texture_ft.write(Re3, uint2(m+tile_size_24*3+0, n));
+            out_texture_ft.write(Im3, uint2(m+tile_size_24*3+1, n));
+            
+            // exploit symmetry of real dft and calculate values for remaining rows
+            if(n2 < n0+tile_size & n2 != n0+tile_size/2)
+            {
+                // write into output texture
+                out_texture_ft.write(Re0_cs, uint2(m+0, n2));
+                out_texture_ft.write(Im0_cs, uint2(m+1, n2));
+                out_texture_ft.write(Re1_cs, uint2(m+tile_size_24+0, n2));
+                out_texture_ft.write(Im1_cs, uint2(m+tile_size_24+1, n2));
+                out_texture_ft.write(Re2_cs, uint2(m+tile_size+0, n2));
+                out_texture_ft.write(Im2_cs, uint2(m+tile_size+1, n2));
+                out_texture_ft.write(Re3_cs, uint2(m+tile_size_24*3+0, n2));
+                out_texture_ft.write(Im3_cs, uint2(m+tile_size_24*3+1, n2));
+            }
+        }
+    }
+}
+
+
+kernel void backward_fft(texture2d<float, access::read> in_texture_ft [[texture(0)]],
+                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
+                         texture2d<float, access::write> out_texture [[texture(2)]],
+                         constant int& tile_size [[buffer(0)]],
+                         constant int& n_textures [[buffer(1)]],
+                         uint2 gid [[thread_position_in_grid]]) {
+    
+    // compute tile positions from gid
+    int const m0 = gid.x*tile_size;
+    int const n0 = gid.y*tile_size;
+    
+    int const tile_size_14 = tile_size/4;
+    int const tile_size_24 = tile_size/2;
+    int const tile_size_34 = tile_size/4*3;
+    
+    // pre-calculate factors for sine and cosine calculation
+    float const angle = -2*PI/float(tile_size);
+    
+    // pre-initalize some vectors
+    float4 const zeros       = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    float4 const norm_factor = float4(float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size), float(n_textures*tile_size*tile_size));
+       
+    float coefRe, coefIm;
+    float4 Re0, Re1, Re2, Re3, Im0, Im1, Im2, Im3, Re00, Re11, Re22, Re33, Im00, Im11, Im22, Im33, dataRe, dataIm;
+    
+    // row-wise one-dimensional fast Fourier transform along x-direction
+    for (int dn = 0; dn < tile_size; dn++) {
+        // calculate 4 small discrete Fourier transforms
+        for (int dm = 0; dm < tile_size/4; dm++) {
+             
+            int const m = 2*(m0 + dm);
+            int const n = n0 + dn;
+            
+            // fill with zeros
+            Re0 = Im0 = Re1 = Im1 = Re2 = Im2 = Re3 = Im3 = zeros;
+            
+            for (int dx = 0; dx < tile_size; dx+=4) {
+                                  
+                int const x = 2*(m0 + dx);
+              
+                // calculate coefficients
+                coefRe = cos(angle*dm*dx);
+                coefIm = sin(angle*dm*dx);
+                
+                dataRe =  in_texture_ft.read(uint2(x+0, n));
+                dataIm = -in_texture_ft.read(uint2(x+1, n));
+                Re0   += (coefRe*dataRe - coefIm*dataIm);
+                Im0   += (coefIm*dataRe + coefRe*dataIm);
+                       
+                dataRe =  in_texture_ft.read(uint2(x+2, n));
+                dataIm = -in_texture_ft.read(uint2(x+3, n));
+                Re2   += (coefRe*dataRe - coefIm*dataIm);
+                Im2   += (coefIm*dataRe + coefRe*dataIm);
+                
+                dataRe =  in_texture_ft.read(uint2(x+4, n));
+                dataIm = -in_texture_ft.read(uint2(x+5, n));
+                Re1   += (coefRe*dataRe - coefIm*dataIm);
+                Im1   += (coefIm*dataRe + coefRe*dataIm);
+                
+                dataRe =  in_texture_ft.read(uint2(x+6, n));
+                dataIm = -in_texture_ft.read(uint2(x+7, n));
+                Re3   += (coefRe*dataRe - coefIm*dataIm);
+                Im3   += (coefIm*dataRe + coefRe*dataIm);
+            }
+            
+            // first butterfly
+            coefRe = cos(angle*2*dm);
+            coefIm = sin(angle*2*dm);
+            Re00 = Re0 + coefRe*Re1 - coefIm*Im1;
+            Im00 = Im0 + coefIm*Re1 + coefRe*Im1;
+            Re22 = Re2 + coefRe*Re3 - coefIm*Im3;
+            Im22 = Im2 + coefIm*Re3 + coefRe*Im3;
+                        
+            coefRe = cos(angle*2*(dm+tile_size_14));
+            coefIm = sin(angle*2*(dm+tile_size_14));
+            Re11 = Re0 + coefRe*Re1 - coefIm*Im1;
+            Im11 = Im0 + coefIm*Re1 + coefRe*Im1;
+            Re33 = Re2 + coefRe*Re3 - coefIm*Im3;
+            Im33 = Im2 + coefIm*Re3 + coefRe*Im3;
+            
+            // second butterfly
+            Re0 = Re00 + cos(angle*dm)*Re22                - sin(angle*dm)*Im22;
+            Im0 = Im00 + sin(angle*dm)*Re22                + cos(angle*dm)*Im22;
+            Re2 = Re00 + cos(angle*(dm+tile_size_24))*Re22 - sin(angle*(dm+tile_size_24))*Im22;
+            Im2 = Im00 + sin(angle*(dm+tile_size_24))*Re22 + cos(angle*(dm+tile_size_24))*Im22;
+            Re1 = Re11 + cos(angle*(dm+tile_size_14))*Re33 - sin(angle*(dm+tile_size_14))*Im33;
+            Im1 = Im11 + sin(angle*(dm+tile_size_14))*Re33 + cos(angle*(dm+tile_size_14))*Im33;
+            Re3 = Re11 + cos(angle*(dm+tile_size_34))*Re33 - sin(angle*(dm+tile_size_34))*Im33;
+            Im3 = Im11 + sin(angle*(dm+tile_size_34))*Re33 + cos(angle*(dm+tile_size_34))*Im33;
+               
+            // write into temporary textures
+            tmp_texture_ft.write( Re0, uint2(m+0, n));
+            tmp_texture_ft.write(-Im0, uint2(m+1, n));
+            tmp_texture_ft.write( Re1, uint2(m+tile_size_24+0, n));
+            tmp_texture_ft.write(-Im1, uint2(m+tile_size_24+1, n));
+            tmp_texture_ft.write( Re2, uint2(m+tile_size+0, n));
+            tmp_texture_ft.write(-Im2, uint2(m+tile_size+1, n));
+            tmp_texture_ft.write( Re3, uint2(m+tile_size_24*3+0, n));
+            tmp_texture_ft.write(-Im3, uint2(m+tile_size_24*3+1, n));
+        }
+    }
+  
+    // column-wise one-dimensional fast Fourier transform along y-direction
+    for (int dm = 0; dm < tile_size; dm++) {
+        // calculate 4 small discrete Fourier transforms
+        for (int dn = 0; dn < tile_size/4; dn++) {
+              
+            int const m = m0 + dm;
+            int const n = n0 + dn;
+            
+            // fill with zeros
+            Re0 = Im0 = Re1 = Im1 = Re2 = Im2 = Re3 = Im3 = zeros;
+            
+            for (int dy = 0; dy < tile_size; dy+=4) {
+                                  
+                int const y = n0 + dy;
+              
+                // calculate coefficients
+                coefRe = cos(angle*dn*dy);
+                coefIm = sin(angle*dn*dy);
+                
+                dataRe =  tmp_texture_ft.read(uint2(2*m+0, y));
+                dataIm = -tmp_texture_ft.read(uint2(2*m+1, y));
+                Re0   += (coefRe*dataRe - coefIm*dataIm);
+                Im0   += (coefIm*dataRe + coefRe*dataIm);
+                       
+                dataRe =  tmp_texture_ft.read(uint2(2*m+0, y+1));
+                dataIm = -tmp_texture_ft.read(uint2(2*m+1, y+1));
+                Re2   += (coefRe*dataRe - coefIm*dataIm);
+                Im2   += (coefIm*dataRe + coefRe*dataIm);
+                
+                dataRe =  tmp_texture_ft.read(uint2(2*m+0, y+2));
+                dataIm = -tmp_texture_ft.read(uint2(2*m+1, y+2));
+                Re1   += (coefRe*dataRe - coefIm*dataIm);
+                Im1   += (coefIm*dataRe + coefRe*dataIm);
+                
+                dataRe =  tmp_texture_ft.read(uint2(2*m+0, y+3));
+                dataIm = -tmp_texture_ft.read(uint2(2*m+1, y+3));
+                Re3   += (coefRe*dataRe - coefIm*dataIm);
+                Im3   += (coefIm*dataRe + coefRe*dataIm);
+            }
+            
+            // first butterfly
+            coefRe = cos(angle*2*dn);
+            coefIm = sin(angle*2*dn);
+            Re00 = Re0 + coefRe*Re1 - coefIm*Im1;
+            Im00 = Im0 + coefIm*Re1 + coefRe*Im1;
+            Re22 = Re2 + coefRe*Re3 - coefIm*Im3;
+            Im22 = Im2 + coefIm*Re3 + coefRe*Im3;
+                        
+            coefRe = cos(angle*2*(dn+tile_size_14));
+            coefIm = sin(angle*2*(dn+tile_size_14));
+            Re11 = Re0 + coefRe*Re1 - coefIm*Im1;
+            Im11 = Im0 + coefIm*Re1 + coefRe*Im1;
+            Re33 = Re2 + coefRe*Re3 - coefIm*Im3;
+            Im33 = Im2 + coefIm*Re3 + coefRe*Im3;
+            
+            // second butterfly
+            Re0 = Re00 + cos(angle*dn)*Re22                - sin(angle*dn)*Im22;
+            Re2 = Re00 + cos(angle*(dn+tile_size_24))*Re22 - sin(angle*(dn+tile_size_24))*Im22;
+            Re1 = Re11 + cos(angle*(dn+tile_size_14))*Re33 - sin(angle*(dn+tile_size_14))*Im33;
+            Re3 = Re11 + cos(angle*(dn+tile_size_34))*Re33 - sin(angle*(dn+tile_size_34))*Im33;
+                          
+            // write into temporary textures
+            out_texture.write(Re0/norm_factor, uint2(m, n));
+            out_texture.write(Re1/norm_factor, uint2(m, n+tile_size_14));
+            out_texture.write(Re2/norm_factor, uint2(m, n+tile_size_24));
+            out_texture.write(Re3/norm_factor, uint2(m, n+tile_size_34));
+        }
+    }
+}
+
+
+kernel void merge_frequency_domain_fft(texture2d<float, access::read> aligned_texture [[texture(0)]],
+                                       texture2d<float, access::read> diff_texture [[texture(1)]],
+                                       texture2d<float, access::read> ref_texture_ft [[texture(2)]],
+                                       texture2d<float, access::read_write> tmp_texture_ft [[texture(3)]],
+                                       texture2d<float, access::read_write> out_texture_ft [[texture(4)]],
+                                       texture2d<float, access::read> rms_texture [[texture(5)]],
+                                       texture2d<float, access::read> mismatch_texture [[texture(6)]],
+                                       constant float& robustness_norm [[buffer(0)]],
+                                       constant float& read_noise [[buffer(1)]],
+                                       constant float& max_motion_norm [[buffer(2)]],
+                                       constant int& tile_size [[buffer(3)]],
+                                       uint2 gid [[thread_position_in_grid]]) {
+    
+    // combine estimated shot noise and read noise
+    float4 const noise_est = rms_texture.read(gid) + read_noise;
+    // normalize with tile size and robustness norm
+    float4 const noise_norm = noise_est*tile_size*tile_size*robustness_norm;
+          
+    // increase of noise reduction for small values of mismatch
+    // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
+    float4 const mismatch = mismatch_texture.read(gid);
+    float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm)/sqrt(2.0f);
+    //float4 const motion_norm = float4(1.0f, 1.0f, 1.0f, 1.0f);
+        
+    // compute tile positions from gid
+    int const m0 = gid.x*tile_size;
+    int const n0 = gid.y*tile_size;
+
+    int const tile_size_14 = tile_size/4;
+    int const tile_size_24 = tile_size/2;
+    int const tile_size_34 = tile_size/4*3;
+    
+    // pre-calculate factors for sine and cosine calculation
+    float const angle = -2*PI/float(tile_size);
+
+    // pre-initalize some vectors
+    float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    
+    float coefRe, coefIm, weight, norm_cosine;
+    float4 Re0, Re1, Re2, Re3, Re00, Re11, Re22, Re33, Im0, Im1, Im2, Im3, Im00, Im11, Im22, Im33, dataRe, dataIm, weight4, refRe, refIm;
+    float4 Re0_cs, Re1_cs, Re2_cs, Re3_cs, Re00_cs, Re11_cs, Re22_cs, Re33_cs, Im0_cs, Im1_cs, Im2_cs, Im3_cs, Im00_cs, Im11_cs, Im22_cs, Im33_cs;
+        
+    // column-wise one-dimensional discrete Fourier transform along y-direction
+    for (int dm = 0; dm < tile_size; dm++) {
+        // exploit symmetry of real dft and calculate reduced number of rows
+        for (int dn = 0; dn <= tile_size/2; dn++) {
+             
+            int const m = m0 + dm;
+            int const n = n0 + dn;
+            
+            // fill with zeros
+            Re0 = zeros;
+            Im0 = zeros;
+            
+            for (int dy = 0; dy < tile_size; dy++) {
+                                  
+                int const y = n0 + dy;
+            
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts
+                norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
+                //norm_cosine = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
+                                
+                // calculate coefficients
+                coefRe = cos(angle*dn*dy);
+                coefIm = sin(angle*dn*dy);
+                
+                dataRe = norm_cosine*aligned_texture.read(uint2(m, y));
+                
+                Re0 += (coefRe * dataRe);
+                Im0 += (coefIm * dataRe);
+            }
+            
+            // write into temporary textures
+            tmp_texture_ft.write(Re0, uint2(2*m+0, n));
+            tmp_texture_ft.write(Im0, uint2(2*m+1, n));
+        }
+    }
+    
+    // row-wise one-dimensional fast Fourier transform along x-direction
+    // exploit symmetry of real dft and calculate reduced number of rows
+    for (int dn = 0; dn <= tile_size/2; dn++) {
+        // calculate 4 small discrete Fourier transforms
+        for (int dm = 0; dm < tile_size/4; dm++) {
+             
+            int const m = 2*(m0 + dm);
+            int const n = n0 + dn;
+            int const n2 = n0 + tile_size-dn;
+            
+            // fill with zeros
+            Re0 = Im0 = Re1 = Im1 = Re2 = Im2 = Re3 = Im3 = zeros;
+            Re0_cs = Im0_cs = Re1_cs = Im1_cs = Re2_cs = Im2_cs = Re3_cs = Im3_cs = zeros;
+            
+            for (int dx = 0; dx < tile_size; dx+=4) {
+                                  
+                int const x = 2*(m0 + dx);
+              
+                // calculate coefficients
+                coefRe = cos(angle*dm*dx);
+                coefIm = sin(angle*dm*dx);
+                
+                dataRe = tmp_texture_ft.read(uint2(x+0, n));
+                dataIm = tmp_texture_ft.read(uint2(x+1, n));
+                Re0   += (coefRe*dataRe - coefIm*dataIm);
+                Im0   += (coefIm*dataRe + coefRe*dataIm);
+                Re0_cs+= (coefRe*dataRe + coefIm*dataIm);
+                Im0_cs+= (coefIm*dataRe - coefRe*dataIm);
+                       
+                dataRe = tmp_texture_ft.read(uint2(x+2, n));
+                dataIm = tmp_texture_ft.read(uint2(x+3, n));
+                Re2   += (coefRe*dataRe - coefIm*dataIm);
+                Im2   += (coefIm*dataRe + coefRe*dataIm);
+                Re2_cs+= (coefRe*dataRe + coefIm*dataIm);
+                Im2_cs+= (coefIm*dataRe - coefRe*dataIm);
+                
+                dataRe = tmp_texture_ft.read(uint2(x+4, n));
+                dataIm = tmp_texture_ft.read(uint2(x+5, n));
+                Re1   += (coefRe*dataRe - coefIm*dataIm);
+                Im1   += (coefIm*dataRe + coefRe*dataIm);
+                Re1_cs+= (coefRe*dataRe + coefIm*dataIm);
+                Im1_cs+= (coefIm*dataRe - coefRe*dataIm);
+                
+                dataRe = tmp_texture_ft.read(uint2(x+6, n));
+                dataIm = tmp_texture_ft.read(uint2(x+7, n));
+                Re3   += (coefRe*dataRe - coefIm*dataIm);
+                Im3   += (coefIm*dataRe + coefRe*dataIm);
+                Re3_cs+= (coefRe*dataRe + coefIm*dataIm);
+                Im3_cs+= (coefIm*dataRe - coefRe*dataIm);
+            }
+            
+            // first butterfly
+            coefRe  = cos(angle*2*dm);
+            coefIm  = sin(angle*2*dm);
+            Re00    = Re0    + coefRe*Re1    - coefIm*Im1;
+            Im00    = Im0    + coefIm*Re1    + coefRe*Im1;
+            Re22    = Re2    + coefRe*Re3    - coefIm*Im3;
+            Im22    = Im2    + coefIm*Re3    + coefRe*Im3;
+            Re00_cs = Re0_cs + coefRe*Re1_cs - coefIm*Im1_cs;
+            Im00_cs = Im0_cs + coefIm*Re1_cs + coefRe*Im1_cs;
+            Re22_cs = Re2_cs + coefRe*Re3_cs - coefIm*Im3_cs;
+            Im22_cs = Im2_cs + coefIm*Re3_cs + coefRe*Im3_cs;
+                        
+            coefRe  = cos(angle*2*(dm+tile_size_14));
+            coefIm  = sin(angle*2*(dm+tile_size_14));
+            Re11    = Re0    + coefRe*Re1    - coefIm*Im1;
+            Im11    = Im0    + coefIm*Re1    + coefRe*Im1;
+            Re33    = Re2    + coefRe*Re3    - coefIm*Im3;
+            Im33    = Im2    + coefIm*Re3    + coefRe*Im3;
+            Re11_cs = Re0_cs + coefRe*Re1_cs - coefIm*Im1_cs;
+            Im11_cs = Im0_cs + coefIm*Re1_cs + coefRe*Im1_cs;
+            Re33_cs = Re2_cs + coefRe*Re3_cs - coefIm*Im3_cs;
+            Im33_cs = Im2_cs + coefIm*Re3_cs + coefRe*Im3_cs;
+            
+            // second butterfly
+            coefRe = cos(angle*dm);
+            coefIm = sin(angle*dm);
+            Re0    = Re00    + coefRe*Re22    - coefIm*Im22;
+            Im0    = Im00    + coefIm*Re22    + coefRe*Im22;
+            Re0_cs = Re00_cs + coefRe*Re22_cs - coefIm*Im22_cs;
+            Im0_cs = Im00_cs + coefIm*Re22_cs + coefRe*Im22_cs;
+            
+            coefRe = cos(angle*(dm+tile_size_24));
+            coefIm = sin(angle*(dm+tile_size_24));
+            Re2    = Re00    + coefRe*Re22    - coefIm*Im22;
+            Im2    = Im00    + coefIm*Re22    + coefRe*Im22;
+            Re2_cs = Re00_cs + coefRe*Re22_cs - coefIm*Im22_cs;
+            Im2_cs = Im00_cs + coefIm*Re22_cs + coefRe*Im22_cs;
+            
+            coefRe = cos(angle*(dm+tile_size_14));
+            coefIm = sin(angle*(dm+tile_size_14));
+            Re1    = Re11    + coefRe*Re33    - coefIm*Im33;
+            Im1    = Im11    + coefIm*Re33    + coefRe*Im33;
+            Re1_cs = Re11_cs + coefRe*Re33_cs - coefIm*Im33_cs;
+            Im1_cs = Im11_cs + coefIm*Re33_cs + coefRe*Im33_cs;
+            
+            coefRe = cos(angle*(dm+tile_size_34));
+            coefIm = sin(angle*(dm+tile_size_34));
+            Re3    = Re11    + coefRe*Re33    - coefIm*Im33;
+            Im3    = Im11    + coefIm*Re33    + coefRe*Im33;
+            Re3_cs = Re11_cs + coefRe*Re33_cs - coefIm*Im33_cs;
+            Im3_cs = Im11_cs + coefIm*Re33_cs + coefRe*Im33_cs;
+               
+            // Re0, Im0 ==================================================
+            refRe = ref_texture_ft.read(uint2(m+0, n));
+            refIm = ref_texture_ft.read(uint2(m+1, n));
+            
+            // calculation of merging weight by Wiener shrinkage
+            weight4 = (refRe-Re0)*(refRe-Re0) + (refIm-Im0)*(refIm-Im0);
+            weight4 = weight4/(weight4 + motion_norm*noise_norm);
+            weight  = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+                        
+            // merging of two textures
+            out_texture_ft.write( (out_texture_ft.read(uint2(m+0, n)) + (1.0f-weight)*Re0 + weight*refRe) , uint2(m+0, n));
+            out_texture_ft.write( (out_texture_ft.read(uint2(m+1, n)) + (1.0f-weight)*Im0 + weight*refIm) , uint2(m+1, n));
+             
+            // Re1, Im1 ==================================================
+            refRe = ref_texture_ft.read(uint2(m+tile_size_24+0, n));
+            refIm = ref_texture_ft.read(uint2(m+tile_size_24+1, n));
+            
+            // calculation of merging weight by Wiener shrinkage
+            weight4 = (refRe-Re1)*(refRe-Re1) + (refIm-Im1)*(refIm-Im1);
+            weight4 = weight4/(weight4 + motion_norm*noise_norm);
+            weight  = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+                        
+            // merging of two textures
+            out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size_24+0, n)) + (1.0f-weight)*Re1 + weight*refRe) , uint2(m+tile_size_24+0, n));
+            out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size_24+1, n)) + (1.0f-weight)*Im1 + weight*refIm) , uint2(m+tile_size_24+1, n));
+            
+            // Re2, Im2 ==================================================
+            refRe = ref_texture_ft.read(uint2(m+tile_size+0, n));
+            refIm = ref_texture_ft.read(uint2(m+tile_size+1, n));
+            
+            // calculation of merging weight by Wiener shrinkage
+            weight4 = (refRe-Re2)*(refRe-Re2) + (refIm-Im2)*(refIm-Im2);
+            weight4 = weight4/(weight4 + motion_norm*noise_norm);
+            weight  = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+                        
+            // merging of two textures
+            out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size+0, n)) + (1.0f-weight)*Re2 + weight*refRe) , uint2(m+tile_size+0, n));
+            out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size+1, n)) + (1.0f-weight)*Im2 + weight*refIm) , uint2(m+tile_size+1, n));
+            
+            // Re3, Im3 ==================================================
+            refRe = ref_texture_ft.read(uint2(m+tile_size_24*3+0, n));
+            refIm = ref_texture_ft.read(uint2(m+tile_size_24*3+1, n));
+            
+            // calculation of merging weight by Wiener shrinkage
+            weight4 = (refRe-Re3)*(refRe-Re3) + (refIm-Im3)*(refIm-Im3);
+            weight4 = weight4/(weight4 + motion_norm*noise_norm);
+            weight  = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+                        
+            // merging of two textures
+            out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size_24*3+0, n)) + (1.0f-weight)*Re3 + weight*refRe) , uint2(m+tile_size_24*3+0, n));
+            out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size_24*3+1, n)) + (1.0f-weight)*Im3 + weight*refIm) , uint2(m+tile_size_24*3+1, n));
+            
+            // exploit symmetry of real dft and calculate values for remaining rows
+            if(n2 < n0+tile_size & n2 != n0+tile_size/2)
+            {
+                // Re0, Im0 ==================================================
+                refRe = ref_texture_ft.read(uint2(m+0, n2));
+                refIm = ref_texture_ft.read(uint2(m+1, n2));
+                
+                // calculation of merging weight by Wiener shrinkage
+                weight4 = (refRe-Re0_cs)*(refRe-Re0_cs) + (refIm-Im0_cs)*(refIm-Im0_cs);
+                weight4 = weight4/(weight4 + motion_norm*noise_norm);
+                weight  = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+                            
+                // merging of two textures
+                out_texture_ft.write( (out_texture_ft.read(uint2(m+0, n2)) + (1.0f-weight)*Re0_cs + weight*refRe) , uint2(m+0, n2));
+                out_texture_ft.write( (out_texture_ft.read(uint2(m+1, n2)) + (1.0f-weight)*Im0_cs + weight*refIm) , uint2(m+1, n2));
+                 
+                // Re1, Im1 ==================================================
+                refRe = ref_texture_ft.read(uint2(m+tile_size_24+0, n2));
+                refIm = ref_texture_ft.read(uint2(m+tile_size_24+1, n2));
+                
+                // calculation of merging weight by Wiener shrinkage
+                weight4 = (refRe-Re1_cs)*(refRe-Re1_cs) + (refIm-Im1_cs)*(refIm-Im1_cs);
+                weight4 = weight4/(weight4 + motion_norm*noise_norm);
+                weight  = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+                            
+                // merging of two textures
+                out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size_24+0, n2)) + (1.0f-weight)*Re1_cs + weight*refRe) , uint2(m+tile_size_24+0, n2));
+                out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size_24+1, n2)) + (1.0f-weight)*Im1_cs + weight*refIm) , uint2(m+tile_size_24+1, n2));
+                
+                // Re2, Im2 ==================================================
+                refRe = ref_texture_ft.read(uint2(m+tile_size+0, n2));
+                refIm = ref_texture_ft.read(uint2(m+tile_size+1, n2));
+                
+                // calculation of merging weight by Wiener shrinkage
+                weight4 = (refRe-Re2_cs)*(refRe-Re2_cs) + (refIm-Im2_cs)*(refIm-Im2_cs);
+                weight4 = weight4/(weight4 + motion_norm*noise_norm);
+                weight  = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+                            
+                // merging of two textures
+                out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size+0, n2)) + (1.0f-weight)*Re2_cs + weight*refRe) , uint2(m+tile_size+0, n2));
+                out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size+1, n2)) + (1.0f-weight)*Im2_cs + weight*refIm) , uint2(m+tile_size+1, n2));
+                
+                // Re3, Im3 ==================================================
+                refRe = ref_texture_ft.read(uint2(m+tile_size_24*3+0, n2));
+                refIm = ref_texture_ft.read(uint2(m+tile_size_24*3+1, n2));
+                
+                // calculation of merging weight by Wiener shrinkage
+                weight4 = (refRe-Re3_cs)*(refRe-Re3_cs) + (refIm-Im3_cs)*(refIm-Im3_cs);
+                weight4 = weight4/(weight4 + motion_norm*noise_norm);
+                weight  = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+                            
+                // merging of two textures
+                out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size_24*3+0, n2)) + (1.0f-weight)*Re3_cs + weight*refRe) , uint2(m+tile_size_24*3+0, n2));
+                out_texture_ft.write( (out_texture_ft.read(uint2(m+tile_size_24*3+1, n2)) + (1.0f-weight)*Im3_cs + weight*refIm) , uint2(m+tile_size_24*3+1, n2));
+            }
+        }
+    }
 }
