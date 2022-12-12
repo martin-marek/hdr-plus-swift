@@ -516,7 +516,7 @@ func align_and_merge(image_urls: [URL], progress: ProcessingProgress, ref_idx: I
     
     // ensure that all files are .dng, converting them if necessary
     var dng_urls = image_urls
-    let convert_to_dng = image_extension != "dng"
+    let convert_to_dng = image_extension.lowercased() != "dng"
     DispatchQueue.main.async { progress.includes_conversion = convert_to_dng }
     if convert_to_dng {
         // check if dng converter is installed
