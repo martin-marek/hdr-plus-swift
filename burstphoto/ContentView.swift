@@ -195,6 +195,8 @@ struct ProcessingView: View {
 struct SettingsView: View {
     let tile_sizes = [16, 32, 64]
     let search_distances = ["Low", "Medium", "High"]
+    
+    @State private var isEditing = false
 
     var body: some View {
         VStack {
@@ -223,10 +225,12 @@ struct SettingsView: View {
             Spacer()
             
             VStack(alignment: .leading) {
-                Text("Noise level / Robustness").font(.system(size: 14, weight: .medium))
+                Text("Noise level / Robustness:  \(Int(AppSettings.robustness+0.1))").font(.system(size: 14, weight: .medium)).foregroundColor(isEditing ? .primary : .primary)
                 HStack {
                     Text(" Low")
-                    Slider(value: AppSettings.$robustness, in: 0...12, step: 1.0)
+                    Slider(value: AppSettings.$robustness, in: 0...24,// step: 1.0,
+                           onEditingChanged: { editing in                     isEditing = editing }
+                    )
                     Text("High")
                 }
             }.padding(20)

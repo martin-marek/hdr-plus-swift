@@ -68,8 +68,7 @@ let forward_dft_state = try! device.makeComputePipelineState(function: mfl.makeF
 let forward_fft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "forward_fft")!)
 let backward_dft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "backward_dft")!)
 let backward_fft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "backward_fft")!)
-let merge_frequency_domain_dft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "merge_frequency_domain_dft")!)
-let merge_frequency_domain_fft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "merge_frequency_domain_fft")!)
+let merge_frequency_domain_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "merge_frequency_domain")!)
 let calculate_mismatch_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_mismatch_rgba")!)
 let normalize_mismatch_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_mismatch")!)
 
@@ -174,18 +173,18 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         let tile_size_merge = Int(16)
           
         // derive normalized robustness value: each step yields another factor of two with the idea that the variance of shot noise increases by a factor of two per iso level
-        let robustness_norm = pow(2.0, (-robustness + 8.0));
+        let robustness_norm = pow(2.0, (-Double(Int(robustness+0.1))/2.0 + 8.0));
         
         // derive read noise with the idea that read noise increases stronger than a factor of two per iso level to increase noise reduction in darker regions relative to bright regions
-        let read_noise = pow(pow(2.0, (-robustness + 10.0)), 1.6);
+        let read_noise = pow(pow(2.0, (-Double(Int(robustness+0.1))/2.0 + 10.0)), 1.6);
         
         // derive a maximum value for the motion norm with the idea that denoising can be inscreased in static regions with good alignment
         // Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a linear scaling derived from the robustness value
         // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-        let max_motion_norm = max(1.0, pow(1.35, (12.0-robustness-1.35)));
+        let max_motion_norm = max(1.0, pow(1.35, (12.0-Double(Int(robustness+0.1))/2.0-1.35)));
         
         // set mode for Fourier transformations ("DFT" or "FFT")
-        let ft_mode = "FFT"
+        let ft_mode = (tile_size_merge <= Int(16) ? "FFT" : "DFT")
         
         // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process
         try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
@@ -202,7 +201,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         print("Merging in the spatial domain...")
     
         let kernel_size = Int(8) // kernel size of binomial filtering used for blurring the image
-        let robustness_norm = 0.08*pow(sqrt(2), robustness) // use this value as a replacement of robustness for control of motion robustness / noise level
+        let robustness_norm = 0.08*pow(sqrt(2), Double(Int(robustness+0.1))/2.0) // use this value as a replacement of robustness for control of motion robustness / noise level
     
         try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
     }
@@ -373,10 +372,26 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     ref_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
     let ref_texture_ft = device.makeTexture(descriptor: ref_texture_ft_descriptor)!
     
+    let aligned_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+tile_size_merge+2*pad_merge_x), height: (texture_height_orig+tile_size_merge+2*pad_merge_y)/2, mipmapped: false)
+    aligned_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
+    let aligned_texture_ft = device.makeTexture(descriptor: aligned_texture_ft_descriptor)!
+    
     let tmp_texture_ft_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: (texture_width_orig+tile_size_merge+2*pad_merge_x), height: (texture_height_orig+tile_size_merge+2*pad_merge_y)/2, mipmapped: false)
     tmp_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
     let tmp_texture_ft = device.makeTexture(descriptor: tmp_texture_ft_descriptor)!
-           
+         
+    let ref_texture_mag_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: (texture_width_orig+tile_size_merge+2*pad_merge_x)/2, height: (texture_height_orig+tile_size_merge+2*pad_merge_y)/2, mipmapped: false)
+    ref_texture_mag_descriptor.usage = [.shaderRead, .shaderWrite]
+    let ref_texture_mag = device.makeTexture(descriptor: ref_texture_mag_descriptor)!
+    
+    let aligned_texture_mag_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: (texture_width_orig+tile_size_merge+2*pad_merge_x)/2, height: (texture_height_orig+tile_size_merge+2*pad_merge_y)/2, mipmapped: false)
+    aligned_texture_mag_descriptor.usage = [.shaderRead, .shaderWrite]
+    let aligned_texture_mag = device.makeTexture(descriptor: aligned_texture_mag_descriptor)!
+    
+    let tmp_texture_mag_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: (texture_width_orig+tile_size_merge+2*pad_merge_x)/2, height: (texture_height_orig+tile_size_merge+2*pad_merge_y)/2, mipmapped: false)
+    tmp_texture_mag_descriptor.usage = [.shaderRead, .shaderWrite]
+    let tmp_texture_mag = device.makeTexture(descriptor: tmp_texture_mag_descriptor)!
+    
     // transform ref_texture to frequency domain
     let tile_info_merge = TileInfo(tile_size: tile_size, tile_size_merge: tile_size_merge, search_dist: 0, n_tiles_x: (texture_width_orig+tile_size_merge+2*pad_merge_x)/(2*tile_size_merge), n_tiles_y: (texture_height_orig+tile_size_merge+2*pad_merge_y)/(2*tile_size_merge), n_pos_1d: 0, n_pos_2d: 0)
   
@@ -386,7 +401,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     
     // transform reference texture into the Fourier space
     // to improve performance, textures are converted into RGBA pixel format that SIMD instructions can be applied
-    forward_ft(ref_texture_rgba, ref_texture_ft, tmp_texture_ft, tile_info_merge, mode: ft_mode)
+    forward_ft(ref_texture_rgba, ref_texture_ft, ref_texture_mag, tmp_texture_ft, tile_info_merge, mode: ft_mode)
     
     let final_texture_ft = copy_texture(ref_texture_ft)
     
@@ -421,10 +436,14 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         //let capture_descriptor = MTLCaptureDescriptor()
         //capture_descriptor.captureObject = device
         //try! capture_manager.startCapture(with: capture_descriptor)
-                
+        
+        // transform aligned texture into the Fourier space
+        // to improve performance, textures are converted into RGBA pixel format that SIMD instructions can be applied
+        forward_ft(aligned_texture_rgba, aligned_texture_ft, aligned_texture_mag, tmp_texture_ft, tile_info_merge, mode: ft_mode)
+        
         // merge aligned comparison texture with reference texture in the frequency domain
         // to improve performance, convert textures into RGBA pixel format that SIMD instructions can be applied and crop image frame that unneccessary zeros are removed at the borders
-        merge_frequency_domain(aligned_texture_rgba, ref_texture_rgba, ref_texture_ft, tmp_texture_ft, final_texture_ft, rms_texture, mismatch_texture, robustness_norm, read_noise, max_motion_norm, tile_info_merge, mode: ft_mode);
+        merge_frequency_domain(ref_texture_ft, ref_texture_mag, aligned_texture_ft, aligned_texture_mag, final_texture_ft, tmp_texture_mag, rms_texture, mismatch_texture, robustness_norm, read_noise, max_motion_norm, tile_info_merge);
                
         // stop debug capture
         //capture_manager.stopCapture()
@@ -1123,7 +1142,7 @@ func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLT
 }
 
 
-func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ tile_info: TileInfo, mode: String) {
+func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ out_texture_mag: MTLTexture, _ tmp_texture_ft: MTLTexture, _ tile_info: TileInfo, mode: String) {
   
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -1134,6 +1153,7 @@ func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_te
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(tmp_texture_ft, index: 1)
     command_encoder.setTexture(out_texture_ft, index: 2)
+    command_encoder.setTexture(out_texture_mag, index: 3)
     command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
@@ -1167,21 +1187,22 @@ func backward_ft(_ in_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ ti
 }
 
 
-func merge_frequency_domain(_ aligned_texture: MTLTexture, _ ref_texture: MTLTexture, _ ref_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ mismatch_texture: MTLTexture, _ robustness_norm: Double, _ read_noise: Double, _ max_motion_norm: Double, _ tile_info: TileInfo, mode: String) {
-  
+func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ ref_texture_mag: MTLTexture, _ aligned_texture_ft: MTLTexture, _ aligned_texture_mag: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_texture_mag: MTLTexture, _ rms_texture: MTLTexture, _ mismatch_texture: MTLTexture, _ robustness_norm: Double, _ read_noise: Double, _ max_motion_norm: Double, _ tile_info: TileInfo) {
+        
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = (mode == "DFT" ? merge_frequency_domain_dft_state : merge_frequency_domain_fft_state)
+    let state = merge_frequency_domain_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(aligned_texture, index: 0)
-    command_encoder.setTexture(ref_texture, index: 1)
-    command_encoder.setTexture(ref_texture_ft, index: 2)
-    command_encoder.setTexture(tmp_texture_ft, index: 3)
+    command_encoder.setTexture(ref_texture_ft, index: 0)
+    command_encoder.setTexture(ref_texture_mag, index: 1)
+    command_encoder.setTexture(aligned_texture_ft, index: 2)
+    command_encoder.setTexture(aligned_texture_mag, index: 3)
     command_encoder.setTexture(out_texture_ft, index: 4)
-    command_encoder.setTexture(rms_texture, index: 5)
-    command_encoder.setTexture(mismatch_texture, index: 6)
+    command_encoder.setTexture(tmp_texture_mag, index: 5)
+    command_encoder.setTexture(rms_texture, index: 6)
+    command_encoder.setTexture(mismatch_texture, index: 7)
     command_encoder.setBytes([Float32(robustness_norm)], length: MemoryLayout<Float32>.stride, index: 0)
     command_encoder.setBytes([Float32(read_noise)], length: MemoryLayout<Float32>.stride, index: 1)
     command_encoder.setBytes([Float32(max_motion_norm)], length: MemoryLayout<Float32>.stride, index: 2)    
