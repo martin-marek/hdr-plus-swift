@@ -8,7 +8,7 @@ enum AppState {
 class AppSettings: ObservableObject {
     @AppStorage("tile_size") static var tile_size: Int = 16
     @AppStorage("search_distance") static var search_distance: String = "Medium"
-    @AppStorage("robustness") static var robustness: Double = 6.0
+    @AppStorage("robustness") static var robustness: Double = 12.0
 }
 
 struct MyAlert {
@@ -225,7 +225,7 @@ struct SettingsView: View {
             Spacer()
             
             VStack(alignment: .leading) {
-                Text("Noise level / Robustness:  \(Int(AppSettings.robustness+0.1))").font(.system(size: 14, weight: .medium)).foregroundColor(isEditing ? .primary : .primary)
+                Text("Noise level / Robustness:  \(Int(AppSettings.robustness+0.5))").font(.system(size: 14, weight: .medium)).foregroundColor(isEditing ? .primary : .primary)
                 HStack {
                     Text(" Low")
                     Slider(value: AppSettings.$robustness, in: 0...24,// step: 1.0,
