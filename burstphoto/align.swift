@@ -77,7 +77,7 @@ let normalize_mismatch_state = try! device.makeComputePipelineState(function: mf
 // Main functions
 // ===========================================================================================================
 
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 1) throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, robustness: Double = 14.0) throws -> URL {
     
     // check that all images are of the same extension
     let image_extension = image_urls[0].pathExtension
@@ -125,7 +125,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     // set output location
     let in_url = dng_urls[ref_idx]
     let in_filename = in_url.deletingPathExtension().lastPathComponent
-    let out_filename = in_filename + "_merged_r\(Int(robustness+0.1)).dng"
+    let out_filename = in_filename + "_merged_nr\(Int(robustness+0.5)).dng"
     let out_path = (final_dng_conversion ? tmp_dir : out_dir) + out_filename
     var out_url = URL(fileURLWithPath: out_path)
     
@@ -154,7 +154,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     fill_with_zeros(final_texture)
     
     // special mode: simple temporal averaging without alignment and robust merging
-    if robustness == 0.0 {
+    if robustness == 25.0 {
         print("Special mode: temporal averaging only...")
           
         // iterate over comparison images
@@ -173,15 +173,16 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         let tile_size_merge = Int(16)
           
         // derive normalized robustness value: each step yields another factor of two with the idea that the variance of shot noise increases by a factor of two per iso level
-        let robustness_norm = pow(2.0, (-Double(Int(robustness+0.5))/2.0 + 8.0));
+        let robustness_rev = 0.5*(25.0-Double(Int(robustness+0.5)))
+        let robustness_norm = pow(2.0, (-robustness_rev + 8.0));
         
         // derive read noise with the idea that read noise increases stronger than a factor of two per iso level to increase noise reduction in darker regions relative to bright regions
-        let read_noise = pow(pow(2.0, (-Double(Int(robustness+0.5))/2.0 + 10.0)), 1.6);
+        let read_noise = pow(pow(2.0, (-robustness_rev + 10.0)), 1.6);
         
         // derive a maximum value for the motion norm with the idea that denoising can be inscreased in static regions with good alignment
         // Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a linear scaling derived from the robustness value
         // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-        let max_motion_norm = max(1.0, pow(1.35, (12.0-Double(Int(robustness+0.5))/2.0-1.35)));
+        let max_motion_norm = max(1.0, pow(1.35, (12.0-robustness_rev-1.35)));
         
         // set mode for Fourier transformations ("DFT" or "FFT")
         let ft_mode = (tile_size_merge <= Int(16) ? "FFT" : "DFT")
@@ -201,7 +202,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         print("Merging in the spatial domain...")
     
         let kernel_size = Int(8) // kernel size of binomial filtering used for blurring the image
-        let robustness_norm = 0.08*pow(sqrt(2), Double(Int(robustness+0.5))/2.0) // use this value as a replacement of robustness for control of motion robustness / noise level
+        let robustness_rev = 0.5*(25.0-Double(Int(robustness+0.5)))
+        let robustness_norm = 0.08*pow(sqrt(2), robustness_rev) // use this value as a replacement of robustness for control of motion robustness / noise level
     
         try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
     }
@@ -219,7 +221,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     
     // check if dng converter is installed
     if final_dng_conversion {
-        let path_delete = out_dir + in_filename + "_merged_r\(Int(robustness+0.5)).dng"
+        let path_delete = out_dir + in_filename + "_merged_nr\(Int(robustness+0.5)).dng"
         
         // delete dng file if an old version exists
         if FileManager.default.fileExists(atPath: path_delete) {

@@ -8,7 +8,7 @@ enum AppState {
 class AppSettings: ObservableObject {
     @AppStorage("tile_size") static var tile_size: Int = 16
     @AppStorage("search_distance") static var search_distance: String = "Medium"
-    @AppStorage("robustness") static var robustness: Double = 12.0
+    @AppStorage("robustness") static var robustness: Double = 14.0   
 }
 
 struct MyAlert {
@@ -197,7 +197,7 @@ struct SettingsView: View {
     let search_distances = ["Low", "Medium", "High"]
     
     @State private var isEditing = false
-
+     
     var body: some View {
         VStack {
             Spacer()
@@ -225,14 +225,24 @@ struct SettingsView: View {
             Spacer()
             
             VStack(alignment: .leading) {
-                Text("Noise level / Robustness:  \(Int(AppSettings.robustness+0.5))").font(.system(size: 14, weight: .medium)).foregroundColor(isEditing ? .primary : .primary)
+                Text("Noise reduction:  \(Int(AppSettings.robustness+0.5))")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(isEditing ? .secondary : .primary)
                 HStack {
-                    Text(" Low")
-                    Slider(value: AppSettings.$robustness, in: 0...24,// step: 1.0,
-                           onEditingChanged: { editing in                     isEditing = editing }
+                    Slider(value: AppSettings.$robustness, in: 1...25, step: 1.0,
+                            onEditingChanged: { editing in                     isEditing = editing }
                     )
-                    Text("High")
+                    Stepper("", value: AppSettings.$robustness, in: 1...25,
+                            onEditingChanged: { editing in                     isEditing = editing }
+                    )
                 }
+                Spacer()
+                Text("Small values increase motion robustness and image sharpness.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("Large values increase the strength of noise reduction.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
             }.padding(20)
             
         }
