@@ -16,12 +16,12 @@ struct MyProgram {
         // create a list of bursts to process
         let burst_dirs = [
                      
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child/Test/",
+            "/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child/Test/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child Kopie/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Klavier/Test/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/burst002_iso1000/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/33TJ_20150614_232110_642_dng order/",
-            "/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/bench-1/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/bench-1/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/martin 7/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Dark Sky/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Jozef-1-dng/",
@@ -42,12 +42,12 @@ struct MyProgram {
 
             // set alignment params
             let ref_idx = image_urls.count / 2
-            let robustness = 15.0 //9.0 for child, 15.0 for bench-1, 17.0 for martin 7, 13.0 for Google test, 7.0 for Klavier
+            let noise_reduction = 9.0 //9.0 for child, 15.0 for bench-1, 17.0 for martin 7, 13.0 for Google test and Dark Sky, 7.0 for Klavier
             let search_distance = "Medium"
             let tile_size = 32
             
             // align+merge
-            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, robustness: robustness)
+            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, noise_reduction: noise_reduction)
             
             print("Image saved in:", out_url.relativePath)            
         }

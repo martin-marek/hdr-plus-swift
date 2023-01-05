@@ -8,7 +8,7 @@ enum AppState {
 class AppSettings: ObservableObject {
     @AppStorage("tile_size") static var tile_size: Int = 16
     @AppStorage("search_distance") static var search_distance: String = "Medium"
-    @AppStorage("robustness") static var robustness: Double = 14.0   
+    @AppStorage("noise_reduction") static var noise_reduction: Double = 14.0
 }
 
 struct MyAlert {
@@ -225,14 +225,14 @@ struct SettingsView: View {
             Spacer()
             
             VStack(alignment: .leading) {
-                Text("Noise reduction:  \(Int(AppSettings.robustness+0.5))")
+                Text("Noise reduction:  \(Int(AppSettings.noise_reduction+0.5))")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(isEditing ? .secondary : .primary)
                 HStack {
-                    Slider(value: AppSettings.$robustness, in: 1...25, step: 1.0,
+                    Slider(value: AppSettings.$noise_reduction, in: 1...25, step: 1.0,
                             onEditingChanged: { editing in                     isEditing = editing }
                     )
-                    Stepper("", value: AppSettings.$robustness, in: 1...25,
+                    Stepper("", value: AppSettings.$noise_reduction, in: 1...25,
                             onEditingChanged: { editing in                     isEditing = editing }
                     )
                 }
@@ -319,7 +319,7 @@ struct MyDropDelegate: DropDelegate {
                 let ref_idx = image_urls.count / 2
 
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, noise_reduction: AppSettings.noise_reduction)
                 
                 // inform the user about the saved image
                 app_state = .image_saved

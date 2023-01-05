@@ -117,40 +117,30 @@ kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)
     // load args
     int texture_width = in_texture.get_width();
     
-    // set kernel weights of binomial filter and clamp kernel_size to a maximum of 8
-    int const kernel_size_clamped = clamp(kernel_size, 0, 8);
-   
-    float3x3 binomial_weights = float3x3({1, 0, 0}, {0, 0, 0}, {0, 0, 0});
+    // clamp kernel_size to a maximum of 8
+    int const kernel_size_c = clamp(kernel_size, 0, 8);
+    
+    // set kernel weights of binomial filter
+    float bw[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+    
+    if(kernel_size_c == 1)      {bw[0]=    2; bw[1]=    1;}
+    else if(kernel_size_c == 2) {bw[0]=    6; bw[1]=    4; bw[2]=   1;}
+    else if(kernel_size_c == 3) {bw[0]=   20; bw[1]=   15; bw[2]=   6; bw[3]=   1;}
+    else if(kernel_size_c == 4) {bw[0]=   70; bw[1]=   56; bw[2]=  28; bw[3]=   8; bw[4]=   1;}
+    else if(kernel_size_c == 5) {bw[0]=  252; bw[1]=  210; bw[2]= 120; bw[3]=  45; bw[4]=  10; bw[5]=  1;}
+    else if(kernel_size_c == 6) {bw[0]=  924; bw[1]=  792; bw[2]= 495; bw[3]= 220; bw[4]=  66; bw[5]= 12; bw[6]=  1;}
+    else if(kernel_size_c == 7) {bw[0]= 3432; bw[1]= 3003; bw[2]=2002; bw[3]=1001; bw[4]= 364; bw[5]= 91; bw[6]= 14; bw[7]= 1;}
+    else if(kernel_size_c == 8) {bw[0]=12870; bw[1]=11440; bw[2]=8008; bw[3]=4368; bw[4]=1820; bw[5]=560; bw[6]=120; bw[7]=16; bw[8]=1;}
 
-    if(kernel_size_clamped == 1)
-        binomial_weights = float3x3({2, 1, 0}, {0, 0, 0}, {0, 0, 0});
-    else if(kernel_size_clamped == 2)
-        binomial_weights = float3x3({6, 4, 1}, {0, 0, 0}, {0, 0, 0});
-    else if(kernel_size_clamped == 3)
-        binomial_weights = float3x3({20, 15, 6}, {1, 0, 0}, {0, 0, 0});
-    else if(kernel_size_clamped == 4)
-        binomial_weights = float3x3({70, 56, 28}, {8, 1, 0}, {0, 0, 0});
-    else if(kernel_size_clamped == 5)
-        binomial_weights = float3x3({252, 210, 120}, {45, 10, 1}, {0, 0, 0});
-    else if(kernel_size_clamped == 6)
-        binomial_weights = float3x3({924, 792, 495}, {220, 66, 12}, {1, 0, 0});
-    else if(kernel_size_clamped == 7)
-        binomial_weights = float3x3({3432, 3003, 2002}, {1001, 364, 91}, {14, 1, 0});
-    else if(kernel_size_clamped == 8)
-        binomial_weights = float3x3({12870, 11440, 8008}, {4368, 1820, 560}, {120, 16, 1});
-        
     // compute a sigle output pixel
     float total_intensity = 0;
     float total_weight = 0;
     int y = gid.y;
-    for (int dx = -kernel_size_clamped; dx <= kernel_size_clamped; dx++) {
+    for (int dx = -kernel_size_c; dx <= kernel_size_c; dx++) {
         int x = gid.x + mosaic_pettern_width*dx;
         if (0 <= x && x < texture_width) {
-            
-            int const m = int(abs(dx)/3.0f+0.1f);
-            int const n = int(abs(dx) % 3);
-            
-            float const weight = float(binomial_weights[m][n]);
+
+            float const weight = bw[abs(dx)];
             total_intensity += weight * in_texture.read(uint2(x, y)).r;
             total_weight += weight;
         }
@@ -172,39 +162,29 @@ kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)
     int texture_height = in_texture.get_height();
     
     // set kernel weights of binomial filter and clamp kernel_size to a maximum of 8
-    int const kernel_size_clamped = clamp(kernel_size, 0, 8);
+    int const kernel_size_c = clamp(kernel_size, 0, 8);
    
-    float3x3 binomial_weights = float3x3({1, 0, 0}, {0, 0, 0}, {0, 0, 0});
-
-    if(kernel_size_clamped == 1)
-        binomial_weights = float3x3({2, 1, 0}, {0, 0, 0}, {0, 0, 0});
-    else if(kernel_size_clamped == 2)
-        binomial_weights = float3x3({6, 4, 1}, {0, 0, 0}, {0, 0, 0});
-    else if(kernel_size_clamped == 3)
-        binomial_weights = float3x3({20, 15, 6}, {1, 0, 0}, {0, 0, 0});
-    else if(kernel_size_clamped == 4)
-        binomial_weights = float3x3({70, 56, 28}, {8, 1, 0}, {0, 0, 0});
-    else if(kernel_size_clamped == 5)
-        binomial_weights = float3x3({252, 210, 120}, {45, 10, 1}, {0, 0, 0});
-    else if(kernel_size_clamped == 6)
-        binomial_weights = float3x3({924, 792, 495}, {220, 66, 12}, {1, 0, 0});
-    else if(kernel_size_clamped == 7)
-        binomial_weights = float3x3({3432, 3003, 2002}, {1001, 364, 91}, {14, 1, 0});
-    else if(kernel_size_clamped == 8)
-        binomial_weights = float3x3({12870, 11440, 8008}, {4368, 1820, 560}, {120, 16, 1});
-        
+    // set kernel weights of binomial filter
+    float bw[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+    
+    if(kernel_size_c == 1)      {bw[0]=    2; bw[1]=    1;}
+    else if(kernel_size_c == 2) {bw[0]=    6; bw[1]=    4; bw[2]=   1;}
+    else if(kernel_size_c == 3) {bw[0]=   20; bw[1]=   15; bw[2]=   6; bw[3]=   1;}
+    else if(kernel_size_c == 4) {bw[0]=   70; bw[1]=   56; bw[2]=  28; bw[3]=   8; bw[4]=   1;}
+    else if(kernel_size_c == 5) {bw[0]=  252; bw[1]=  210; bw[2]= 120; bw[3]=  45; bw[4]=  10; bw[5]=  1;}
+    else if(kernel_size_c == 6) {bw[0]=  924; bw[1]=  792; bw[2]= 495; bw[3]= 220; bw[4]=  66; bw[5]= 12; bw[6]=  1;}
+    else if(kernel_size_c == 7) {bw[0]= 3432; bw[1]= 3003; bw[2]=2002; bw[3]=1001; bw[4]= 364; bw[5]= 91; bw[6]= 14; bw[7]= 1;}
+    else if(kernel_size_c == 8) {bw[0]=12870; bw[1]=11440; bw[2]=8008; bw[3]=4368; bw[4]=1820; bw[5]=560; bw[6]=120; bw[7]=16; bw[8]=1;}
+    
     // compute a sigle output pixel
     float total_intensity = 0;
     float total_weight = 0;
     int x = gid.x;
-    for (int dy = -kernel_size_clamped; dy <= kernel_size_clamped; dy++) {
+    for (int dy = -kernel_size_c; dy <= kernel_size_c; dy++) {
         int y = gid.y + mosaic_pettern_width*dy;
         if (0 <= y && y < texture_height) {
            
-            int const m = int(abs(dy)/3.0f+0.1f);
-            int const n = int(abs(dy) % 3);
-            
-            float const weight = float(binomial_weights[m][n]);
+            float const weight = bw[abs(dy)];
             total_intensity += weight * in_texture.read(uint2(x, y)).r;
             total_weight += weight;
         }
@@ -415,6 +395,91 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
     }
 }
 
+/*
+kernel void compute_tile_differences25(texture2d<float, access::read> ref_texture [[texture(0)]],
+                                       texture2d<float, access::read> comp_texture [[texture(1)]],
+                                       texture2d<int, access::read> prev_alignment [[texture(2)]],
+                                       texture3d<float, access::write> tile_diff [[texture(3)]],
+                                       constant int& downscale_factor [[buffer(0)]],
+                                       constant int& tile_size [[buffer(1)]],
+                                       constant int& search_dist [[buffer(2)]],
+                                       constant int& n_tiles_x [[buffer(3)]],
+                                       constant int& n_tiles_y [[buffer(4)]],
+                                       uint2 gid [[thread_position_in_grid]]) {
+    
+    // load args
+    int texture_width = ref_texture.get_width();
+    int texture_height = ref_texture.get_height();
+    int tile_half_size = tile_size / 2;
+    
+    int comp_tile_x, comp_tile_y;
+    
+    // compute tile position if previous alignment were 0
+    int x0 = int(floor( tile_half_size + float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
+    int y0 = int(floor( tile_half_size + float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
+    
+    // factor in previous alignmnet
+    int4 prev_align = prev_alignment.read(uint2(gid.x, gid.y));
+    int dx0 = downscale_factor * prev_align.x;
+    int dy0 = downscale_factor * prev_align.y;
+    
+    float diff[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    float tmp_ref[64];
+    float tmp_comp[68];
+    
+    for (int i = 0; i < 25; i++) {
+        diff[i] = 2*UINT16_MAX_VAL*tile_size*tile_size;
+    }
+    
+    for (int dy1 = -tile_half_size; dy1 < tile_half_size; dy1++) {
+        
+        for (int dx1 = -tile_half_size; dx1 < tile_half_size; dx1++) {
+            
+            int const ref_tile_x = x0 + dx1;
+            int const ref_tile_y = y0 + dy1;
+            
+            tmp_ref[dx1+tile_half_size] = ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r;
+        }
+        
+        for (int dy2 = -2; dy2 <= 2; dy2++) {
+            
+            comp_tile_y = y0 + dy0 + dy1 + dy2;
+            
+            if (comp_tile_y>=0 & comp_tile_y<texture_height) {
+                
+                for (int dx2 = -2; dx2 < tile_size+2; dx2++) {
+                    
+                    comp_tile_x = x0 + dx0 + dx2;
+                    
+                    if (comp_tile_x>=0 & comp_tile_x<texture_width) {
+                        tmp_comp[dx2+2] = comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r;
+                    }
+                }
+                
+                for (int dx2 = -2; dx2 <= 2; dx2++) {
+                    
+                    int const index = (dy2+2)*5 + (dx2+2);
+                    
+                    for (int i = 0; i < tile_size; i++) {
+                        
+                        comp_tile_x = x0 + dx0 + dx2 + i;
+                        
+                        if (comp_tile_x>=0 & comp_tile_x<texture_width) {
+                            diff[index] += (abs(tmp_ref[i] - tmp_comp[i+dx2+2]) - 2*UINT16_MAX_VAL);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // store tile differences
+    for (int i = 0; i < 25; i++)
+    {
+        tile_diff.write(diff[i], uint3(gid.x, gid.y, i));
+    }
+}
+*/
 
 kernel void compute_tile_alignments(texture3d<float, access::read> tile_diff [[texture(0)]],
                                     texture2d<int, access::read> prev_alignment [[texture(1)]],
@@ -756,7 +821,6 @@ kernel void calculate_rms_rgba(texture2d<float, access::read> ref_texture [[text
 kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]],
                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                         texture2d<float, access::write> out_texture_ft [[texture(2)]],
-                        texture2d<float, access::write> out_texture_mag [[texture(3)]],
                         constant int& tile_size [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]]) {
     
@@ -845,22 +909,6 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
             
             out_texture_ft.write(Re0, uint2(m+0, n));
             out_texture_ft.write(Im0, uint2(m+1, n));
-            
-            int const dm_shifted = (dm<tile_size/2 ? dm+tile_size/2 : dm-tile_size/2);
-            int const dn_shifted = (dn<tile_size/2 ? dn+tile_size/2 : dn-tile_size/2);
-            
-            mag = sqrt(Re0*Re0 + Im0*Im0);
-            out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m0+dm_shifted, n0+dn_shifted));
-             
-            // exploit symmetry of real dft and calculate values for remaining rows
-            if(n2 < n0+tile_size & n2 != n0+tile_size/2)
-            {
-                out_texture_ft.write(Re1, uint2(m+0, n2));
-                out_texture_ft.write(Im1, uint2(m+1, n2));
-                
-                mag = sqrt(Re1*Re1 + Im1*Im1);
-                out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m0+dm_shifted, n0+tile_size-dn_shifted));
-            }
         }
     }
 }
@@ -953,13 +1001,10 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(
 
 
 kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft [[texture(0)]],
-                                   texture2d<float, access::read> ref_texture_mag [[texture(1)]],
-                                   texture2d<float, access::read> aligned_texture_ft [[texture(2)]],
-                                   texture2d<float, access::read_write> aligned_texture_mag [[texture(3)]],
-                                   texture2d<float, access::read_write> out_texture_ft [[texture(4)]],
-                                   texture2d<float, access::read_write> tmp_texture_mag [[texture(5)]],
-                                   texture2d<float, access::read> rms_texture [[texture(6)]],
-                                   texture2d<float, access::read> mismatch_texture [[texture(7)]],
+                                   texture2d<float, access::read> aligned_texture_ft [[texture(1)]],
+                                   texture2d<float, access::read_write> out_texture_ft [[texture(2)]],
+                                   texture2d<float, access::read> rms_texture [[texture(3)]],
+                                   texture2d<float, access::read> mismatch_texture [[texture(4)]],
                                    constant float& robustness_norm [[buffer(0)]],
                                    constant float& read_noise [[buffer(1)]],
                                    constant float& max_motion_norm [[buffer(2)]],
@@ -980,74 +1025,67 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
     // compute tile positions from gid
     int const m0 = gid.x*tile_size;
     int const n0 = gid.y*tile_size;
-
-    float weight;
-    float4 refRe, refIm, alignedRe, alignedIm, mergedRe, mergedIm, weight4;
-    float4 binomial_weights = float4(20, 15, 6, 1);
     
-    // calculate ratio of magnitudes of complex frequency data
+    float const angle = -2*PI/float(tile_size);
+
+    float weight, coefRe, coefIm, shift_x, shift_y;
+    float4 refRe, refIm, refMag, alignedRe, alignedIm, alignedRe2, alignedIm2, alignedMag2, mergedRe, mergedIm, weight4, diff4;
+    
+    float total_diff[81];
+    // fill with zeros
+    for(int i = 0; i < 81; i++) {
+        total_diff[i] = 0.0f;
+    }
+    
+    // subpixel alignment: test shifts between -1.0 and +1.0 pixels (specified on the original pixel scale)
     for (int dn = 0; dn < tile_size; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
-         
-            int const m = m0 + dm;
+            
+            int const m = 2*(m0 + dm);
             int const n = n0 + dn;
             
-            float const ref_mag     = ref_texture_mag.read(uint2(m, n)).r;
-            float const aligned_mag = aligned_texture_mag.read(uint2(m, n)).r;
+            refRe = ref_texture_ft.read(uint2(m+0, n));
+            refIm = ref_texture_ft.read(uint2(m+1, n));
             
-            tmp_texture_mag.write(aligned_mag/ref_mag, uint2(m, n));
+            alignedRe = aligned_texture_ft.read(uint2(m+0, n));
+            alignedIm = aligned_texture_ft.read(uint2(m+1, n));
+    
+            for(int i = 0; i < 81; i++) {
+                  
+                // potential shift in pixels (specified on the Bayer pixel scale)
+                shift_x = -0.5f + int(i % 9) * 0.125f;
+                shift_y = -0.5f + int(i / 9) * 0.125f;
+                            
+                // calculate coefficients for Fourier shift
+                coefRe = cos(angle*(dm*shift_x+dn*shift_y));
+                coefIm = sin(angle*(dm*shift_x+dn*shift_y));
+                          
+                alignedRe2 = (coefRe*alignedRe - coefIm*alignedIm);
+                alignedIm2 = (coefIm*alignedRe + coefRe*alignedIm);
+                
+                diff4 = (refRe-alignedRe2)*(refRe-alignedRe2) + (refIm-alignedIm2)*(refIm-alignedIm2);
+                // add magnitudes of differences
+                total_diff[i] += (diff4[0]+diff4[1]+diff4[2]+diff4[3]);
+            }
         }
     }
     
-    // blurring of ratios in x-direction
-    for (int dn = 0; dn < tile_size; dn++) {
-        for (int dm = 0; dm < tile_size; dm++) {
-            
-            float total_intensity = 0.0f;
-            float total_weight    = 0.0f;
-
-            // apply truncated binomial filter to reduce computation time
-            for (int dx = -2; dx <= 2; dx++) {
-                
-                int const x = m0 + dm + dx;
-                
-                if (m0<=x && x<m0+tile_size) {
-                                         
-                    float const weight = float(binomial_weights[abs(dx)]);
-                                               
-                    total_intensity += weight*tmp_texture_mag.read(uint2(x, n0+dn)).r;
-                    total_weight    += weight;
-                }
-            }
-            
-            aligned_texture_mag.write(total_intensity/total_weight, uint2(m0+dm, n0+dn));
-        }
-    }
+    // find best shifts with lowest differences
+    float best_diff = 1e20;
+    int   best_i    = 0;
     
-    // blurring of ratios in y-direction
-    for (int dm = 0; dm < tile_size; dm++) {
-        for (int dn = 0; dn < tile_size; dn++) {
+    for(int i = 0; i < 81; i++) {
+        
+        if(total_diff[i] < best_diff) {
             
-            float total_intensity = 0.0f;
-            float total_weight    = 0.0f;
-            
-            // apply truncated binomial filter to reduce computation time
-            for (int dy = -2; dy <= 2; dy++) {
-                
-                int const y = n0 + dn + dy;
-                
-                if (n0<=y && y<n0+tile_size) {
-                    
-                    float const weight = float(binomial_weights[abs(dy)]);
-                                               
-                    total_intensity += weight*aligned_texture_mag.read(uint2(m0+dm, y)).r;
-                    total_weight    += weight;
-                }
-            }
-            
-            tmp_texture_mag.write(total_intensity/total_weight, uint2(m0+dm, n0+dn));
+            best_diff = total_diff[i];
+            best_i    = i;
         }
     }
+        
+    // extract best shifts
+    float const best_shift_x = -0.5f + int(best_i % 9) * 0.125f;
+    float const best_shift_y = -0.5f + int(best_i / 9) * 0.125f;
     
     // merging of reference and aligned texture
     for (int dn = 0; dn < tile_size; dn++) {
@@ -1056,43 +1094,52 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             int const m = 2*(m0 + dm);
             int const n = n0 + dn;
             
-            float magnitude_norm = 1.0f;
-            
-            if(dm+dn > 0)
-            {
-                int const dm_shifted = (dm<tile_size/2 ? dm+tile_size/2 : dm-tile_size/2);
-                int const dn_shifted = (dn<tile_size/2 ? dn+tile_size/2 : dn-tile_size/2);
-                
-                float const mag = tmp_texture_mag.read(uint2(m0+dm_shifted, n0+dn_shifted)).r;
-                
-                // calculation of additional normalization factor that increases impact of sharper frames
-                //magnitude_norm = 1.4f*clamp(pow(mag, 2.0f), 0.5f, 2.0f);
-                //magnitude_norm = 1.0f*clamp(pow(mag, 2.0f), 0.5f, 2.0f);
-                magnitude_norm = 1.1f*clamp(pow(mag, 2.0f), 0.5f, 2.0f);
-            }
-           
             refRe = ref_texture_ft.read(uint2(m+0, n));
             refIm = ref_texture_ft.read(uint2(m+1, n));
             
             alignedRe = aligned_texture_ft.read(uint2(m+0, n));
             alignedIm = aligned_texture_ft.read(uint2(m+1, n));
             
+            // calculate coefficients for best Fourier shift
+            coefRe = cos(angle*(dm*best_shift_x+dn*best_shift_y));
+            coefIm = sin(angle*(dm*best_shift_x+dn*best_shift_y));
+                      
+            alignedRe2 = (coefRe*alignedRe - coefIm*alignedIm);
+            alignedIm2 = (coefIm*alignedRe + coefRe*alignedIm);
+                       
+            // increase merging weights for images with larger frequency magnitudes and decrease weights for lower magnitudes
+            // this approach is inspired by the publication in https://arxiv.org/pdf/1505.02731.pdf
+            // calculate ratio of magnitudes of complex frequency data            
+            float magnitude_norm = 1.0f;
+            
+            if(dm+dn > 0)
+            {
+                refMag      = sqrt(refRe*refRe + refIm*refIm);
+                alignedMag2 = sqrt(alignedRe2*alignedRe2 + alignedIm2*alignedIm2);
+                
+                float const ratio_mag = (alignedMag2[0]+alignedMag2[1]+alignedMag2[2]+alignedMag2[3])/(refMag[0]+refMag[1]+refMag[2]+refMag[3]);
+                
+                // calculation of additional normalization factor that increases impact of sharper frames
+                magnitude_norm = 1.0f*clamp(pow(ratio_mag, 2.0f), 0.5f, 2.0f);
+                //magnitude_norm = 1.1f*clamp(pow(ratio_mag, 2.0f), 0.5f, 2.0f);
+            }
+            
             // calculation of merging weight by Wiener shrinkage
-            weight4 = (refRe-alignedRe)*(refRe-alignedRe) + (refIm-alignedIm)*(refIm-alignedIm);
+            weight4 = (refRe-alignedRe2)*(refRe-alignedRe2) + (refIm-alignedIm2)*(refIm-alignedIm2);
             weight4 = weight4/(weight4 + magnitude_norm*motion_norm*noise_norm);
             
             // use the same weight for all color channels to reduce color artifacts. Use maximum of weight4 as this increases motion robustness.
             // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
             weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
-                        
+            
             // merging of two textures
-            mergedRe = out_texture_ft.read(uint2(m+0, n)) + (1.0f-weight)*alignedRe + weight*refRe;
-            mergedIm = out_texture_ft.read(uint2(m+1, n)) + (1.0f-weight)*alignedIm + weight*refIm;
+            mergedRe = out_texture_ft.read(uint2(m+0, n)) + (1.0f-weight)*alignedRe2 + weight*refRe;
+            mergedIm = out_texture_ft.read(uint2(m+1, n)) + (1.0f-weight)*alignedIm2 + weight*refIm;
          
             out_texture_ft.write(mergedRe, uint2(m+0, n));
             out_texture_ft.write(mergedIm, uint2(m+1, n));
         }
-    }
+    }   
 }
 
 
@@ -1358,19 +1405,7 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
             out_texture_ft.write(Im2, uint2(m+tile_size+1, n));
             out_texture_ft.write(Re3, uint2(m+tile_size_24*3+0, n));
             out_texture_ft.write(Im3, uint2(m+tile_size_24*3+1, n));
-                       
-            int const m_shifted = m0 + (dm<tile_size/2 ? dm+tile_size/2 : dm-tile_size/2);
-            int const n_shifted = n0 + (dn<tile_size/2 ? dn+tile_size/2 : dn-tile_size/2);
-                  
-            mag = sqrt(Re0*Re0 + Im0*Im0);
-            out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m_shifted, n_shifted));
-            mag = sqrt(Re1*Re1 + Im1*Im1);
-            out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m_shifted+tile_size_24/2, n_shifted));
-            mag = sqrt(Re2*Re2 + Im2*Im2);
-            out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m_shifted+tile_size/2, n_shifted));
-            mag = sqrt(Re3*Re3 + Im3*Im3);
-            out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m_shifted+tile_size_24*3/2, n_shifted));
-            
+              
             // exploit symmetry of real dft and calculate values for remaining rows
             if(n2 < n0+tile_size & n2 != n0+tile_size/2)
             {
@@ -1383,17 +1418,6 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
                 out_texture_ft.write(Im2_cs, uint2(m+tile_size+1, n2));
                 out_texture_ft.write(Re3_cs, uint2(m+tile_size_24*3+0, n2));
                 out_texture_ft.write(Im3_cs, uint2(m+tile_size_24*3+1, n2));
-                
-                int const n2_shifted = n0 + tile_size - (dn<tile_size/2 ? dn+tile_size/2 : dn-tile_size/2);
-                
-                mag = sqrt(Re0_cs*Re0_cs + Im0_cs*Im0_cs);
-                out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m_shifted, n2_shifted));
-                mag = sqrt(Re1_cs*Re1_cs + Im1_cs*Im1_cs);
-                out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m_shifted+tile_size_24/2, n2_shifted));
-                mag = sqrt(Re2_cs*Re2_cs + Im2_cs*Im2_cs);
-                out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m_shifted+tile_size/2, n2_shifted));
-                mag = sqrt(Re3_cs*Re3_cs + Im3_cs*Im3_cs);
-                out_texture_mag.write(0.25f*(mag[0]+mag[1]+mag[2]+mag[3]), uint2(m_shifted+tile_size_24*3/2, n2_shifted));
             }
         }
     }
