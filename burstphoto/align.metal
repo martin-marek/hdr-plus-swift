@@ -279,6 +279,7 @@ kernel void convert_bayer(texture2d<float, access::read> in_texture [[texture(0)
 }
 
 
+
 // ===========================================================================================================
 // Functions specific to image alignment
 // ===========================================================================================================
@@ -713,6 +714,36 @@ kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
 }
 
 
+kernel void average_y_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
+                           texture1d<float, access::write> out_texture [[texture(1)]],
+                           uint gid [[thread_position_in_grid]]) {
+    uint x = gid;
+    int texture_height = in_texture.get_height();
+    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    for (int y = 0; y < texture_height; y++) {
+        total += in_texture.read(uint2(x, y));
+    }
+    float4 avg = total / texture_height;
+    out_texture.write(avg, x);
+}
+
+
+kernel void average_x_rgba(texture1d<float, access::read> in_texture [[texture(0)]],
+                           device float *out_buffer [[buffer(0)]],
+                           constant int& width [[buffer(1)]],
+                           uint gid [[thread_position_in_grid]]) {
+    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    for (int x = 0; x < width; x++) {
+        total += in_texture.read(uint(x));
+    }
+    float4 avg = total / width;
+    out_buffer[0] = avg[0];
+    out_buffer[1] = avg[1];
+    out_buffer[2] = avg[2];
+    out_buffer[3] = avg[3];
+}
+
+
 kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
                       texture1d<float, access::write> out_texture [[texture(1)]],
                       uint gid [[thread_position_in_grid]]) {
@@ -725,6 +756,8 @@ kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
     float avg = total / texture_height;
     out_texture.write(avg, x);
 }
+
+
 
 
 kernel void color_difference(texture2d<float, access::read> texture1 [[texture(0)]],
@@ -835,7 +868,7 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
     float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
     
     float coefRe, coefIm, norm_cosine;
-    float4 Re0, Re1, Im0, Im1, dataRe, dataIm, mag;
+    float4 Re0, Re1, Im0, Im1, dataRe, dataIm;
     
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm++) {
@@ -909,6 +942,13 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
             
             out_texture_ft.write(Re0, uint2(m+0, n));
             out_texture_ft.write(Im0, uint2(m+1, n));
+            
+            // exploit symmetry of real dft and calculate values for remaining rows
+            if(n2 < n0+tile_size & n2 != n0+tile_size/2)
+            {
+                out_texture_ft.write(Re1, uint2(m+0, n2));
+                out_texture_ft.write(Im1, uint2(m+1, n2));
+            }
         }
     }
 }
@@ -1120,8 +1160,8 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
                 float const ratio_mag = (alignedMag2[0]+alignedMag2[1]+alignedMag2[2]+alignedMag2[3])/(refMag[0]+refMag[1]+refMag[2]+refMag[3]);
                 
                 // calculation of additional normalization factor that increases impact of sharper frames
-                magnitude_norm = 1.0f*clamp(pow(ratio_mag, 2.0f), 0.5f, 2.0f);
-                //magnitude_norm = 1.1f*clamp(pow(ratio_mag, 2.0f), 0.5f, 2.0f);
+                magnitude_norm = 1.0f*clamp(pow(ratio_mag, 4.0f), 0.5f, 3.0f);
+                //magnitude_norm = 1.0f*clamp(pow(ratio_mag, 2.0f), 0.5f, 2.0f);
             }
             
             // calculation of merging weight by Wiener shrinkage
@@ -1218,6 +1258,55 @@ kernel void normalize_mismatch(texture2d<float, access::read_write> mismatch_tex
 }
 
 
+kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[texture(0)]],
+                              texture2d<float, access::read> in_texture [[texture(1)]],
+                              texture2d<float, access::write> out_texture [[texture(2)]],
+                              constant float* mean_texture_buffer [[buffer(0)]],
+                              uint2 gid [[thread_position_in_grid]]) {
+       
+    int const x = gid.x+4;
+    int const y = gid.y+4;
+    
+    // load args
+    float mean_texture = 0.0f;
+    
+    if (x%2 == 0 & y%2 == 0) {
+        mean_texture = mean_texture_buffer[0];
+    }
+    if (x%2 == 1 & y%2 == 0) {
+        mean_texture = mean_texture_buffer[1];
+    }
+    if (x%2 == 0 & y%2 == 1) {
+        mean_texture = mean_texture_buffer[2];
+    }    
+    if (x%2 == 1 & y%2 == 1) {
+        mean_texture = mean_texture_buffer[3];
+    }
+         
+    float sum = 2*average_texture.read(uint2(x-2, y-2)).r;
+    sum      += 2*average_texture.read(uint2(x+2, y-2)).r;
+    sum      += 2*average_texture.read(uint2(x-2, y+2)).r;
+    sum      += 2*average_texture.read(uint2(x+2, y+2)).r;
+    sum      +=   average_texture.read(uint2(x-4, y-4)).r;
+    sum      +=   average_texture.read(uint2(x+4, y-4)).r;
+    sum      +=   average_texture.read(uint2(x-4, y+4)).r;
+    sum      +=   average_texture.read(uint2(x+4, y+4)).r;
+    
+    float const pixel_value = average_texture.read(uint2(x, y)).r;
+    
+    // if hot pixel is detected
+    if (pixel_value > 0.2f*sum & pixel_value > 2.0f*mean_texture) {
+        
+        float sum2 = in_texture.read(uint2(x-2, y-2)).r;
+        sum2      += in_texture.read(uint2(x+2, y-2)).r;
+        sum2      += in_texture.read(uint2(x-2, y+2)).r;
+        sum2      += in_texture.read(uint2(x+2, y+2)).r;
+        
+        out_texture.write(0.25f*sum2, uint2(x, y));
+    }
+}
+
+
 kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]],
                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                         texture2d<float, access::write> out_texture_ft [[texture(2)]],
@@ -1240,7 +1329,7 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
     float4 const zeros = float4(0.0f, 0.0f, 0.0f, 0.0f);
     
     float coefRe, coefIm, norm_cosine;
-    float4 Re0, Re1, Re2, Re3, Re00, Re11, Re22, Re33, Im0, Im1, Im2, Im3, Im00, Im11, Im22, Im33, dataRe, dataIm, mag;
+    float4 Re0, Re1, Re2, Re3, Re00, Re11, Re22, Re33, Im0, Im1, Im2, Im3, Im00, Im11, Im22, Im33, dataRe, dataIm;
     float4 Re0_cs, Re1_cs, Re2_cs, Re3_cs, Re00_cs, Re11_cs, Re22_cs, Re33_cs, Im0_cs, Im1_cs, Im2_cs, Im3_cs, Im00_cs, Im11_cs, Im22_cs, Im33_cs;
     float4 tmp_data[32];
     

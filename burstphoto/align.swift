@@ -55,6 +55,8 @@ let convert_rgba_state = try! device.makeComputePipelineState(function: mfl.make
 let convert_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_bayer")!)
 let average_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x")!)
 let average_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y")!)
+let average_x_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x_rgba")!)
+let average_y_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y_rgba")!)
 let compute_tile_differences_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences")!)
 let compute_tile_differences25_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences25")!)
 let compute_tile_alignments_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_alignments")!)
@@ -71,6 +73,7 @@ let backward_fft_state = try! device.makeComputePipelineState(function: mfl.make
 let merge_frequency_domain_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "merge_frequency_domain")!)
 let calculate_mismatch_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_mismatch_rgba")!)
 let normalize_mismatch_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_mismatch")!)
+let correct_hotpixels_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_hotpixels")!)
 
 
 // ===========================================================================================================
@@ -156,7 +159,12 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     // special mode: simple temporal averaging without alignment and robust merging
     if noise_reduction == 25.0 {
         print("Special mode: temporal averaging only...")
-          
+         
+        // correction of hot pixels
+        if mosaic_pettern_width == 2 {
+            correct_hotpixels(textures)
+        }
+        
         // iterate over comparison images
         for comp_idx in 0..<image_urls.count {
             
@@ -187,6 +195,9 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         // set mode for Fourier transformations ("DFT" or "FFT")
         let ft_mode = (tile_size_merge <= Int(16) ? "FFT" : "DFT")
         
+        // correction of hot pixels
+        correct_hotpixels(textures)
+                
         // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process
         try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
         
@@ -394,7 +405,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     forward_ft(ref_texture_rgba, ref_texture_ft, tmp_texture_ft, tile_info_merge, mode: ft_mode)
     
     let final_texture_ft = copy_texture(ref_texture_ft)
-    
+   
     // iterate over comparison images
     for comp_idx in 0..<textures.count {
   
@@ -418,7 +429,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         let mismatch_texture = calculate_mismatch_rgba(aligned_texture_rgba, ref_texture_rgba, rms_texture, tile_info_merge)
 
         // normalize mismatch texture
-        let mean_mismatch = texture_mean(crop_texture(mismatch_texture, shift_left/tile_size_merge, shift_right/tile_size_merge, shift_top/tile_size_merge, shift_bottom/tile_size_merge))
+        let mean_mismatch = texture_mean(crop_texture(mismatch_texture, shift_left/tile_size_merge, shift_right/tile_size_merge, shift_top/tile_size_merge, shift_bottom/tile_size_merge), "r")
         normalize_mismatch(mismatch_texture, mean_mismatch)
                   
         // start debug capture
@@ -444,7 +455,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
   
     // transform output texture back to image space and convert back to the 2x2 pixel structure
     let output_texture = crop_texture(convert_bayer(backward_ft(final_texture_ft, tmp_texture_ft, tile_info_merge, textures.count, mode: ft_mode)), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
-     
+        
     // add output texture to the final texture to collect all textures of the four iterations
     add_texture(output_texture, final_texture, 1)
 }
@@ -766,7 +777,7 @@ func convert_bayer(_ in_texture: MTLTexture) -> MTLTexture {
 }
 
 
-func texture_mean(_ in_texture: MTLTexture) -> MTLBuffer {
+func texture_mean(_ in_texture: MTLTexture, _ pixelformat: String) -> MTLBuffer {
     
     // create a 1d texture that will contain the averages of the input texture along the x-axis
     let texture_descriptor = MTLTextureDescriptor()
@@ -779,7 +790,7 @@ func texture_mean(_ in_texture: MTLTexture) -> MTLBuffer {
     // average the input texture along the y-axis
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = average_y_state
+    let state = (pixelformat == "rgba" ? average_y_rgba_state : average_y_state)
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
     let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
@@ -789,12 +800,12 @@ func texture_mean(_ in_texture: MTLTexture) -> MTLBuffer {
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     
     // average the generated 1d texture along the x-axis
-    let state2 = average_x_state
+    let state2 = (pixelformat == "rgba" ? average_x_rgba_state : average_x_state)
     command_encoder.setComputePipelineState(state2)
     let avg_buffer = device.makeBuffer(length: MemoryLayout<Float32>.size, options: .storageModeShared)!
     command_encoder.setTexture(avg_y, index: 0)
     command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
-    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(in_texture.width)], length: (pixelformat=="rgba" ? 4 : 1)*MemoryLayout<Int32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -802,6 +813,7 @@ func texture_mean(_ in_texture: MTLTexture) -> MTLBuffer {
     // return the average of all pixels in the input array
     return avg_buffer
 }
+
 
 
 // ===========================================================================================================
@@ -1059,7 +1071,7 @@ func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, 
     let texture_diff = color_difference(texture, texture_blurred, mosaic_pettern_width)
     
     // compute the average of the difference between the original and the blurred texture
-    let mean_diff = texture_mean(texture_diff)
+    let mean_diff = texture_mean(texture_diff, "r")
     
     return mean_diff
 }
@@ -1242,5 +1254,39 @@ func normalize_mismatch(_ mismatch_texture: MTLTexture, _ mean_mismatch_buffer: 
 }
 
 
-
+func correct_hotpixels(_ textures: [MTLTexture]) {
+    
+    // use a 32 bit float as final image
+    let average_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[0].width, height: textures[0].height, mipmapped: false)
+    average_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let average_texture = device.makeTexture(descriptor: average_texture_descriptor)!
+    fill_with_zeros(average_texture)
+              
+    // iterate over comparison images
+    for comp_idx in 0..<textures.count {
+            
+        add_texture(textures[comp_idx], average_texture, textures.count)
+    }
+    
+    let mean_texture_buffer = texture_mean(convert_rgba(average_texture, 0, 0), "rgba")
+    
+    for comp_idx in 0..<textures.count {
+        
+        let tmp_texture = copy_texture(textures[comp_idx])
+        
+        let command_buffer = command_queue.makeCommandBuffer()!
+        let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        let state = correct_hotpixels_state
+        command_encoder.setComputePipelineState(state)
+        let threads_per_grid = MTLSize(width: average_texture.width-8, height: average_texture.height-8, depth: 1)
+        let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+        command_encoder.setTexture(average_texture, index: 0)
+        command_encoder.setTexture(tmp_texture, index: 1)
+        command_encoder.setTexture(textures[comp_idx], index: 2)
+        command_encoder.setBuffer(mean_texture_buffer, offset: 0, index: 0)
+        command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+        command_encoder.endEncoding()
+        command_buffer.commit()
+    }
+}
 
