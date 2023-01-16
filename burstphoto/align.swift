@@ -164,14 +164,14 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         if mosaic_pettern_width == 2 {
             correct_hotpixels(textures)
         }
-        
+                  
         // iterate over comparison images
         for comp_idx in 0..<image_urls.count {
             
             add_texture(textures[comp_idx], final_texture, image_urls.count)
             DispatchQueue.main.async { progress.int += Int(80000000/Double(image_urls.count)) }
         }
-     
+        
 
     // sophisticated approach with alignment of tiles and merging of tiles in frequency domain (only 2x2 Bayer pattern)
     } else if mosaic_pettern_width == 2 {
@@ -886,9 +886,9 @@ func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<I
     for (i, downscale_factor) in downscale_factor_list.enumerated() {
         if i == 0 {
             pyramid.append(avg_pool(input_texture, downscale_factor))
+         
         } else {
-            //pyramid.append(avg_pool(pyramid.last!, downscale_factor))
-            pyramid.append(avg_pool(blur_mosaic_texture(pyramid.last!, 2, 1), downscale_factor))
+            pyramid.append(avg_pool(blur_mosaic_texture(pyramid.last!, 2, 1), downscale_factor))       
         }
     }
     return pyramid
@@ -1278,7 +1278,7 @@ func correct_hotpixels(_ textures: [MTLTexture]) {
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
         let state = correct_hotpixels_state
         command_encoder.setComputePipelineState(state)
-        let threads_per_grid = MTLSize(width: average_texture.width-8, height: average_texture.height-8, depth: 1)
+        let threads_per_grid = MTLSize(width: average_texture.width-4, height: average_texture.height-4, depth: 1)
         let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
         command_encoder.setTexture(average_texture, index: 0)
         command_encoder.setTexture(tmp_texture, index: 1)

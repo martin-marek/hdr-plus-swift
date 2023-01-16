@@ -1264,8 +1264,8 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
                               constant float* mean_texture_buffer [[buffer(0)]],
                               uint2 gid [[thread_position_in_grid]]) {
        
-    int const x = gid.x+4;
-    int const y = gid.y+4;
+    int const x = gid.x+2;
+    int const y = gid.y+2;
     
     // load args
     float mean_texture = 0.0f;
@@ -1282,27 +1282,31 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
     if (x%2 == 1 & y%2 == 1) {
         mean_texture = mean_texture_buffer[3];
     }
-         
-    float sum = 2*average_texture.read(uint2(x-2, y-2)).r;
-    sum      += 2*average_texture.read(uint2(x+2, y-2)).r;
-    sum      += 2*average_texture.read(uint2(x-2, y+2)).r;
-    sum      += 2*average_texture.read(uint2(x+2, y+2)).r;
-    sum      +=   average_texture.read(uint2(x-4, y-4)).r;
-    sum      +=   average_texture.read(uint2(x+4, y-4)).r;
-    sum      +=   average_texture.read(uint2(x-4, y+4)).r;
-    sum      +=   average_texture.read(uint2(x+4, y+4)).r;
+        
+    // calculate sum of 8 pixels surrounding the potential hot pixel
+    float sum =   average_texture.read(uint2(x-2, y-2)).r;
+    sum      +=   average_texture.read(uint2(x+2, y-2)).r;
+    sum      +=   average_texture.read(uint2(x-2, y+2)).r;
+    sum      +=   average_texture.read(uint2(x+2, y+2)).r;
+    sum      += 2*average_texture.read(uint2(x-2, y+0)).r;
+    sum      += 2*average_texture.read(uint2(x+2, y+0)).r;
+    sum      += 2*average_texture.read(uint2(x+0, y-2)).r;
+    sum      += 2*average_texture.read(uint2(x+0, y+2)).r;
     
     float const pixel_value = average_texture.read(uint2(x, y)).r;
+    float const pixel_ratio = pixel_value/sum;
     
     // if hot pixel is detected
-    if (pixel_value > 0.2f*sum & pixel_value > 2.0f*mean_texture) {
+    if (pixel_ratio >= 0.15f & pixel_value >= 2.0f*mean_texture) {
         
-        float sum2 = in_texture.read(uint2(x-2, y-2)).r;
-        sum2      += in_texture.read(uint2(x+2, y-2)).r;
-        sum2      += in_texture.read(uint2(x-2, y+2)).r;
-        sum2      += in_texture.read(uint2(x+2, y+2)).r;
+        float sum2 = in_texture.read(uint2(x-2, y+0)).r;
+        sum2      += in_texture.read(uint2(x+2, y+0)).r;
+        sum2      += in_texture.read(uint2(x+0, y-2)).r;
+        sum2      += in_texture.read(uint2(x+0, y+2)).r;
         
-        out_texture.write(0.25f*sum2, uint2(x, y));
+        float const weight = 10.0f*min(pixel_ratio-0.15f, 0.10f);
+        
+        out_texture.write(weight*0.25f*sum2 + (1.0f-weight)*pixel_value, uint2(x, y));
     }
 }
 
