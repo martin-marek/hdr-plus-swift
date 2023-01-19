@@ -226,8 +226,6 @@ kernel void crop_texture(texture2d<float, access::read> in_texture [[texture(0)]
 }
 
 
-
-
 kernel void add_texture(texture2d<float, access::read> in_texture [[texture(0)]],
                         texture2d<float, access::read_write> out_texture [[texture(1)]],
                         constant int& n_textures [[buffer(0)]],
@@ -701,49 +699,6 @@ kernel void add_textures_weighted(texture2d<float, access::read> texture1 [[text
 }
 
 
-kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
-                      device float *out_buffer [[buffer(0)]],
-                      constant int& width [[buffer(1)]],
-                      uint gid [[thread_position_in_grid]]) {
-    float total = 0;
-    for (int x = 0; x < width; x++) {
-        total += in_texture.read(uint(x)).r;
-    }
-    float avg = total / width;
-    out_buffer[0] = avg;
-}
-
-
-kernel void average_y_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
-                           texture1d<float, access::write> out_texture [[texture(1)]],
-                           uint gid [[thread_position_in_grid]]) {
-    uint x = gid;
-    int texture_height = in_texture.get_height();
-    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    for (int y = 0; y < texture_height; y++) {
-        total += in_texture.read(uint2(x, y));
-    }
-    float4 avg = total / texture_height;
-    out_texture.write(avg, x);
-}
-
-
-kernel void average_x_rgba(texture1d<float, access::read> in_texture [[texture(0)]],
-                           device float *out_buffer [[buffer(0)]],
-                           constant int& width [[buffer(1)]],
-                           uint gid [[thread_position_in_grid]]) {
-    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    for (int x = 0; x < width; x++) {
-        total += in_texture.read(uint(x));
-    }
-    float4 avg = total / width;
-    out_buffer[0] = avg[0];
-    out_buffer[1] = avg[1];
-    out_buffer[2] = avg[2];
-    out_buffer[3] = avg[3];
-}
-
-
 kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
                       texture1d<float, access::write> out_texture [[texture(1)]],
                       uint gid [[thread_position_in_grid]]) {
@@ -758,6 +713,17 @@ kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
 }
 
 
+kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
+                      device float *out_buffer [[buffer(0)]],
+                      constant int& width [[buffer(1)]],
+                      uint gid [[thread_position_in_grid]]) {
+    float total = 0;
+    for (int x = 0; x < width; x++) {
+        total += in_texture.read(uint(x)).r;
+    }
+    float avg = total / width;
+    out_buffer[0] = avg;
+}
 
 
 kernel void color_difference(texture2d<float, access::read> texture1 [[texture(0)]],
@@ -819,6 +785,36 @@ kernel void compute_merge_weight(texture2d<float, access::read> texture_diff [[t
 // ===========================================================================================================
 // Function specific to merging in the frequency domain
 // ===========================================================================================================
+
+kernel void average_y_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
+                           texture1d<float, access::write> out_texture [[texture(1)]],
+                           uint gid [[thread_position_in_grid]]) {
+    uint x = gid;
+    int texture_height = in_texture.get_height();
+    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    for (int y = 0; y < texture_height; y++) {
+        total += in_texture.read(uint2(x, y));
+    }
+    float4 avg = total / texture_height;
+    out_texture.write(avg, x);
+}
+
+
+kernel void average_x_rgba(texture1d<float, access::read> in_texture [[texture(0)]],
+                           device float *out_buffer [[buffer(0)]],
+                           constant int& width [[buffer(1)]],
+                           uint gid [[thread_position_in_grid]]) {
+    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    for (int x = 0; x < width; x++) {
+        total += in_texture.read(uint(x));
+    }
+    float4 avg = total / width;
+    out_buffer[0] = avg[0];
+    out_buffer[1] = avg[1];
+    out_buffer[2] = avg[2];
+    out_buffer[3] = avg[3];
+}
+
 
 kernel void calculate_rms_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
                                texture2d<float, access::write> rms_texture [[texture(1)]],

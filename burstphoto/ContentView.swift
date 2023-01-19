@@ -237,6 +237,10 @@ struct SettingsView: View {
                     )
                 }
                 Spacer()
+                Spacer()
+                Text("Please adjust according to your burst image series and taste:")
+                    .font(.system(size: 12))
+                    .foregroundColor(.accentColor)
                 Text("Small values increase motion robustness and image sharpness.")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)

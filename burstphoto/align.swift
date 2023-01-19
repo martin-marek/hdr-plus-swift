@@ -106,7 +106,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     
     // ensure that all files are .dng, converting them if necessary
     var dng_urls = image_urls
-    let convert_to_dng = image_extension != "dng"
+    let convert_to_dng = image_extension.lowercased() != "dng"
     DispatchQueue.main.async { progress.includes_conversion = convert_to_dng }
     let dng_converter_path = "/Applications/Adobe DNG Converter.app"
     let final_dng_conversion = FileManager.default.fileExists(atPath: dng_converter_path)
@@ -214,7 +214,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     
         let kernel_size = Int(8) // kernel size of binomial filtering used for blurring the image
         let robustness_rev = 0.5*(25.0-Double(Int(noise_reduction+0.5)))
-        let robustness_norm = 0.08*pow(sqrt(2), robustness_rev) // use this value as a replacement of robustness for control of motion robustness / noise level
+        let robustness_norm = 0.1*pow(sqrt(2), robustness_rev) // use this value as a replacement of robustness for control of motion robustness / noise level
     
         try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
     }
@@ -802,10 +802,10 @@ func texture_mean(_ in_texture: MTLTexture, _ pixelformat: String) -> MTLBuffer 
     // average the generated 1d texture along the x-axis
     let state2 = (pixelformat == "rgba" ? average_x_rgba_state : average_x_state)
     command_encoder.setComputePipelineState(state2)
-    let avg_buffer = device.makeBuffer(length: MemoryLayout<Float32>.size, options: .storageModeShared)!
+    let avg_buffer = device.makeBuffer(length: (pixelformat=="rgba" ? 4 : 1)*MemoryLayout<Float32>.size, options: .storageModeShared)!
     command_encoder.setTexture(avg_y, index: 0)
     command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
-    command_encoder.setBytes([Int32(in_texture.width)], length: (pixelformat=="rgba" ? 4 : 1)*MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
