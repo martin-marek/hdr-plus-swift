@@ -76,6 +76,7 @@ let normalize_mismatch_state = try! device.makeComputePipelineState(function: mf
 let correct_hotpixels_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_hotpixels")!)
 
 
+
 // ===========================================================================================================
 // Main functions
 // ===========================================================================================================
@@ -177,11 +178,11 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     } else if mosaic_pettern_width == 2 {
         print("Merging in the frequency domain...")
         
-        // tile size for merging in frequency domain is always 16x16
-        let tile_size_merge = Int(16)
+        // tile size for merging in frequency domain should be either 8x8 or 16x16
+        let tile_size_merge = min(max(8, tile_size/4), 16)
           
         // derive normalized robustness value: each two steps yield another factor of two with the idea that the variance of shot noise increases by a factor of two per iso level
-        let robustness_rev = 0.5*(25.0-Double(Int(noise_reduction+0.5)))
+        let robustness_rev = 0.5*(26.5-Double(Int(noise_reduction+0.5)))
         let robustness_norm = pow(2.0, (-robustness_rev + 8.0));
         
         // derive read noise with the idea that read noise increases approx. by a factor of three per iso level to increase noise reduction in darker regions relative to bright regions
@@ -437,7 +438,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         //let capture_descriptor = MTLCaptureDescriptor()
         //capture_descriptor.captureObject = device
         //try! capture_manager.startCapture(with: capture_descriptor)
-        
+          
         // transform aligned texture into the Fourier space
         // to improve performance, textures are converted into RGBA pixel format that SIMD instructions can be applied
         forward_ft(aligned_texture_rgba, aligned_texture_ft, tmp_texture_ft, tile_info_merge, mode: ft_mode)
@@ -452,7 +453,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         print("Align+merge: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
         DispatchQueue.main.async { progress.int += Int(80000000/Double(4*(textures.count-1))) }
     }
-  
+    
     // transform output texture back to image space and convert back to the 2x2 pixel structure
     let output_texture = crop_texture(convert_bayer(backward_ft(final_texture_ft, tmp_texture_ft, tile_info_merge, textures.count, mode: ft_mode)), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
         
@@ -1120,6 +1121,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
 // Functions specific to merging in the frequency domain
 // ===========================================================================================================
 
+
 func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLTexture {
     
     // create output texture
@@ -1229,7 +1231,6 @@ func calculate_mismatch_rgba(_ aligned_texture: MTLTexture, _ ref_texture: MTLTe
     command_encoder.setTexture(rms_texture, index: 2)
     command_encoder.setTexture(mismatch_texture, index: 3)
     command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()

@@ -324,7 +324,7 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                diff += (2*UINT16_MAX_VAL); // value has to be increased as scaling of values to the range of 0 to 1 was removed
+                diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r + 2*UINT16_MAX_VAL); // value has to be increased as scaling of values to the range of 0 to 1 was removed
             } else {
                 diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
             }
@@ -351,134 +351,89 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
     int texture_width = ref_texture.get_width();
     int texture_height = ref_texture.get_height();
     int tile_half_size = tile_size / 2;
-    int n_pos_1d = 2*search_dist + 1;
     
-    int comp_tile_x, comp_tile_y;
+    int ref_tile_x, ref_tile_y, comp_tile_x, comp_tile_y, tmp_index, dx_i, dy_i;
     
     // compute tile position if previous alignment were 0
     int x0 = int(floor( tile_half_size + float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
     int y0 = int(floor( tile_half_size + float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
     
     // factor in previous alignmnet
-    int4 prev_align = prev_alignment.read(uint2(gid.x, gid.y));
-    int dx0 = downscale_factor * prev_align.x;
-    int dy0 = downscale_factor * prev_align.y;
+    int4 const prev_align = prev_alignment.read(uint2(gid.x, gid.y));
+    int const dx0 = downscale_factor * prev_align.x;
+    int const dy0 = downscale_factor * prev_align.y;
     
     float diff[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
- 
-    for (int dy1 = -tile_half_size; dy1 < tile_half_size; dy1++) {
-        for (int dx1 = -tile_half_size; dx1 < tile_half_size; dx1++) {
+    float tmp_ref;
+    float tmp_comp[5*68];
+    
+    // loop over first 4 rows of comp_texture
+    for (int dy = -tile_half_size-2; dy < -tile_half_size+2; dy++) {
         
-            // compute the indices of the pixels to compare
-            int const ref_tile_x = x0 + dx1;
-            int const ref_tile_y = y0 + dy1;
-            float const ref_val = ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r;
+        // loop over columns of comp_texture to copy first 4 rows of comp_texture
+        for (int dx = -tile_half_size-2; dx < tile_half_size+2; dx++) {
             
-            for (int i = 0; i < 25; i++) {
- 
-                comp_tile_x = ref_tile_x + dx0 + (i % n_pos_1d - search_dist);
-                comp_tile_y = ref_tile_y + dy0 + (i / n_pos_1d - search_dist);
-                if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                    diff[i] += (2*UINT16_MAX_VAL);
-                } else {
-                    diff[i] += abs(ref_val - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
-                }
+            comp_tile_x = x0 + dx0 + dx;
+            comp_tile_y = y0 + dy0 + dy;
+            
+            // index of corresponding pixel value in tmp_comp
+            tmp_index = (dy+tile_half_size+2)*(tile_size+4) + dx+tile_half_size+2;
+            
+            if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                tmp_comp[tmp_index] = (-2*UINT16_MAX_VAL);
+            } else {
+                tmp_comp[tmp_index] = comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r;
             }
         }
     }
     
-    // store tile differences
-    for (int i = 0; i < 25; i++)
-    {
+    // loop over rows of ref_texture
+    for (int dy = -tile_half_size; dy < tile_half_size; dy++) {
+        
+        // loop over columns of comp_texture copy 1 additional row of comp_texture
+        for (int dx = -tile_half_size-2; dx < tile_half_size+2; dx++) {
+            
+            comp_tile_x = x0 + dx0 + dx;
+            comp_tile_y = y0 + dy0 + dy+2;
+            
+            // index of corresponding pixel value in tmp_comp
+            tmp_index = ((dy+tile_half_size+4)%5)*(tile_size+4) + dx+tile_half_size+2;
+            
+            if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                tmp_comp[tmp_index] = (-2*UINT16_MAX_VAL);
+            } else {
+                tmp_comp[tmp_index] = comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r;
+            }
+        }
+        
+        // loop over columns of ref_texture
+        for (int dx = -tile_half_size; dx < tile_half_size; dx++) {
+            
+            ref_tile_x = x0 + dx;
+            ref_tile_y = y0 + dy;
+            
+            tmp_ref = ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r;
+            
+            // loop over 25 test displacements
+            for (int i = 0; i < 25; i++) {
+                
+                dx_i = i % 5;
+                dy_i = i / 5;
+                
+                // index of corresponding pixel value in tmp_comp
+                tmp_index = ((dy+tile_half_size+dy_i)%5)*(tile_size+4) + dx+tile_half_size + dx_i;
+                
+                diff[i] += abs(tmp_ref - tmp_comp[tmp_index]);
+            }
+        }
+    }
+    
+    // store tile differences in texture
+    for (int i = 0; i < 25; i++) {
         tile_diff.write(diff[i], uint3(gid.x, gid.y, i));
     }
 }
 
-/*
-kernel void compute_tile_differences25(texture2d<float, access::read> ref_texture [[texture(0)]],
-                                       texture2d<float, access::read> comp_texture [[texture(1)]],
-                                       texture2d<int, access::read> prev_alignment [[texture(2)]],
-                                       texture3d<float, access::write> tile_diff [[texture(3)]],
-                                       constant int& downscale_factor [[buffer(0)]],
-                                       constant int& tile_size [[buffer(1)]],
-                                       constant int& search_dist [[buffer(2)]],
-                                       constant int& n_tiles_x [[buffer(3)]],
-                                       constant int& n_tiles_y [[buffer(4)]],
-                                       uint2 gid [[thread_position_in_grid]]) {
-    
-    // load args
-    int texture_width = ref_texture.get_width();
-    int texture_height = ref_texture.get_height();
-    int tile_half_size = tile_size / 2;
-    
-    int comp_tile_x, comp_tile_y;
-    
-    // compute tile position if previous alignment were 0
-    int x0 = int(floor( tile_half_size + float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
-    int y0 = int(floor( tile_half_size + float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
-    
-    // factor in previous alignmnet
-    int4 prev_align = prev_alignment.read(uint2(gid.x, gid.y));
-    int dx0 = downscale_factor * prev_align.x;
-    int dy0 = downscale_factor * prev_align.y;
-    
-    float diff[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    float tmp_ref[64];
-    float tmp_comp[68];
-    
-    for (int i = 0; i < 25; i++) {
-        diff[i] = 2*UINT16_MAX_VAL*tile_size*tile_size;
-    }
-    
-    for (int dy1 = -tile_half_size; dy1 < tile_half_size; dy1++) {
-        
-        for (int dx1 = -tile_half_size; dx1 < tile_half_size; dx1++) {
-            
-            int const ref_tile_x = x0 + dx1;
-            int const ref_tile_y = y0 + dy1;
-            
-            tmp_ref[dx1+tile_half_size] = ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r;
-        }
-        
-        for (int dy2 = -2; dy2 <= 2; dy2++) {
-            
-            comp_tile_y = y0 + dy0 + dy1 + dy2;
-            
-            if (comp_tile_y>=0 & comp_tile_y<texture_height) {
-                
-                for (int dx2 = -2; dx2 < tile_size+2; dx2++) {
-                    
-                    comp_tile_x = x0 + dx0 + dx2;
-                    
-                    if (comp_tile_x>=0 & comp_tile_x<texture_width) {
-                        tmp_comp[dx2+2] = comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r;
-                    }
-                }
-                
-                for (int dx2 = -2; dx2 <= 2; dx2++) {
-                    
-                    int const index = (dy2+2)*5 + (dx2+2);
-                    
-                    for (int i = 0; i < tile_size; i++) {
-                        
-                        comp_tile_x = x0 + dx0 + dx2 + i;
-                        
-                        if (comp_tile_x>=0 & comp_tile_x<texture_width) {
-                            diff[index] += (abs(tmp_ref[i] - tmp_comp[i+dx2+2]) - 2*UINT16_MAX_VAL);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // store tile differences
-    for (int i = 0; i < 25; i++)
-    {
-        tile_diff.write(diff[i], uint3(gid.x, gid.y, i));
-    }
-}
-*/
 
 kernel void compute_tile_alignments(texture3d<float, access::read> tile_diff [[texture(0)]],
                                     texture2d<int, access::read> prev_alignment [[texture(1)]],
@@ -786,6 +741,7 @@ kernel void compute_merge_weight(texture2d<float, access::read> texture_diff [[t
 // Function specific to merging in the frequency domain
 // ===========================================================================================================
 
+
 kernel void average_y_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
                            texture1d<float, access::write> out_texture [[texture(1)]],
                            uint gid [[thread_position_in_grid]]) {
@@ -828,7 +784,7 @@ kernel void calculate_rms_rgba(texture2d<float, access::read> ref_texture [[text
     // fill with zeros
     float4 noise_est = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    // use 16x16 tile size here
+    // use tile size merge here
     for (int dy = 0; dy < tile_size; dy++) {
         for (int dx = 0; dx < tile_size; dx++) {
             
@@ -1064,7 +1020,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
     
     float const angle = -2*PI/float(tile_size);
 
-    float weight, coefRe, coefIm, shift_x, shift_y;
+    float weight, min_weight, max_weight, coefRe, coefIm, shift_x, shift_y;
     float4 refRe, refIm, refMag, alignedRe, alignedIm, alignedRe2, alignedIm2, alignedMag2, mergedRe, mergedIm, weight4, diff4;
     
     float total_diff[81];
@@ -1148,13 +1104,13 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             // calculate ratio of magnitudes of complex frequency data            
             float magnitude_norm = 1.0f;
             
-            if(dm+dn > 0)
-            {
+            if(dm+dn > 0) {
+               
                 refMag      = sqrt(refRe*refRe + refIm*refIm);
                 alignedMag2 = sqrt(alignedRe2*alignedRe2 + alignedIm2*alignedIm2);
                 
                 float const ratio_mag = (alignedMag2[0]+alignedMag2[1]+alignedMag2[2]+alignedMag2[3])/(refMag[0]+refMag[1]+refMag[2]+refMag[3]);
-                
+                     
                 // calculation of additional normalization factor that increases impact of sharper frames
                 magnitude_norm = 1.0f*clamp(pow(ratio_mag, 4.0f), 0.5f, 3.0f);
                 //magnitude_norm = 1.0f*clamp(pow(ratio_mag, 2.0f), 0.5f, 2.0f);
@@ -1166,7 +1122,12 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             
             // use the same weight for all color channels to reduce color artifacts. Use maximum of weight4 as this increases motion robustness.
             // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-            weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+            //weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
+            
+            min_weight = min(weight4[0], min(weight4[1], min(weight4[2], weight4[3])));
+            max_weight = max(weight4[0], max(weight4[1], max(weight4[2], weight4[3])));
+            // use mean value of two central weight values, which removes the two extremes and thus should be slightly more robust
+            weight = clamp(0.5f*(weight4[0]+weight4[1]+weight4[2]+weight4[3]-min_weight-max_weight), 0.0f, 1.0f);
             
             // merging of two textures
             mergedRe = out_texture_ft.read(uint2(m+0, n)) + (1.0f-weight)*alignedRe2 + weight*refRe;
@@ -1184,7 +1145,6 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
                                     texture2d<float, access::read> rms_texture [[texture(2)]],
                                     texture2d<float, access::write> mismatch_texture [[texture(3)]],
                                     constant int& tile_size [[buffer(0)]],
-                                    constant int& tile_size_align [[buffer(1)]],
                                     uint2 gid [[thread_position_in_grid]]) {
         
     // compute tile positions from gid
@@ -1194,17 +1154,15 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
     // use only estimated shot noise here
     float4 const noise_est = rms_texture.read(gid);
     
-    float const angle = 2*PI/float(tile_size);
-    
     // estimate motion mismatch as the absolute difference of reference tile and comparison tile
     // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-    // use 16x16, 32x32 or 64x64 tile size here as used for alignment
+    // use 16x16 or 32x32 tile size here
     
-    int const x_start = max(0, m0 + tile_size/2 - tile_size_align/2);
-    int const y_start = max(0, n0 + tile_size/2 - tile_size_align/2);
+    int const x_start = max(0, m0 + tile_size/2 - tile_size);
+    int const y_start = max(0, n0 + tile_size/2 - tile_size);
     
-    int const x_end = min(int(ref_texture.get_width()-1),  m0 + tile_size/2 + tile_size_align/2);
-    int const y_end = min(int(ref_texture.get_height()-1), n0 + tile_size/2 + tile_size_align/2);
+    int const x_end = min(int(ref_texture.get_width()-1),  m0 + tile_size/2 + tile_size);
+    int const y_end = min(int(ref_texture.get_height()-1), n0 + tile_size/2 + tile_size);
     
     float tile_diff = 0.f;
     float n_total = 0.f;
@@ -1213,25 +1171,20 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
         for (int dx = x_start; dx < x_end; dx++) {
         
             float4 const diff = float4(ref_texture.read(uint2(dx, dy))) - float4(aligned_texture.read(uint2(dx, dy)));
+          
+            tile_diff += (0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
              
-            // calculate modified raised cosine window weight for blending tiles to suppress artifacts
-            float const weight = (0.5f-0.500f*cos(angle*(dx+0.5f)))*(0.5f-0.500f*cos(angle*(dy+0.5f)));
-            // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
-            //float const weight = (0.5f-0.505f*cos(angle*(dx+0.5f)))*(0.5f-0.505f*cos(angle*(dy+0.5f)));
-                 
-            tile_diff += weight*(0.25f * abs(diff[0]+diff[1]+diff[2]+diff[3]));
-             
-            n_total += weight;
+            n_total += 1.0f;
         }
     }
      
     tile_diff /= float(n_total);
-    
+
     // calculation of mismatch ratio
     //float4 const mismatch4 = (tile_diff*tile_diff) / (tile_diff*tile_diff + noise_est);
-    float4 const mismatch4 = tile_diff / sqrt(noise_est+1e-12);
+    float4 const mismatch4 = tile_diff / sqrt(noise_est+1e-12f);
     float const mismatch = 0.25f*(mismatch4[0] + mismatch4[1] + mismatch4[2] + mismatch4[3]);
-    
+        
     mismatch_texture.write(mismatch, gid);
 }
 
