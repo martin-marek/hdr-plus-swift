@@ -85,9 +85,10 @@ func safeShell(_ command: String) throws -> String {
 
 func convert_images_to_dng(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String) throws -> [URL] {
 
-    // creade command string
+    // create command string
     let executable_path = dng_converter_path + "/Contents/MacOS/Adobe DNG Converter"
-    let args = "--args -c -p0 -d \"\(tmp_dir)\"" // let args = "--args -u -p0 -d \"\(tmp_dir)\""
+    // changed args to convert raw files to compressed DNGs
+    let args = "--args -c -p0 -d \"\(tmp_dir)\""
     var command = "\"\(executable_path)\" \(args)"
     for url in in_urls {
         command += " \"\(url.relativePath)\""

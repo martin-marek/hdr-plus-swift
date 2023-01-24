@@ -58,7 +58,7 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
         *pixel_bytes_pointer = pixel_bytes;
         memcpy(pixel_bytes, pixel_buffer.DirtyPixel(0, 0), image_size);
         
-        // get size of mosaic patter
+        // get size of mosaic pattern
         // - this affects how raw pixels are aligned
         // - it is assumed that the pattern is square
         const dng_mosaic_info* mosaic_info = negative->GetMosaicInfo();
@@ -91,6 +91,7 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
             info.PostParse(host);
             if(!info.IsValidDNG()) {return dng_error_bad_format;}
             negative.Reset(host.Make_dng_negative());
+            // this line ensures that the maker notes are copied 
             host.SetSaveDNGVersion(dngVersion_SaveDefault);
             negative->Parse(host, stream, info);
             negative->PostParse(host, stream, info);

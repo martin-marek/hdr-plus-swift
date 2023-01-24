@@ -161,6 +161,7 @@ struct ProcessingView: View {
                 return "Loading images..."
             } else if progress.int < 100000000 {
                 
+                // use a very high number for the 100% mark to minimize any rounding errors
                 let percent = round(Double(progress.int-20000000)/800000*10)/10.0
                            
                 return "Processing images (\(percent)%)..."
@@ -173,6 +174,7 @@ struct ProcessingView: View {
                 return "Loading images..."
             } else if progress.int < 100000000 {
                 
+                // use a very high number for the 100% mark to minimize any rounding errors
                 let percent = round(Double(progress.int-20000000)/800000*10)/10.0
            
                 return "Processing images (\(percent)%)..."
