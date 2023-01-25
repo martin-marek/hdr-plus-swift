@@ -187,7 +187,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
           
         // derive normalized robustness value: two steps in noise_reduction (-2.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the variance of shot noise increases by a factor of two per iso level
         let robustness_rev = 0.5*(26.5-Double(Int(noise_reduction+0.5)))
-        let robustness_norm = pow(2.0, (-robustness_rev + 8.0));
+        let robustness_norm = pow(2.0, (-robustness_rev + 7.5));
         
         // derive estimate of read noise with the idea that read noise increases approx. by a factor of three (stronger than increase in shot noise) per iso level to increase noise reduction in darker regions relative to bright regions
         let read_noise = pow(pow(2.0, (-robustness_rev + 10.0)), 1.65);

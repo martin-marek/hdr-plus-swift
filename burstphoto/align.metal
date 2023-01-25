@@ -1052,7 +1052,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
           
     // derive motion norm from mismatch texture to increase the noise reduction for small values of mismatch using a similar linear relationship as shown in Figure 9f in [Liba 2019]
     float4 const mismatch = mismatch_texture.read(gid);
-    float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm)/sqrt(2.0f);
+    float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm);
     //float4 const motion_norm = float4(1.0f, 1.0f, 1.0f, 1.0f);
         
     // compute tile positions from gid
@@ -1121,7 +1121,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             best_i    = i;
         }
     }
-        
+    
     // extract best shifts
     float const best_shift_x = -0.5f + int(best_i % 9) * 0.125f;
     float const best_shift_y = -0.5f + int(best_i / 9) * 0.125f;
@@ -1150,7 +1150,6 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
                        
             // increase merging weights for images with larger frequency magnitudes and decrease weights for lower magnitudes with the idea that larger magnitudes indicate images with higher sharpness
             // this approach is inspired by equation (3) in [Delbracio 2015]
-             
             float magnitude_norm = 1.0f;
             
             // if we are not at the central frequency bin (zero frequency)
@@ -1164,7 +1163,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
                 float const ratio_mag = (alignedMag2[0]+alignedMag2[1]+alignedMag2[2]+alignedMag2[3])/(refMag[0]+refMag[1]+refMag[2]+refMag[3]);
                      
                 // calculate additional normalization factor that increases the merging weight larger magnitudes and decreases weight for lower magnitudes
-                magnitude_norm = 1.0f*clamp(pow(ratio_mag, 4.0f), 0.5f, 3.0f);
+                magnitude_norm = clamp(pow(ratio_mag, 4.0f), 0.5f, 3.0f);
             }
             
             // calculation of merging weight by Wiener shrinkage as described in the section "Robust pairwise temporal merge" and equation (7) in [Hasinoff 2016] or in the section "Spatially varying temporal merging" and equation (7) and (9) in [Liba 2019] or in section "Pairwise Wiener Temporal Denoising" and equation (11) in [Monod 2021]
@@ -1252,8 +1251,8 @@ kernel void normalize_mismatch(texture2d<float, access::read_write> mismatch_tex
     
     float mismatch_norm = mismatch_texture.read(gid).r;
     
-    // normalize that mean value of mismatch texture is set to 0.2
-    mismatch_norm /= (mean_mismatch*5.0f + 1e-12f);
+    // normalize that mean value of mismatch texture is set to 1/6, which is very close to the threshold value of 0.17. For values larger than the threshold, the strength of temporal denoising is not increased anymore
+    mismatch_norm /= (mean_mismatch*6.0f + 1e-12f);
     
     // clamp to range of 0 to 1 to remove very large values
     mismatch_norm = clamp(mismatch_norm, 0.0f, 1.0f);
