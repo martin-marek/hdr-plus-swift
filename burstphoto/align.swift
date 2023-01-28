@@ -181,7 +181,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     } else if mosaic_pettern_width == 2 {
         print("Merging in the frequency domain...")
         
-        // tile size for merging in frequency domain can be either 8x8 (for tile_size 16x16 and 32x32) or 16x16 (for tile_size 64x64). The smaller tile size leads to a reduction of artifacts at specular highlights and a slightly better performance while the larger tile size suppresses low-frequency noise in shadows better
+        // the tile size for merging in frequency domain can be either 8x8 (for tile_size 16x16 and 32x32) or 16x16 (for tile_size 64x64). The smaller tile size leads to a reduction of artifacts at specular highlights and a slightly better performance while the larger tile size suppresses low-frequency noise in shadows better
         // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
         let tile_size_merge = min(max(8, tile_size/4), 16)
           
@@ -198,6 +198,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         let max_motion_norm = max(1.0, pow(1.35, (12.0-robustness_rev-1.35)));
         
         // set mode for Fourier transformations ("DFT" or "FFT")
+        // for the mode "FFT", only tile sizes <= 16 are possible due to some restrictions within the function
         let ft_mode = (tile_size_merge <= Int(16) ? "FFT" : "DFT")
         
         // correction of hot pixels
