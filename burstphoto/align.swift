@@ -1149,6 +1149,11 @@ func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLT
 
 func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ tile_info: TileInfo, mode: String) {
   
+    var cosine_factor = 0.500    
+    // adapt cosine factor dependent on tile size
+    if (Int32(tile_info.tile_size_merge) == 8) {cosine_factor = 0.530}
+    else if (Int32(tile_info.tile_size_merge) == 16) {cosine_factor = 0.505}
+    
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     // either use discrete Fourier transform or highly-optimized fast Fourier transform
@@ -1160,6 +1165,7 @@ func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_te
     command_encoder.setTexture(tmp_texture_ft, index: 1)
     command_encoder.setTexture(out_texture_ft, index: 2)
     command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Float32(cosine_factor)], length: MemoryLayout<Float32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()

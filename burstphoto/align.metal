@@ -816,6 +816,7 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                         texture2d<float, access::write> out_texture_ft [[texture(2)]],
                         constant int& tile_size [[buffer(0)]],
+                        constant float& cosine_factor [[buffer(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
     
     // compute tile positions from gid
@@ -847,11 +848,9 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                 int const y = n0 + dy;
                 
                 // see section "Overlapped tiles" in https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf or section "Overlapped Tiles and Raised Cosine Window" in https://www.ipol.im/pub/art/2021/336/
-                // calculate modified raised cosine window weight for blending tiles to suppress artifacts
-                //norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
-                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
-                norm_cosine = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
-                
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication with cosine factor dependending on tile size)
+                norm_cosine = (0.5f-cosine_factor*cos(-angle*(dm+0.5f)))*(0.5f-cosine_factor*cos(-angle*(dy+0.5f)));
+                                
                 // calculate coefficients
                 coefRe = cos(angle*dn*dy);
                 coefIm = sin(angle*dn*dy);
@@ -1286,6 +1285,7 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
                         texture2d<float, access::write> out_texture_ft [[texture(2)]],
                         texture2d<float, access::write> out_texture_mag [[texture(3)]],
                         constant int& tile_size [[buffer(0)]],
+                        constant float& cosine_factor [[buffer(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
     
     // compute tile positions from gid
@@ -1331,11 +1331,9 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
             for (int dy = 0; dy < tile_size; dy++) {
       
                 // see section "Overlapped tiles" in https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf or section "Overlapped Tiles and Raised Cosine Window" in https://www.ipol.im/pub/art/2021/336/
-                // calculate modified raised cosine window weight for blending tiles to suppress artifacts
-                //norm_cosine = (0.5f-0.500f*cos(-angle*(dm+0.5f)))*(0.5f-0.500f*cos(-angle*(dy+0.5f)));
-                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication)
-                norm_cosine0 = (0.5f-0.505f*cos(-angle*(dm+0.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
-                norm_cosine1 = (0.5f-0.505f*cos(-angle*(dm+1.5f)))*(0.5f-0.505f*cos(-angle*(dy+0.5f)));
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication with cosine factor dependending on tile size)
+                norm_cosine0 = (0.5f-cosine_factor*cos(-angle*(dm+0.5f)))*(0.5f-cosine_factor*cos(-angle*(dy+0.5f)));
+                norm_cosine1 = (0.5f-cosine_factor*cos(-angle*(dm+1.5f)))*(0.5f-cosine_factor*cos(-angle*(dy+0.5f)));
                 
                 // calculate coefficients
                 coefRe = cos(angle*dn*dy);
