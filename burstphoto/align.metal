@@ -1150,6 +1150,66 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
 }
 
 
+kernel void deconvolute_frequency_domain(texture2d<float, access::read_write> final_texture_ft [[texture(0)]],
+                                         constant int& tile_size [[buffer(0)]],
+                                         uint2 gid [[thread_position_in_grid]]) {
+    
+    // compute tile positions from gid
+    int const m0 = gid.x*tile_size;
+    int const n0 = gid.y*tile_size;
+ 
+    float4 convRe, convIm, convMag;
+    float magnitude_zero, magnitude, weight;
+    float cw[16];
+    
+    // tile size-dependent gains used for the different frequencies
+    if (tile_size == 8) {
+        cw[0] = 0.00f; cw[1] = 0.02f; cw[2] = 0.04f; cw[3] = 0.08f;
+        cw[4] = 0.04f; cw[5] = 0.08f; cw[6] = 0.04f; cw[7] = 0.02f;
+        
+    } else if (tile_size == 16) {
+        cw[ 0] = 0.00f; cw[ 1] = 0.01f; cw[ 2] = 0.02f; cw[ 3] = 0.03f;
+        cw[ 4] = 0.04f; cw[ 5] = 0.06f; cw[ 6] = 0.08f; cw[ 7] = 0.06f;
+        cw[ 8] = 0.04f; cw[ 9] = 0.06f; cw[10] = 0.08f; cw[11] = 0.06f;
+        cw[12] = 0.04f; cw[13] = 0.03f; cw[14] = 0.02f; cw[15] = 0.01f;
+    }
+    
+    convRe = final_texture_ft.read(uint2(2*m0+0, n0));
+    convIm = final_texture_ft.read(uint2(2*m0+1, n0));
+    
+    convMag = sqrt(convRe*convRe + convIm*convIm);
+    magnitude_zero = (convMag[0] + convMag[1] + convMag[2] + convMag[3]);
+    
+    for (int dn = 0; dn < tile_size; dn++) {
+        for (int dm = 0; dm < tile_size; dm++) {
+            
+            if (dm+dn > 0) {
+                
+                int const m = 2*(m0 + dm);
+                int const n = n0 + dn;
+                
+                convRe = final_texture_ft.read(uint2(m+0, n));
+                convIm = final_texture_ft.read(uint2(m+1, n));
+                
+                convMag = sqrt(convRe*convRe + convIm*convIm);
+                magnitude = (convMag[0] + convMag[1] + convMag[2] + convMag[3]);
+                  
+                // reduce the increase for frequencies with high magnitude
+                // weight becomes 0 for ratio >= 0.10
+                // weight becomes 1 for ratio <= 0.05
+                weight = clamp(2.0f - 20.0f*magnitude/magnitude_zero, 0.0f, 1.0f);
+                
+                convRe = (1.0f+weight*cw[dm])*(1.0f+weight*cw[dn]) * convRe;
+                convIm = (1.0f+weight*cw[dm])*(1.0f+weight*cw[dn]) * convIm;
+                
+                final_texture_ft.write(convRe, uint2(m+0, n));
+                final_texture_ft.write(convIm, uint2(m+1, n));
+            }
+        }
+    }
+}
+
+
 kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
                                     texture2d<float, access::read> aligned_texture [[texture(1)]],
                                     texture2d<float, access::read> rms_texture [[texture(2)]],
@@ -1274,7 +1334,7 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
         float const weight = 10.0f*min(pixel_ratio-0.15f, 0.10f);
         
         // blend values and replace hot pixel value
-        out_texture.write(weight*0.25f*sum2 + (1.0f-weight)*pixel_value, uint2(x, y));
+        out_texture.write(weight*0.25f*sum2 + (1.0f-weight)*in_texture.read(uint2(x, y)).r, uint2(x, y));
     }
 }
 

@@ -23,6 +23,7 @@ struct MyProgram {
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Moon/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Dark Sky/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/dinosaur order/",
+            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/highlights/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/33TJ_20150614_232110_642_dng order/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/bench-1/",
             //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/martin 7/",
