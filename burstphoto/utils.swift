@@ -24,18 +24,18 @@ func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int) {
     let compute_group = DispatchGroup()
     let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
     let access_queue = DispatchQueue(label: "") // this is a serial queue to read/save data thread-safely
-    var mosaic_pettern_width: Int?
+    var mosaic_pattern_width: Int?
 
     for i in 0..<urls.count {
         compute_queue.async(group: compute_group) {
     
             // asynchronously load texture
-            if let (texture, _mosaic_pettern_width) = try? image_url_to_texture(urls[i], device) {
+            if let (texture, _mosaic_pattern_width) = try? image_url_to_texture(urls[i], device) {
         
                 // thread-safely save the texture
                 access_queue.sync {
                     textures_dict[i] = texture
-                    mosaic_pettern_width = _mosaic_pettern_width
+                    mosaic_pattern_width = _mosaic_pattern_width
                 }
             }
         }
@@ -60,7 +60,7 @@ func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int) {
         }
     }
     
-    return (textures_list, mosaic_pettern_width!)
+    return (textures_list, mosaic_pattern_width!)
 }
 
 // https://stackoverflow.com/questions/26971240/how-do-i-run-a-terminal-command-in-a-swift-script-e-g-xcodebuild

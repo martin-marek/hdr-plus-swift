@@ -20,7 +20,7 @@ void terminate_xmp_sdk() {
 }
 
 
-int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pettern_width) {
+int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width) {
     
     try {
         
@@ -63,12 +63,12 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
         // - it is assumed that the pattern is square
         const dng_mosaic_info* mosaic_info = negative->GetMosaicInfo();
         if (mosaic_info == NULL) {
-            *mosaic_pettern_width = 1;
+            *mosaic_pattern_width = 1;
             printf("ERROR: MosaicInfo is null.\n");
             return 1;
         } else {
             dng_point mosaic_pettern_size = negative->fMosaicInfo->fCFAPatternSize;
-            *mosaic_pettern_width = mosaic_pettern_size.h;
+            *mosaic_pattern_width = mosaic_pettern_size.h;
         }
         
     }

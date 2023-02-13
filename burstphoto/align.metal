@@ -116,7 +116,7 @@ kernel void avg_pool(texture2d<float, access::read> in_texture [[texture(0)]],
 kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)]],
                           texture2d<float, access::write> out_texture [[texture(1)]],
                           constant int& kernel_size [[buffer(0)]],
-                          constant int& mosaic_pettern_width [[buffer(1)]],
+                          constant int& mosaic_pattern_width [[buffer(1)]],
                           uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -143,7 +143,7 @@ kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)
     int y = gid.y;
     
     for (int dx = -kernel_size_c; dx <= kernel_size_c; dx++) {
-        int x = gid.x + mosaic_pettern_width*dx;
+        int x = gid.x + mosaic_pattern_width*dx;
         if (0 <= x && x < texture_width) {
 
             float const weight = bw[abs(dx)];
@@ -161,7 +161,7 @@ kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)
 kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)]],
                           texture2d<float, access::write> out_texture [[texture(1)]],
                           constant int& kernel_size [[buffer(0)]],
-                          constant int& mosaic_pettern_width [[buffer(1)]],
+                          constant int& mosaic_pattern_width [[buffer(1)]],
                           uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -188,7 +188,7 @@ kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)
     int x = gid.x;
     
     for (int dy = -kernel_size_c; dy <= kernel_size_c; dy++) {
-        int y = gid.y + mosaic_pettern_width*dy;
+        int y = gid.y + mosaic_pattern_width*dy;
         if (0 <= y && y < texture_height) {
            
             float const weight = bw[abs(dy)];
@@ -686,15 +686,15 @@ kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
 kernel void color_difference(texture2d<float, access::read> texture1 [[texture(0)]],
                              texture2d<float, access::read> texture2 [[texture(1)]],
                              texture2d<float, access::write> out_texture [[texture(2)]],
-                             constant int& mosaic_pettern_width [[buffer(0)]],
+                             constant int& mosaic_pattern_width [[buffer(0)]],
                              uint2 gid [[thread_position_in_grid]]) {
     
     float total_diff = 0;
-    int x0 = gid.x * mosaic_pettern_width;
-    int y0 = gid.y * mosaic_pettern_width;
+    int x0 = gid.x * mosaic_pattern_width;
+    int y0 = gid.y * mosaic_pattern_width;
     
-    for (int dx = 0; dx < mosaic_pettern_width; dx++) {
-        for (int dy = 0; dy < mosaic_pettern_width; dy++) {
+    for (int dx = 0; dx < mosaic_pattern_width; dx++) {
+        for (int dy = 0; dy < mosaic_pattern_width; dy++) {
             int x = x0 + dx;
             int y = y0 + dy;
             float i1 = texture1.read(uint2(x, y)).r;

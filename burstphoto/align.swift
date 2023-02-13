@@ -139,7 +139,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     
     // load images
     t = DispatchTime.now().uptimeNanoseconds
-    var (textures, mosaic_pettern_width) = try load_images(dng_urls)
+    var (textures, mosaic_pattern_width) = try load_images(dng_urls)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10000000 : 20000000) }
@@ -166,7 +166,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         print("Special mode: temporal averaging only...")
          
         // correction of hot pixels
-        if mosaic_pettern_width == 2 {
+        if mosaic_pattern_width == 2 {
             correct_hotpixels(textures)
         }
                   
@@ -179,7 +179,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         
 
     // sophisticated approach with alignment of tiles and merging of tiles in frequency domain (only 2x2 Bayer pattern)
-    } else if mosaic_pettern_width == 2 {
+    } else if mosaic_pattern_width == 2 {
         print("Merging in the frequency domain...")
         
         // the tile size for merging in frequency domain can be either 8x8 (for tile_size 16x16 and 32x32) or 16x16 (for tile_size 64x64). The smaller tile size leads to a reduction of artifacts at specular highlights and a slightly better performance while the larger tile size suppresses low-frequency noise in shadows better
@@ -206,13 +206,13 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         correct_hotpixels(textures)
                 
         // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process. The shift equals the tile size used in the merging process here, which later translates into tile_size_merge/2 when each color channel is processed independently
-        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
         
-        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
          
-        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
             
-        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
    
         
     // sophisticated approach with alignment of tiles and merging of tiles in the spatial domain (when pattern is not 2x2 Bayer)
@@ -225,7 +225,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         let robustness_rev = 0.5*(25.0-Double(Int(noise_reduction+0.5)))
         let robustness_norm = 0.1*pow(sqrt(2), robustness_rev)
     
-        try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pettern_width: mosaic_pettern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
+        try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
     }
     
     // convert final image to 16 bit integer
@@ -265,7 +265,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
 
 
 // convenience function for the spatial merging approach
-func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pettern_width: Int, search_distance: Int, tile_size: Int, kernel_size: Int, robustness: Double, textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, kernel_size: Int, robustness: Double, textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // set original texture size
     let texture_width_orig = textures[ref_idx].width
@@ -273,11 +273,11 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
               
     // set alignment params
     let min_image_dim = min(texture_width_orig, texture_height_orig)
-    var downscale_factor_array = [mosaic_pettern_width]
+    var downscale_factor_array = [mosaic_pattern_width]
     var search_dist_array = [2]
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]
-    var div = mosaic_pettern_width
+    var div = mosaic_pattern_width
     while (res > search_distance) {
         downscale_factor_array.append(2)
         search_dist_array.append(2)
@@ -303,9 +303,9 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
     
     // blur reference texure and estimate noise standard deviation
     // -  the computation is done here to avoid repeating the same computation in 'robust_merge()'
-    var ref_texture_blurred = blur_mosaic_texture(textures[ref_idx], kernel_size, mosaic_pettern_width)
-    ref_texture_blurred = blur_mosaic_texture(ref_texture_blurred, kernel_size, mosaic_pettern_width)
-    let noise_sd = estimate_color_noise(textures[ref_idx], ref_texture_blurred, mosaic_pettern_width)
+    var ref_texture_blurred = blur_mosaic_texture(textures[ref_idx], kernel_size, mosaic_pattern_width)
+    ref_texture_blurred = blur_mosaic_texture(ref_texture_blurred, kernel_size, mosaic_pattern_width)
+    let noise_sd = estimate_color_noise(textures[ref_idx], ref_texture_blurred, mosaic_pattern_width)
 
     // iterate over comparison images
     for comp_idx in 0..<textures.count {
@@ -329,7 +329,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         let aligned_texture = crop_texture(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array), pad_align_x, pad_align_x, pad_align_y, pad_align_y)
         
         // robust-merge the texture
-        let merged_texture = robust_merge(textures[ref_idx], ref_texture_blurred, aligned_texture, kernel_size, robustness, noise_sd, mosaic_pettern_width)
+        let merged_texture = robust_merge(textures[ref_idx], ref_texture_blurred, aligned_texture, kernel_size, robustness, noise_sd, mosaic_pattern_width)
         
         // add robust-merged texture to the output image
         add_texture(merged_texture, final_texture, textures.count)
@@ -341,7 +341,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
 
 
 // convenience function for the frequency-based merging approach
-func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int, shift_right: Int, shift_top: Int, shift_bottom: Int, ref_idx: Int, mosaic_pettern_width: Int, search_distance: Int, tile_size: Int, tile_size_merge: Int, robustness_norm: Double, read_noise: Double, max_motion_norm: Double, ft_mode: String, textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int, shift_right: Int, shift_top: Int, shift_bottom: Int, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, tile_size_merge: Int, robustness_norm: Double, read_noise: Double, max_motion_norm: Double, ft_mode: String, textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // set original texture size
     let texture_width_orig = textures[ref_idx].width
@@ -349,11 +349,11 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
                      
     // set alignment params
     let min_image_dim = min(texture_width_orig, texture_height_orig)
-    var downscale_factor_array = [mosaic_pettern_width]
+    var downscale_factor_array = [mosaic_pattern_width]
     var search_dist_array = [2]
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]
-    var div = mosaic_pettern_width
+    var div = mosaic_pattern_width
     while (res > search_distance) {
         downscale_factor_array.append(2)
         search_dist_array.append(2)
@@ -610,7 +610,7 @@ func avg_pool(_ input_texture: MTLTexture, _ scale: Int) -> MTLTexture {
 }
 
 
-func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_pettern_width: Int) -> MTLTexture {
+func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_pattern_width: Int) -> MTLTexture {
     
     // create a temp texture blurred along x-axis only and the output texture, blurred along both x- and y-axis
     let blur_x = texture_like(in_texture)
@@ -626,7 +626,7 @@ func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(blur_x, index: 1)
     command_encoder.setBytes([Int32(kernel_size)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(mosaic_pettern_width)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
 
     // blur the texture along the y-axis
@@ -1048,9 +1048,9 @@ func add_textures_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ wei
 }
 
 
-func color_difference(_ texture1: MTLTexture, _ texture2: MTLTexture, _ mosaic_pettern_width: Int) -> MTLTexture {
+func color_difference(_ texture1: MTLTexture, _ texture2: MTLTexture, _ mosaic_pattern_width: Int) -> MTLTexture {
     
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width/mosaic_pettern_width, height: texture1.height/mosaic_pettern_width, mipmapped: false)
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width/mosaic_pattern_width, height: texture1.height/mosaic_pattern_width, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let output_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
@@ -1064,7 +1064,7 @@ func color_difference(_ texture1: MTLTexture, _ texture2: MTLTexture, _ mosaic_p
     command_encoder.setTexture(texture1, index: 0)
     command_encoder.setTexture(texture2, index: 1)
     command_encoder.setTexture(output_texture, index: 2)
-    command_encoder.setBytes([Int32(mosaic_pettern_width)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -1073,10 +1073,10 @@ func color_difference(_ texture1: MTLTexture, _ texture2: MTLTexture, _ mosaic_p
 }
 
 
-func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, _ mosaic_pettern_width: Int) -> MTLBuffer {
+func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, _ mosaic_pattern_width: Int) -> MTLBuffer {
     
     // compute the color difference of each mosaic superpixel between the original and the blurred texture
-    let texture_diff = color_difference(texture, texture_blurred, mosaic_pettern_width)
+    let texture_diff = color_difference(texture, texture_blurred, mosaic_pattern_width)
     
     // compute the average of the difference between the original and the blurred texture
     let mean_diff = texture_mean(texture_diff, "r")
@@ -1085,14 +1085,14 @@ func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, 
 }
 
 
-func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, _ comp_texture: MTLTexture, _ kernel_size: Int, _ robustness: Double, _ noise_sd: MTLBuffer, _ mosaic_pettern_width: Int) -> MTLTexture {
+func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, _ comp_texture: MTLTexture, _ kernel_size: Int, _ robustness: Double, _ noise_sd: MTLBuffer, _ mosaic_pattern_width: Int) -> MTLTexture {
     
     // blur comparison texture
-    var comp_texture_blurred = blur_mosaic_texture(comp_texture, kernel_size, mosaic_pettern_width)
-    comp_texture_blurred = blur_mosaic_texture(comp_texture_blurred, kernel_size, mosaic_pettern_width)
+    var comp_texture_blurred = blur_mosaic_texture(comp_texture, kernel_size, mosaic_pattern_width)
+    comp_texture_blurred = blur_mosaic_texture(comp_texture_blurred, kernel_size, mosaic_pattern_width)
     
     // compute the color difference of each superpixel between the blurred reference and the comparison textures
-    let texture_diff = color_difference(ref_texture_blurred, comp_texture_blurred, mosaic_pettern_width)
+    let texture_diff = color_difference(ref_texture_blurred, comp_texture_blurred, mosaic_pattern_width)
     
     // create a weight texture
     let weight_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: texture_diff.width, height: texture_diff.height, mipmapped: false)
