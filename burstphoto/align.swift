@@ -1609,3 +1609,95 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
     }    
 }
 
+
+func equalize_exposure(_ textures: [MTLTexture], _ black_level: [Int], _ exposure_bias: [Int], _ ref_idx: Int) {
+
+    // iterate over all images and correct exposure in each texture
+    for comp_idx in 0..<textures.count {
+        
+        let exposure_diff = Int(exposure_bias[ref_idx] - exposure_bias[comp_idx])
+        
+        // only apply exposure correction if there is a different exposure and if a reasonable black level is available
+        if (exposure_diff != 0 && black_level[0] != -1) {
+            
+            let command_buffer = command_queue.makeCommandBuffer()!
+            let command_encoder = command_buffer.makeComputeCommandEncoder()!
+            let state = equalize_exposure_state
+            command_encoder.setComputePipelineState(state)
+            let threads_per_grid = MTLSize(width: textures[comp_idx].width, height: textures[comp_idx].height, depth: 1)
+            let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+            command_encoder.setTexture(textures[comp_idx], index: 0)
+            command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 0)
+            command_encoder.setBytes([Int32(black_level[comp_idx*4+0])], length: MemoryLayout<Int32>.stride, index: 1)
+            command_encoder.setBytes([Int32(black_level[comp_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 2)
+            command_encoder.setBytes([Int32(black_level[comp_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 3)
+            command_encoder.setBytes([Int32(black_level[comp_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 4)
+            command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+            command_encoder.endEncoding()
+            command_buffer.commit()
+        }
+    }
+}
+
+
+func correct_underexposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ exposure_bias: [Int], _ ref_idx: Int) {
+          
+    // only apply exposure correction if reference image is underexposed
+    if (exposure_bias[ref_idx] < 0 && white_level != -1 && black_level[0] != -1) {
+     
+        var exp_idx = 0
+        var uniform_exposure = true
+        // find index of image with longest exposure to use the most robust black level value
+        for comp_idx in 0..<exposure_bias.count {         
+            if (exposure_bias[comp_idx] > exposure_bias[exp_idx]) {
+                exp_idx = comp_idx
+                uniform_exposure = false
+            }
+        }
+        
+        var black_level0 = 0.0
+        var black_level1 = 0.0
+        var black_level2 = 0.0
+        var black_level3 = 0.0
+        
+        // if exposure levels are uniform, calculate mean value of all exposures
+        if uniform_exposure {
+            
+            for comp_idx in 0..<exposure_bias.count {
+                black_level0 += Double(black_level[comp_idx*4+0])
+                black_level1 += Double(black_level[comp_idx*4+1])
+                black_level2 += Double(black_level[comp_idx*4+2])
+                black_level3 += Double(black_level[comp_idx*4+3])
+            }
+            
+            black_level0 /= Double(exposure_bias.count)
+            black_level1 /= Double(exposure_bias.count)
+            black_level2 /= Double(exposure_bias.count)
+            black_level3 /= Double(exposure_bias.count)
+            
+        } else {
+            black_level0 = Double(black_level[exp_idx*4+0])
+            black_level1 = Double(black_level[exp_idx*4+1])
+            black_level2 = Double(black_level[exp_idx*4+2])
+            black_level3 = Double(black_level[exp_idx*4+3])
+        }              
+    
+        let command_buffer = command_queue.makeCommandBuffer()!
+        let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        let state = correct_underexposure_state
+        command_encoder.setComputePipelineState(state)
+        let threads_per_grid = MTLSize(width: final_texture.width, height: final_texture.height, depth: 1)
+        let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+        command_encoder.setTexture(final_texture, index: 0)
+        command_encoder.setBytes([Int32(exposure_bias[ref_idx])], length: MemoryLayout<Int32>.stride, index: 0)
+        command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 1)
+        command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 2)
+        command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 3)
+        command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 4)
+        command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 5)
+        command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+        command_encoder.endEncoding()
+        command_buffer.commit()
+    }    
+}
+
