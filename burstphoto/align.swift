@@ -74,6 +74,8 @@ let merge_frequency_domain_state = try! device.makeComputePipelineState(function
 let calculate_mismatch_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_mismatch_rgba")!)
 let normalize_mismatch_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_mismatch")!)
 let correct_hotpixels_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_hotpixels")!)
+let equalize_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure")!)
+let correct_underexposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_underexposure")!)
 let deconvolute_frequency_domain_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "deconvolute_frequency_domain")!)
 
 
@@ -84,7 +86,7 @@ let deconvolute_frequency_domain_state = try! device.makeComputePipelineState(fu
 
 
 // main function of the burst photo app
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, merging_algorithm: String = "Fast", tile_size: Int = 32, search_distance: String = "Medium", kernel_size: Int = 5, noise_reduction: Double = 13.0) throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: Int = 32, kernel_size: Int = 5, noise_reduction: Double = 13.0, comp_underexposure: String = "Off") throws -> URL {
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -129,21 +131,33 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
             t = DispatchTime.now().uptimeNanoseconds
         }
     }
-    
+       
     // load images
     t = DispatchTime.now().uptimeNanoseconds
-    var (textures, mosaic_pattern_width) = try load_images(dng_urls)
+    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias) = try load_images(dng_urls)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10000000 : 20000000) }
     
-    // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
+    // if images have a uniform exposure: use central image as reference
+    var ref_idx = image_urls.count / 2
+       
+    // if images have different exposures: use image with lowest exposure as reference to protect highlights
+    // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
+    for comp_idx in 0..<image_urls.count {
+     
+        if exposure_bias[comp_idx] < exposure_bias[ref_idx] {
+            ref_idx = comp_idx
+        }
+    }
+    
+     // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
     var merging_algorithm = merging_algorithm
     if merging_algorithm == "Higher quality" && mosaic_pattern_width != 2 {
         DispatchQueue.main.async { progress.show_nonbayer_hq_alert = true }
         merging_algorithm = "Fast"
     }
-    
+       
     // convert images from uint16 to float16
     textures = textures.map{texture_uint16_to_float($0)}
      
@@ -168,6 +182,10 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         // correction of hot pixels
         if mosaic_pattern_width == 2 {
             correct_hotpixels(textures)
+            
+            // correction of intensities for images with bracketed exposure
+            // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
+            equalize_exposure(textures, black_level, exposure_bias, ref_idx)
         }
                   
         // iterate over all images
@@ -203,6 +221,10 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         
         // correction of hot pixels
         correct_hotpixels(textures)
+        
+        // correction of intensities for images with bracketed exposure
+        // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
+        equalize_exposure(textures, black_level, exposure_bias, ref_idx)
                 
         // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process. The shift equals the tile size used in the merging process here, which later translates into tile_size_merge/2 when each color channel is processed independently
         try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
@@ -212,7 +234,13 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
             
         try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
-   
+        
+        // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
+        // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
+        if comp_underexposure == "On" {
+            correct_underexposure(final_texture, white_level[ref_idx], black_level, exposure_bias, ref_idx)
+        }
+            
         
     // alignment and merging of tiles in the spatial domain (supports non-Bayer sensors)
     } else {
@@ -1347,5 +1375,97 @@ func correct_hotpixels(_ textures: [MTLTexture]) {
         command_encoder.endEncoding()
         command_buffer.commit()
     }
+}
+
+
+func equalize_exposure(_ textures: [MTLTexture], _ black_level: [Int], _ exposure_bias: [Int], _ ref_idx: Int) {
+
+    // iterate over all images and correct exposure in each texture
+    for comp_idx in 0..<textures.count {
+        
+        let exposure_diff = Int(exposure_bias[ref_idx] - exposure_bias[comp_idx])
+        
+        // only apply exposure correction if there is a different exposure and if a reasonable black level is available
+        if (exposure_diff != 0 && black_level[0] != -1) {
+            
+            let command_buffer = command_queue.makeCommandBuffer()!
+            let command_encoder = command_buffer.makeComputeCommandEncoder()!
+            let state = equalize_exposure_state
+            command_encoder.setComputePipelineState(state)
+            let threads_per_grid = MTLSize(width: textures[comp_idx].width, height: textures[comp_idx].height, depth: 1)
+            let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+            command_encoder.setTexture(textures[comp_idx], index: 0)
+            command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 0)
+            command_encoder.setBytes([Int32(black_level[comp_idx*4+0])], length: MemoryLayout<Int32>.stride, index: 1)
+            command_encoder.setBytes([Int32(black_level[comp_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 2)
+            command_encoder.setBytes([Int32(black_level[comp_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 3)
+            command_encoder.setBytes([Int32(black_level[comp_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 4)
+            command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+            command_encoder.endEncoding()
+            command_buffer.commit()
+        }
+    }
+}
+
+
+func correct_underexposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ exposure_bias: [Int], _ ref_idx: Int) {
+          
+    // only apply exposure correction if reference image is underexposed
+    if (exposure_bias[ref_idx] < 0 && white_level != -1 && black_level[0] != -1) {
+     
+        var exp_idx = 0
+        var uniform_exposure = true
+        // find index of image with longest exposure to use the most robust black level value
+        for comp_idx in 0..<exposure_bias.count {         
+            if (exposure_bias[comp_idx] > exposure_bias[exp_idx]) {
+                exp_idx = comp_idx
+                uniform_exposure = false
+            }
+        }
+        
+        var black_level0 = 0.0
+        var black_level1 = 0.0
+        var black_level2 = 0.0
+        var black_level3 = 0.0
+        
+        // if exposure levels are uniform, calculate mean value of all exposures
+        if uniform_exposure {
+            
+            for comp_idx in 0..<exposure_bias.count {
+                black_level0 += Double(black_level[comp_idx*4+0])
+                black_level1 += Double(black_level[comp_idx*4+1])
+                black_level2 += Double(black_level[comp_idx*4+2])
+                black_level3 += Double(black_level[comp_idx*4+3])
+            }
+            
+            black_level0 /= Double(exposure_bias.count)
+            black_level1 /= Double(exposure_bias.count)
+            black_level2 /= Double(exposure_bias.count)
+            black_level3 /= Double(exposure_bias.count)
+            
+        } else {
+            black_level0 = Double(black_level[exp_idx*4+0])
+            black_level1 = Double(black_level[exp_idx*4+1])
+            black_level2 = Double(black_level[exp_idx*4+2])
+            black_level3 = Double(black_level[exp_idx*4+3])
+        }              
+    
+        let command_buffer = command_queue.makeCommandBuffer()!
+        let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        let state = correct_underexposure_state
+        command_encoder.setComputePipelineState(state)
+        let threads_per_grid = MTLSize(width: final_texture.width, height: final_texture.height, depth: 1)
+        let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+        command_encoder.setTexture(final_texture, index: 0)
+        command_encoder.setBytes([Int32(exposure_bias[ref_idx])], length: MemoryLayout<Int32>.stride, index: 0)
+        command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 1)
+        command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 2)
+        command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 3)
+        command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 4)
+        command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 5)
+        command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+        command_encoder.endEncoding()
+        command_buffer.commit()
+    }    
 }
 

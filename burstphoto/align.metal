@@ -1390,6 +1390,105 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
 }
 
 
+// exposure correction in case of a burst with exposure bracketing
+kernel void equalize_exposure(texture2d<float, access::read_write> comp_texture [[texture(0)]],
+                             constant int& exposure_diff [[buffer(0)]],
+                             constant int& black_level0 [[buffer(1)]],
+                             constant int& black_level1 [[buffer(2)]],
+                             constant int& black_level2 [[buffer(3)]],
+                             constant int& black_level3 [[buffer(4)]],
+                             uint2 gid [[thread_position_in_grid]]) {
+       
+    int const x = gid.x;
+    int const y = gid.y;
+    
+    // load args
+    float black_level = 0.0f;
+    
+    // extract color channel-dependent black level
+    if (x%2 == 0 & y%2 == 0) {
+        black_level = float(black_level0);
+    }
+    if (x%2 == 1 & y%2 == 0) {
+        black_level = float(black_level1);
+    }
+    if (x%2 == 0 & y%2 == 1) {
+        black_level = float(black_level2);
+    }
+    if (x%2 == 1 & y%2 == 1) {
+        black_level = float(black_level3);
+    }
+    
+    // calculate exposure correction factor from exposure difference
+    float const corr_factor = pow(2.0f, float(exposure_diff/100.0f));
+    
+    // extract pixel value and correct exposure
+    float pixel_val = comp_texture.read(gid).r;
+    pixel_val = (pixel_val - black_level)*corr_factor + black_level;
+    pixel_val = clamp(pixel_val, 0.0f, float(UINT16_MAX_VAL));
+
+    // write back into texture
+    comp_texture.write(pixel_val, gid);
+}
+
+
+// correction of underexposure with reinhard tone mapping operator
+// inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
+kernel void correct_underexposure(texture2d<float, access::read_write> final_texture [[texture(0)]],
+                                  constant int& exposure_bias [[buffer(0)]],
+                                  constant int& white_level [[buffer(1)]],
+                                  constant float& black_level0 [[buffer(2)]],
+                                  constant float& black_level1 [[buffer(3)]],
+                                  constant float& black_level2 [[buffer(4)]],
+                                  constant float& black_level3 [[buffer(5)]],
+                                  uint2 gid [[thread_position_in_grid]]) {
+      
+    int const x = gid.x;
+    int const y = gid.y;
+   
+    // load args
+    float black_level = 0.0f;
+    
+    // extract color channel-dependent black level
+    if (x%2 == 0 & y%2 == 0) {
+        black_level = black_level0;
+    }
+    if (x%2 == 1 & y%2 == 0) {
+        black_level = black_level1;
+    }
+    if (x%2 == 0 & y%2 == 1) {
+        black_level = black_level2;
+    }
+    if (x%2 == 1 & y%2 == 1) {
+        black_level = black_level3;
+    }    
+  
+    float const correction_stops = float(-exposure_bias/100.0f);
+    
+    float gain = clamp(0.5f+0.5f*correction_stops, 1.0f, 2.0f);
+    gain = clamp(gain*pow(2.0f, correction_stops), 1.0f, 32.0f);
+    
+    float const max_value1 = gain*2.0f/(2.0f+gain);
+    float const max_value2 = sqrt(sqrt(sqrt(sqrt(max_value1))));
+    
+    float color_value = final_texture.read(gid).r;    
+    // subtract black level and rescale intensity to range from 0 to 1
+    color_value = (color_value-black_level)/float(white_level-black_level);
+    // apply gain
+    color_value = gain * color_value;
+    
+    // apply tone mappting operator inspired by equation (4) in https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
+    // The adapted formula yields a better linearity in the shadows and midtones compared to the formula in the publication
+    color_value = max(1.0f, max_value2)/max_value1 * color_value*2.0f/(2.0f+color_value);
+        
+    // return to original intensity scale
+    color_value = color_value*float(white_level-black_level) + black_level;
+    color_value = clamp(color_value, 0.0f, float(UINT16_MAX_VAL));
+
+    final_texture.write(color_value, gid);
+}
+
+
 // highly-optimized fast Fourier transform applied to each color channel independently
 // The aim of this function is to provide improved performance compared to the more simple function forward_dft() while providing equal results. It uses the following features for reduced calculation times:
 // - the four color channels are stored as a float4 and all calculations employ SIMD instructions.

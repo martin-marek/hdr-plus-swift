@@ -20,7 +20,7 @@ void terminate_xmp_sdk() {
 }
 
 
-int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width) {
+int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_level0, int* black_level1, int* black_level2, int* black_level3, int* exposure_bias) {
     
     try {
         
@@ -67,8 +67,39 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
             printf("ERROR: MosaicInfo is null.\n");
             return 1;
         } else {
-            dng_point mosaic_pettern_size = negative->fMosaicInfo->fCFAPatternSize;
-            *mosaic_pattern_width = mosaic_pettern_size.h;
+            dng_point mosaic_pattern_size = negative->fMosaicInfo->fCFAPatternSize;
+            *mosaic_pattern_width = mosaic_pattern_size.h;
+        }
+        
+        // get black level for exposure correction
+        // - currently only working for 2x2 Bayer mosaic pattern
+        const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
+        if (linearization_info == NULL | *mosaic_pattern_width != 2) {
+            *white_level = -1;
+            *black_level0 = -1;
+            *black_level1 = -1;
+            *black_level2 = -1;
+            *black_level3 = -1;
+            printf("ERROR: LinearizationInfo is null.\n");
+            return 1;
+        } else {        
+            *white_level = int(negative->fLinearizationInfo->fWhiteLevel[0]);
+            *black_level0 = negative->fLinearizationInfo->fBlackLevel[0][0][0];
+            *black_level1 = negative->fLinearizationInfo->fBlackLevel[0][1][0];
+            *black_level2 = negative->fLinearizationInfo->fBlackLevel[1][0][0];
+            *black_level3 = negative->fLinearizationInfo->fBlackLevel[1][1][0];
+        }
+        
+        // get exposure bias for exposure correction
+        // - currently only working for 2x2 Bayer mosaic pattern
+        const dng_exif* exif = negative->GetExif();
+        if (exif == NULL | *mosaic_pattern_width != 2) {
+            *exposure_bias = -1;
+            printf("ERROR: Exif is null.\n");
+            return 1;
+        } else {
+            dng_srational exposure_bias_value = exif->fExposureBiasValue;
+            *exposure_bias = exposure_bias_value.n;
         }
         
     }

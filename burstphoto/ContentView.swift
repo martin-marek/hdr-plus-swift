@@ -201,13 +201,28 @@ struct ProcessingView: View {
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     let tile_sizes = [16, 32, 64]
-    let search_distances = ["Low", "Medium", "High"]
     let merging_algorithms = ["Fast", "Higher quality"]
+    let comp_underexposures = ["Off", "On"]
+    
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
      
     var body: some View {
         VStack {
+                   
+            VStack(alignment: .leading) {
+                Text("Compensation of underexposure").font(.system(size: 14, weight: .medium))
+                HStack {
+                    Picker(selection: settings.$comp_underexposure, label: EmptyView()) {
+                        ForEach(comp_underexposures, id: \.self) {
+                            Text($0)
+                        }
+                    }.pickerStyle(SegmentedPickerStyle())
+                    Text("(if specified in EXIF)")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)                    
+                }
+            }.padding(15)
             
             VStack(alignment: .leading) {
                 Text("Tile size").font(.system(size: 14, weight: .medium))
@@ -216,16 +231,7 @@ struct SettingsView: View {
                         Text(String($0))
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-            }.padding(.horizontal, 15).padding(.top, 15).padding(.bottom, 10)
-            
-            VStack(alignment: .leading) {
-                Text("Search distance").font(.system(size: 14, weight: .medium))
-                Picker(selection: settings.$search_distance, label: EmptyView()) {
-                    ForEach(search_distances, id: \.self) {
-                        Text(String($0))
-                    }
-                }.pickerStyle(SegmentedPickerStyle())
-            }.padding(.horizontal, 15).padding(.vertical, 10)
+            }.padding(15)
             
             VStack(alignment: .leading) {
                 Text("Merging algorithm").font(.system(size: 14, weight: .medium))
@@ -234,7 +240,7 @@ struct SettingsView: View {
                         Text($0)
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-            }.padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 3)
+            }.padding(15)
             
             VStack(alignment: .leading) {
                 
@@ -346,12 +352,9 @@ struct MyDropDelegate: DropDelegate {
                 app_state = .processing
             }
             
-            do {
-                // compute reference index (use the middle image)
-                let ref_idx = image_urls.count / 2
-
+            do {               
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction)
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, noise_reduction: settings.noise_reduction, comp_underexposure: settings.comp_underexposure)
                 
                 // inform the user about the saved image
                 app_state = .image_saved

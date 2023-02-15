@@ -10,7 +10,7 @@ enum ImageIOError: Error {
 
 
 
-func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture, Int) {
+func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture, Int, Int, [Int], Int) {
     
     // read image
     var error_code: Int32
@@ -18,7 +18,15 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     var width: Int32 = 0;
     var height: Int32 = 0;
     var mosaic_pattern_width: Int32 = 0;
-    error_code = read_image(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width)
+    var white_level: Int32 = 0;
+    var black_level0: Int32 = 0;
+    var black_level1: Int32 = 0;
+    var black_level2: Int32 = 0;
+    var black_level3: Int32 = 0;
+    var black_level: [Int] = [0, 0, 0, 0];
+    var exposure_bias: Int32 = 0;
+    
+    error_code = read_image(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width, &white_level, &black_level0, &black_level1, &black_level2, &black_level3, &exposure_bias)
     if (error_code != 0) {throw ImageIOError.load_error}
     
     // convert image bitmap to MTLTexture
@@ -33,7 +41,13 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     // free memory
     free(pixel_bytes!)
 
-    return (texture, Int(mosaic_pattern_width))
+    // convert four black levels to int16
+    black_level[0] = Int(black_level0)
+    black_level[1] = Int(black_level1)
+    black_level[2] = Int(black_level2)
+    black_level[3] = Int(black_level3)
+    
+    return (texture, Int(mosaic_pattern_width), Int(white_level), black_level, Int(exposure_bias))
 }
 
 
