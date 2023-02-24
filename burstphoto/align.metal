@@ -1336,6 +1336,10 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
                               texture2d<float, access::read> in_texture [[texture(1)]],
                               texture2d<float, access::write> out_texture [[texture(2)]],
                               constant float* mean_texture_buffer [[buffer(0)]],
+                              constant int& black_level0 [[buffer(1)]],
+                              constant int& black_level1 [[buffer(2)]],
+                              constant int& black_level2 [[buffer(3)]],
+                              constant int& black_level3 [[buffer(4)]],
                               uint2 gid [[thread_position_in_grid]]) {
        
     int const x = gid.x+2;
@@ -1343,19 +1347,23 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
     
     // load args
     float mean_texture = 0.0f;
+    float black_level = 0.0f;
     
     // extract color channel-dependent mean value of the average texture of all images
     if (x%2 == 0 & y%2 == 0) {
-        mean_texture = mean_texture_buffer[0];
+        mean_texture = mean_texture_buffer[0] - black_level0;
+        black_level = float(black_level0);
     }
     if (x%2 == 1 & y%2 == 0) {
-        mean_texture = mean_texture_buffer[1];
+        mean_texture = mean_texture_buffer[1] - black_level1;
+        black_level = float(black_level1);
     }
     if (x%2 == 0 & y%2 == 1) {
         mean_texture = mean_texture_buffer[2];
     }
     if (x%2 == 1 & y%2 == 1) {
-        mean_texture = mean_texture_buffer[3];
+        mean_texture = mean_texture_buffer[3] - black_level3;
+        black_level = float(black_level3);
     }
         
     // calculate weighted sum of 8 pixels surrounding the potential hot pixel based on the average texture
@@ -1370,10 +1378,10 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
     
     // extract value of potential hot pixel from the average texture and divide by sum of surrounding pixels
     float const pixel_value = average_texture.read(uint2(x, y)).r;
-    float const pixel_ratio = pixel_value/sum;
+    float const pixel_ratio = max(pixel_value-black_level, 1.0f)/max(sum/12.0f-black_level, 1.0f);
     
     // if hot pixel is detected
-    if (pixel_ratio >= 0.15f & pixel_value >= 2.0f*mean_texture) {
+    if (pixel_ratio >= 2.0f & pixel_value >= 2.0f*mean_texture) {
         
         // calculate mean value of 4 surrounding values
         float sum2 = in_texture.read(uint2(x-2, y+0)).r;
@@ -1382,7 +1390,7 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
         sum2      += in_texture.read(uint2(x+0, y+2)).r;
         
         // calculate weight for blending to have a smooth transition for not so obvious hot pixels
-        float const weight = 10.0f*min(pixel_ratio-0.15f, 0.10f);
+        float const weight = 0.5f*min(pixel_ratio-2.0f, 2.0f);
         
         // blend values and replace hot pixel value
         out_texture.write(weight*0.25f*sum2 + (1.0f-weight)*in_texture.read(uint2(x, y)).r, uint2(x, y));
