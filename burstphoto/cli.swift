@@ -40,7 +40,7 @@ struct MyProgram {
             // options: 16, 32 or 64
             let tile_size = 32
             // options: "Off" or "On"
-            let comp_underexposure = "On"
+            let comp_underexposure = "Off"
             
             // align+merge
             let out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: merging_algorithm, tile_size: tile_size, noise_reduction: noise_reduction, comp_underexposure: comp_underexposure)

@@ -1359,7 +1359,8 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
         black_level = float(black_level1);
     }
     if (x%2 == 0 & y%2 == 1) {
-        mean_texture = mean_texture_buffer[2];
+        mean_texture = mean_texture_buffer[2] - black_level2;
+        black_level = float(black_level2);
     }
     if (x%2 == 1 & y%2 == 1) {
         mean_texture = mean_texture_buffer[3] - black_level3;
