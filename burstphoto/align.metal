@@ -1009,10 +1009,13 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
     float4 const noise_norm = noise_est*tile_size*tile_size*robustness_norm;
           
     // derive motion norm from mismatch texture to increase the noise reduction for small values of mismatch using a similar linear relationship as shown in Figure 9f in [Liba 2019]
-    float4 const mismatch = mismatch_texture.read(gid);
-    float4 const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm);
-    //float4 const motion_norm = float4(1.0f, 1.0f, 1.0f, 1.0f);
-        
+    float const mismatch = mismatch_texture.read(gid).r;
+    // for a smooth transition, the magnitude norm is weighted based on the mismatch
+    float const mismatch_weight = clamp(1.0f - 10.0f*(mismatch-0.2f), 0.0f, 1.0f);
+    
+    float const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm);
+    //float const motion_norm = 1.0f
+    
     // compute tile positions from gid
     int const m0 = gid.x*tile_size;
     int const n0 = gid.y*tile_size;
@@ -1110,9 +1113,9 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             // this approach is inspired by equation (3) in [Delbracio 2015]
             magnitude_norm = 1.0f;
             
-            // if we are not at the central frequency bin (zero frequency)
-            if(dm+dn > 0) {
-               
+            // if we are not at the central frequency bin (zero frequency) and if the mismatch is low
+            if(dm+dn > 0 & mismatch < 0.3f) {
+                
                 // calculate magnitudes of complex frequency data
                 refMag      = sqrt(refRe*refRe + refIm*refIm);
                 alignedMag2 = sqrt(alignedRe2*alignedRe2 + alignedIm2*alignedIm2);
@@ -1120,8 +1123,8 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
                 // calculate ratio of magnitudes
                 ratio_mag = (alignedMag2[0]+alignedMag2[1]+alignedMag2[2]+alignedMag2[3])/(refMag[0]+refMag[1]+refMag[2]+refMag[3]);
                      
-                // calculate additional normalization factor that increases the merging weight larger magnitudes and decreases weight for lower magnitudes
-                magnitude_norm = clamp(ratio_mag*ratio_mag*ratio_mag*ratio_mag, 0.5f, 3.0f);
+                // calculate additional normalization factor that increases the merging weight larger magnitudes and decreases weight for lower magnitudes           
+                magnitude_norm = mismatch_weight*clamp(ratio_mag*ratio_mag*ratio_mag*ratio_mag, 0.5f, 3.0f);
             }
             
             // calculation of merging weight by Wiener shrinkage as described in the section "Robust pairwise temporal merge" and equation (7) in [Hasinoff 2016] or in the section "Spatially varying temporal merging" and equation (7) and (9) in [Liba 2019] or in section "Pairwise Wiener Temporal Denoising" and equation (11) in [Monod 2021]
@@ -1151,6 +1154,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
 
 
 kernel void deconvolute_frequency_domain(texture2d<float, access::read_write> final_texture_ft [[texture(0)]],
+                                         texture2d<float, access::read> total_mismatch_texture [[texture(1)]],
                                          constant int& tile_size [[buffer(0)]],
                                          uint2 gid [[thread_position_in_grid]]) {
     
@@ -1173,6 +1177,10 @@ kernel void deconvolute_frequency_domain(texture2d<float, access::read_write> fi
         cw[ 8] = 0.04f; cw[ 9] = 0.06f; cw[10] = 0.08f; cw[11] = 0.06f;
         cw[12] = 0.04f; cw[13] = 0.03f; cw[14] = 0.02f; cw[15] = 0.01f;
     }
+   
+    float const mismatch = total_mismatch_texture.read(gid).r;
+    // for a smooth transition, the deconvolution is weighted based on the mismatch
+    float const mismatch_weight = clamp(1.0f - 10.0f*(mismatch-0.2f), 0.0f, 1.0f);
     
     convRe = final_texture_ft.read(uint2(2*m0+0, n0));
     convIm = final_texture_ft.read(uint2(2*m0+1, n0));
@@ -1183,7 +1191,7 @@ kernel void deconvolute_frequency_domain(texture2d<float, access::read_write> fi
     for (int dn = 0; dn < tile_size; dn++) {
         for (int dm = 0; dm < tile_size; dm++) {
             
-            if (dm+dn > 0) {
+            if (dm+dn > 0 & mismatch < 0.3f) {
                 
                 int const m = 2*(m0 + dm);
                 int const n = n0 + dn;
@@ -1195,9 +1203,9 @@ kernel void deconvolute_frequency_domain(texture2d<float, access::read_write> fi
                 magnitude = (convMag[0] + convMag[1] + convMag[2] + convMag[3]);
                   
                 // reduce the increase for frequencies with high magnitude
-                // weight becomes 0 for ratio >= 0.10
-                // weight becomes 1 for ratio <= 0.05
-                weight = clamp(2.0f - 20.0f*magnitude/magnitude_zero, 0.0f, 1.0f);
+                // weight becomes 0 for ratio >= 0.05
+                // weight becomes 1 for ratio <= 0.01
+                weight = mismatch_weight*clamp(1.25f - 25.0f*magnitude/magnitude_zero, 0.0f, 1.0f);
                 
                 convRe = (1.0f+weight*cw[dm])*(1.0f+weight*cw[dn]) * convRe;
                 convIm = (1.0f+weight*cw[dm])*(1.0f+weight*cw[dn]) * convIm;
@@ -1207,6 +1215,8 @@ kernel void deconvolute_frequency_domain(texture2d<float, access::read_write> fi
             }
         }
     }
+    
+     
 }
 
 
@@ -1223,38 +1233,46 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
     
     // use only estimated shot noise here
     float4 const noise_est = rms_texture.read(gid);
-    float4 diff;
     
     // estimate motion mismatch as the absolute difference of reference tile and comparison tile
     // see section "Spatially varying temporal merging" in https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-    // use a 16x16 or 32x32 tile size here, which is twice the tile size used for merging
+    // use a spatial support twice of the tile size used for merging
     
     // clamp at top/left border of image frame
-    int const x_start = max(0, m0 + tile_size/2 - tile_size);
-    int const y_start = max(0, n0 + tile_size/2 - tile_size);
+    int const x_start = max(0, m0 - tile_size/2);
+    int const y_start = max(0, n0 - tile_size/2);
     
     // clamp at bottom/right border of image frame
-    int const x_end = min(int(ref_texture.get_width()-1),  m0 + tile_size/2 + tile_size);
-    int const y_end = min(int(ref_texture.get_height()-1), n0 + tile_size/2 + tile_size);
+    int const x_end = min(int(ref_texture.get_width()-1),  m0 + tile_size*3/2);
+    int const y_end = min(int(ref_texture.get_height()-1), n0 + tile_size*3/2);
     
-    float tile_diff = 0.0f;
-    int n_total = 0;
+    // calculate shift for cosine window to shift to range 0 - (tile_size-1)
+    int const x_shift = -(m0 - tile_size/2);
+    int const y_shift = -(n0 - tile_size/2);
+    
+    // pre-calculate factors for sine and cosine calculation
+    float const angle = -2*PI/float(tile_size);
+    
+    float4 tile_diff = 0.0f;
+    float n_total = 0.0f;
+    float norm_cosine;
      
     for (int dy = y_start; dy < y_end; dy++) {
         for (int dx = x_start; dx < x_end; dx++) {
-        
-            diff = ref_texture.read(uint2(dx, dy)) - aligned_texture.read(uint2(dx, dy));
           
-            tile_diff += abs(diff[0]+diff[1]+diff[2]+diff[3]);
+            // use modified raised cosine window to apply lower weights at outer regions of the patch
+            norm_cosine = (0.5f-0.17f*cos(-angle*((dx+x_shift)+0.5f)))*(0.5f-0.17f*cos(-angle*((dy+y_shift)+0.5f)));
+            
+            tile_diff += norm_cosine * abs(ref_texture.read(uint2(dx, dy)) - aligned_texture.read(uint2(dx, dy)));
              
-            n_total += 1;
+            n_total += norm_cosine;
         }
     }
      
-    tile_diff /= float(n_total);
+    tile_diff /= n_total;
 
     // calculation of mismatch ratio, which is different from the Wiener shrinkage proposed in the publication above (equation (8)). The quadratic terms of the Wiener shrinkage led to a strong separation of bright and dark pixels in the mismatch texture while mismatch should be (almost) independent of pixel brightness
-    float4 const mismatch4 = tile_diff / sqrt(noise_est+1e-12f);
+    float4 const mismatch4 = tile_diff / sqrt(noise_est+1.0f);
     float const mismatch = 0.25f*(mismatch4[0] + mismatch4[1] + mismatch4[2] + mismatch4[3]);
         
     mismatch_texture.write(mismatch, gid);
@@ -1270,8 +1288,8 @@ kernel void normalize_mismatch(texture2d<float, access::read_write> mismatch_tex
     
     float mismatch_norm = mismatch_texture.read(gid).r;
     
-    // normalize that mean value of mismatch texture is set to 1/6, which is very close to the threshold value of 0.17. For values larger than the threshold, the strength of temporal denoising is not increased anymore
-    mismatch_norm /= (mean_mismatch*6.0f + 1e-12f);
+    // normalize that mean value of mismatch texture is set to 0.12, which is close to the threshold value of 0.17. For values larger than the threshold, the strength of temporal denoising is not increased anymore
+    mismatch_norm *= (0.12f/(mean_mismatch + 1e-12f));
     
     // clamp to range of 0 to 1 to remove very large values
     mismatch_norm = clamp(mismatch_norm, 0.0f, 1.0f);
@@ -1302,7 +1320,7 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
     }
     if (x%2 == 0 & y%2 == 1) {
         mean_texture = mean_texture_buffer[2];
-    }    
+    }
     if (x%2 == 1 & y%2 == 1) {
         mean_texture = mean_texture_buffer[3];
     }
@@ -1394,7 +1412,7 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
                 // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication with cosine factor dependending on tile size)
                 norm_cosine0 = (0.5f-cosine_factor*cos(-angle*(dm+0.5f)))*(0.5f-cosine_factor*cos(-angle*(dy+0.5f)));
                 norm_cosine1 = (0.5f-cosine_factor*cos(-angle*(dm+1.5f)))*(0.5f-cosine_factor*cos(-angle*(dy+0.5f)));
-                
+                         
                 // calculate coefficients
                 coefRe = cos(angle*dn*dy);
                 coefIm = sin(angle*dn*dy);
@@ -1503,7 +1521,7 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
             if(dn > 0 & dn != tile_size/2)
             {
                 int const n2 = n0 + tile_size-dn;
-                //int const mx0 = 2*(m0 + (dm==0 ? 0 : tile_size-dm));
+                //int const m20 = 2*(m0 + (dm==0 ? 0 : tile_size-dm));
                 int const m20 = 2*(m0 + min(dm, 1)*(tile_size-dm));
                 int const m21 = 2*(m0 + tile_size-dm-tile_size_14);
                 int const m22 = 2*(m0 + tile_size-dm-tile_size_24);
@@ -1702,7 +1720,7 @@ kernel void backward_fft(texture2d<float, access::read> in_texture_ft [[texture(
             Re2 = Re00 + cos(angle*(dn+tile_size_24))*Re22 - sin(angle*(dn+tile_size_24))*Im22;
             Re1 = Re11 + cos(angle*(dn+tile_size_14))*Re33 - sin(angle*(dn+tile_size_14))*Im33;
             Re3 = Re11 + cos(angle*(dn+tile_size_34))*Re33 - sin(angle*(dn+tile_size_34))*Im33;
-                          
+                      
             // write into output textures
             out_texture.write(Re0/norm_factor, uint2(m, n));
             out_texture.write(Re1/norm_factor, uint2(m, n+tile_size_14));

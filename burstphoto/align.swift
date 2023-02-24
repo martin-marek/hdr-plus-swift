@@ -182,21 +182,21 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     } else if mosaic_pattern_width == 2 {
         print("Merging in the frequency domain...")
         
-        // the tile size for merging in frequency domain can be either 8x8 (for tile_size 16x16 and 32x32) or 16x16 (for tile_size 64x64). The smaller tile size leads to a reduction of artifacts at specular highlights and a slightly better performance while the larger tile size suppresses low-frequency noise in shadows better
+        // the tile size for merging in frequency domain is set to 8x8 for all tile sizes used for alignment. The smaller tile size leads to a reduction of artifacts at specular highlights at the expense of a slightly reduced suppression of low-frequency noise in the shadows
         // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
-        let tile_size_merge = min(max(8, tile_size/4), 16)
+        let tile_size_merge = Int(8)
           
         // derive normalized robustness value: two steps in noise_reduction (-2.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the variance of shot noise increases by a factor of two per iso level
         let robustness_rev = 0.5*(26.5-Double(Int(noise_reduction+0.5)))
         let robustness_norm = pow(2.0, (-robustness_rev + 7.5));
         
         // derive estimate of read noise with the idea that read noise increases approx. by a factor of three (stronger than increase in shot noise) per iso level to increase noise reduction in darker regions relative to bright regions
-        let read_noise = pow(pow(2.0, (-robustness_rev + 10.0)), 1.65);
+        let read_noise = pow(pow(2.0, (-robustness_rev + 10.0)), 1.6);
         
         // derive a maximum value for the motion norm with the idea that denoising can be stronger in static regions with good alignment compared to regions with motion
         // factors from Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a linear scaling derived from the robustness value to cover a similar range as proposed in the paper
         // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-        let max_motion_norm = max(1.0, pow(1.35, (12.0-robustness_rev-1.35)));
+        let max_motion_norm = max(1.0, pow(1.3, (11.0-robustness_rev)));
         
         // set mode for Fourier transformations ("DFT" or "FFT")
         // for the mode "FFT", only tile sizes <= 16 are possible due to some restrictions within the function
@@ -414,6 +414,10 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     // estimate noise level of tiles
     let rms_texture = calculate_rms_rgba(ref_texture_rgba, tile_info_merge)
     
+    // generate texture to accumulate the total mismatch
+    let total_mismatch_texture = texture_like(rms_texture)
+    fill_with_zeros(total_mismatch_texture)
+    
     // transform reference texture into the frequency domain
     forward_ft(ref_texture_rgba, ref_texture_ft, tmp_texture_ft, tile_info_merge, mode: ft_mode)
     
@@ -447,7 +451,10 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         // normalize mismatch texture
         let mean_mismatch = texture_mean(crop_texture(mismatch_texture, shift_left/tile_size_merge, shift_right/tile_size_merge, shift_top/tile_size_merge, shift_bottom/tile_size_merge), "r")
         normalize_mismatch(mismatch_texture, mean_mismatch)
-                  
+           
+        // add mismatch texture to the total, accumulated mismatch texture
+        add_texture(mismatch_texture, total_mismatch_texture, textures.count)
+        
         // start debug capture
         //let capture_manager = MTLCaptureManager.shared()
         //let capture_descriptor = MTLCaptureDescriptor()
@@ -469,7 +476,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     }
     
     // apply simple deconvolution to slightly correct potential blurring from misalignment of bursts
-    deconvolute_frequency_domain(final_texture_ft, tile_info_merge)
+    deconvolute_frequency_domain(final_texture_ft, total_mismatch_texture, tile_info_merge)
     
     // transform output texture back to image domain, convert back to the 2x2 pixel structure and crop to original size
     let output_texture = crop_texture(convert_bayer(backward_ft(final_texture_ft, tmp_texture_ft, tile_info_merge, textures.count, mode: ft_mode)), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
@@ -1225,7 +1232,7 @@ func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: 
 }
 
 
-func deconvolute_frequency_domain(_ final_texture_ft: MTLTexture, _ tile_info: TileInfo) {
+func deconvolute_frequency_domain(_ final_texture_ft: MTLTexture, _ total_mismatch_texture: MTLTexture, _ tile_info: TileInfo) {
         
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -1234,6 +1241,7 @@ func deconvolute_frequency_domain(_ final_texture_ft: MTLTexture, _ tile_info: T
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(final_texture_ft, index: 0)
+    command_encoder.setTexture(total_mismatch_texture, index: 1)
     command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
