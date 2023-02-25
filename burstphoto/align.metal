@@ -1248,8 +1248,6 @@ kernel void deconvolute_frequency_domain(texture2d<float, access::read_write> fi
             }
         }
     }
-    
-     
 }
 
 
@@ -1258,6 +1256,7 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
                                     texture2d<float, access::read> rms_texture [[texture(2)]],
                                     texture2d<float, access::write> mismatch_texture [[texture(3)]],
                                     constant int& tile_size [[buffer(0)]],
+                                    constant float& exposure_factor [[buffer(1)]],
                                     uint2 gid [[thread_position_in_grid]]) {
         
     // compute tile positions from gid
@@ -1305,7 +1304,7 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
     tile_diff /= n_total;
 
     // calculation of mismatch ratio, which is different from the Wiener shrinkage proposed in the publication above (equation (8)). The quadratic terms of the Wiener shrinkage led to a strong separation of bright and dark pixels in the mismatch texture while mismatch should be (almost) independent of pixel brightness
-    float4 const mismatch4 = tile_diff / sqrt(noise_est+1.0f);
+    float4 const mismatch4 = tile_diff / sqrt(0.5f*noise_est + 0.5f*noise_est/exposure_factor + 1.0f);   
     float const mismatch = 0.25f*(mismatch4[0] + mismatch4[1] + mismatch4[2] + mismatch4[3]);
         
     mismatch_texture.write(mismatch, gid);
@@ -1473,9 +1472,7 @@ kernel void correct_underexposure(texture2d<float, access::read_write> final_tex
     }    
   
     float const correction_stops = float(-exposure_bias/100.0f);
-    
-    float gain = clamp(0.5f+0.5f*correction_stops, 1.0f, 2.0f);
-    gain = clamp(gain*pow(2.0f, correction_stops), 1.0f, 32.0f);
+    float const gain = 1.2*clamp(pow(2.0f, correction_stops), 1.0f, 16.0f);
     
     float const max_value1 = gain*2.0f/(2.0f+gain);
     float const max_value2 = sqrt(sqrt(sqrt(sqrt(max_value1))));
