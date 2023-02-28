@@ -1407,38 +1407,32 @@ kernel void equalize_exposure(texture2d<float, access::read_write> comp_texture 
                              constant int& black_level3 [[buffer(4)]],
                              uint2 gid [[thread_position_in_grid]]) {
        
-    int const x = gid.x;
-    int const y = gid.y;
+    int const x = gid.x*2;
+    int const y = gid.y*2;
     
     // load args
-    float black_level = 0.0f;
+    float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
     
-    // extract color channel-dependent black level
-    if (x%2 == 0 & y%2 == 0) {
-        black_level = float(black_level0);
-    }
-    if (x%2 == 1 & y%2 == 0) {
-        black_level = float(black_level1);
-    }
-    if (x%2 == 0 & y%2 == 1) {
-        black_level = float(black_level2);
-    }
-    if (x%2 == 1 & y%2 == 1) {
-        black_level = float(black_level3);
-    }
+    // extract pixel values of 2x2 super pixel
+    float4 pixel_value = float4(comp_texture.read(uint2(x,   y)).r,
+                                comp_texture.read(uint2(x+1, y)).r,
+                                comp_texture.read(uint2(x,   y+1)).r,
+                                comp_texture.read(uint2(x+1, y+1)).r);
     
     // calculate exposure correction factor from exposure difference
     float const corr_factor = pow(2.0f, float(exposure_diff/100.0f));
     
-    // extract pixel value and correct exposure
-    float pixel_val = comp_texture.read(gid).r;
-    pixel_val = (pixel_val - black_level)*corr_factor + black_level;
-    pixel_val = clamp(pixel_val, 0.0f, float(UINT16_MAX_VAL));
+    // correct exposure
+    pixel_value = (pixel_value - black_level)*corr_factor + black_level;
+    pixel_value = clamp(pixel_value, 0.0f, float(UINT16_MAX_VAL));
 
     // write back into texture
-    comp_texture.write(pixel_val, gid);
+    comp_texture.write(pixel_value[0], uint2(x,   y));
+    comp_texture.write(pixel_value[1], uint2(x+1, y));
+    comp_texture.write(pixel_value[2], uint2(x,   y+1));
+    comp_texture.write(pixel_value[3], uint2(x+1, y+1));
 }
-
+ 
 
 // correction of underexposure with reinhard tone mapping operator
 // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
@@ -1451,47 +1445,50 @@ kernel void correct_underexposure(texture2d<float, access::read_write> final_tex
                                   constant float& black_level3 [[buffer(5)]],
                                   uint2 gid [[thread_position_in_grid]]) {
       
-    int const x = gid.x;
-    int const y = gid.y;
+    int const x = gid.x*2;
+    int const y = gid.y*2;
    
     // load args
-    float black_level = 0.0f;
+    float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
+   
+    // extract pixel values of 2x2 super pixel
+    float4 pixel_value = float4(final_texture.read(uint2(x,   y)).r,
+                                final_texture.read(uint2(x+1, y)).r,
+                                final_texture.read(uint2(x,   y+1)).r,
+                                final_texture.read(uint2(x+1, y+1)).r);
     
-    // extract color channel-dependent black level
-    if (x%2 == 0 & y%2 == 0) {
-        black_level = black_level0;
-    }
-    if (x%2 == 1 & y%2 == 0) {
-        black_level = black_level1;
-    }
-    if (x%2 == 0 & y%2 == 1) {
-        black_level = black_level2;
-    }
-    if (x%2 == 1 & y%2 == 1) {
-        black_level = black_level3;
-    }    
-  
+    // calculate gain for intensity correction
     float const correction_stops = float(-exposure_bias/100.0f);
-    float const gain = 1.2*clamp(pow(2.0f, correction_stops), 1.0f, 16.0f);
+    float const correction_factor = pow(2.0f, correction_stops);    
+    float const gain = 1.2f*clamp(correction_factor, 1.0f, 16.0f);
     
-    float const max_value1 = gain*2.0f/(2.0f+gain);
-    float const max_value2 = sqrt(sqrt(sqrt(sqrt(max_value1))));
+    // the gain factor is used to control the shape of the curve
+    float const gain_factor = max(2.0f, 4.0f/correction_factor*sqrt(max(1.0f, 0.75f/correction_stops)));
     
-    float color_value = final_texture.read(gid).r;    
+    // the max values are used to control the maximum of the curve at the white point
+    float const max_value1 = gain*gain_factor/(gain+gain_factor);
+    float const max_value2 = max(1.0f, pow(max_value1, 1.0f/(16.0f*max(1.0f, 1.0f/correction_stops))));
+        
     // subtract black level and rescale intensity to range from 0 to 1
-    color_value = (color_value-black_level)/float(white_level-black_level);
+    pixel_value = (pixel_value-black_level)/(float(white_level)-black_level);
+    
+    // use luminosity to ensure that the four color channels are treated equally
+    float const luminosity_before = 0.25f*(pixel_value[0]+pixel_value[1]+pixel_value[2]+pixel_value[3]);
     // apply gain
-    color_value = gain * color_value;
+    float luminosity_after = gain * luminosity_before;
     
     // apply tone mappting operator inspired by equation (4) in https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-    // The adapted formula yields a better linearity in the shadows and midtones compared to the formula in the publication
-    color_value = max(1.0f, max_value2)/max_value1 * color_value*2.0f/(2.0f+color_value);
-        
-    // return to original intensity scale
-    color_value = color_value*float(white_level-black_level) + black_level;
-    color_value = clamp(color_value, 0.0f, float(UINT16_MAX_VAL));
+    // The adapted formula is slightly steeper in the shadows and midtones compared to the formula in the publication
+    luminosity_after = max_value2/max_value1 * luminosity_after*gain_factor/(luminosity_after+gain_factor);
+           
+    // apply scaling derived from luminosity values and return to original intensity scale
+    pixel_value = pixel_value * luminosity_after/luminosity_before * (float(white_level)-black_level) + black_level;
+    pixel_value = clamp(pixel_value, 0.0f, float(UINT16_MAX_VAL));
 
-    final_texture.write(color_value, gid);
+    final_texture.write(pixel_value[0], uint2(x,   y));
+    final_texture.write(pixel_value[1], uint2(x+1, y));
+    final_texture.write(pixel_value[2], uint2(x,   y+1));
+    final_texture.write(pixel_value[3], uint2(x+1, y+1));
 }
 
 

@@ -1412,7 +1412,7 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [Int], _ exposur
             let command_encoder = command_buffer.makeComputeCommandEncoder()!
             let state = equalize_exposure_state
             command_encoder.setComputePipelineState(state)
-            let threads_per_grid = MTLSize(width: textures[comp_idx].width, height: textures[comp_idx].height, depth: 1)
+            let threads_per_grid = MTLSize(width: textures[comp_idx].width/2, height: textures[comp_idx].height/2, depth: 1)
             let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
             command_encoder.setTexture(textures[comp_idx], index: 0)
             command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 0)
@@ -1431,7 +1431,7 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [Int], _ exposur
 func correct_underexposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ exposure_bias: [Int], _ ref_idx: Int) {
           
     // only apply exposure correction if reference image is underexposed
-    if (exposure_bias[ref_idx] < 0 && white_level != -1 && black_level[0] != -1) {
+    if (exposure_bias[ref_idx] < -1 && white_level != -1 && black_level[0] != -1) {
      
         var exp_idx = 0
         var uniform_exposure = true
@@ -1474,7 +1474,7 @@ func correct_underexposure(_ final_texture: MTLTexture, _ white_level: Int, _ bl
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
         let state = correct_underexposure_state
         command_encoder.setComputePipelineState(state)
-        let threads_per_grid = MTLSize(width: final_texture.width, height: final_texture.height, depth: 1)
+        let threads_per_grid = MTLSize(width: final_texture.width/2, height: final_texture.height/2, depth: 1)
         let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
         command_encoder.setTexture(final_texture, index: 0)
         command_encoder.setBytes([Int32(exposure_bias[ref_idx])], length: MemoryLayout<Int32>.stride, index: 0)
