@@ -1459,11 +1459,10 @@ kernel void correct_underexposure(texture2d<float, access::read_write> final_tex
     
     // calculate gain for intensity correction
     float const correction_stops = float(-exposure_bias/100.0f);
-    float const correction_factor = pow(2.0f, correction_stops);    
-    float const gain = 1.2f*clamp(correction_factor, 1.0f, 16.0f);
+    float const gain = min(22.0f, pow(2.0f, correction_stops+min(0.4f, 0.2f*correction_stops)));
     
     // the gain factor is used to control the shape of the curve
-    float const gain_factor = max(2.0f, 4.0f/correction_factor*sqrt(max(1.0f, 0.75f/correction_stops)));
+    float const gain_factor = max(2.0f, 4.0f/pow(2.0f, correction_stops)*sqrt(max(1.0f, 0.75f/correction_stops)));
     
     // the max values are used to control the maximum of the curve at the white point
     float const max_value1 = gain*gain_factor/(gain+gain_factor);
@@ -1472,17 +1471,17 @@ kernel void correct_underexposure(texture2d<float, access::read_write> final_tex
     // subtract black level and rescale intensity to range from 0 to 1
     pixel_value = (pixel_value-black_level)/(float(white_level)-black_level);
     
-    // use luminosity to ensure that the four color channels are treated equally
-    float const luminosity_before = 0.25f*(pixel_value[0]+pixel_value[1]+pixel_value[2]+pixel_value[3]);
+    // use luminance to ensure that the four color channels are treated equally
+    float const luminance_before = 0.25f*(pixel_value[0]+pixel_value[1]+pixel_value[2]+pixel_value[3]);
     // apply gain
-    float luminosity_after = gain * luminosity_before;
+    float luminance_after = gain * luminance_before;
     
     // apply tone mappting operator inspired by equation (4) in https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
     // The adapted formula is slightly steeper in the shadows and midtones compared to the formula in the publication
-    luminosity_after = max_value2/max_value1 * luminosity_after*gain_factor/(luminosity_after+gain_factor);
+    luminance_after = max_value2/max_value1 * luminance_after*gain_factor/(luminance_after+gain_factor);
            
-    // apply scaling derived from luminosity values and return to original intensity scale
-    pixel_value = pixel_value * luminosity_after/luminosity_before * (float(white_level)-black_level) + black_level;
+    // apply scaling derived from luminance values and return to original intensity scale
+    pixel_value = pixel_value * luminance_after/luminance_before * (float(white_level)-black_level) + black_level;
     pixel_value = clamp(pixel_value, 0.0f, float(UINT16_MAX_VAL));
 
     final_texture.write(pixel_value[0], uint2(x,   y));
