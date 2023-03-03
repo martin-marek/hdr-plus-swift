@@ -1459,15 +1459,15 @@ kernel void correct_underexposure(texture2d<float, access::read_write> final_tex
     
     // calculate gain for intensity correction
     float const correction_stops = float(-exposure_bias/100.0f);
-    float const gain = min(22.0f, pow(2.0f, correction_stops+min(0.4f, 0.2f*correction_stops)));
+    float const gain = min(14.0f, pow(2.0f, correction_stops+clamp(0.4f*(correction_stops-0.8f), 0.05f, 0.36f)));
     
     // the gain factor is used to control the shape of the curve
     float const gain_factor = max(2.0f, 4.0f/pow(2.0f, correction_stops)*sqrt(max(1.0f, 0.75f/correction_stops)));
     
     // the max values are used to control the maximum of the curve at the white point
     float const max_value1 = gain*gain_factor/(gain+gain_factor);
-    float const max_value2 = max(1.0f, pow(max_value1, 1.0f/(16.0f*max(1.0f, 1.0f/correction_stops))));
-        
+    float const max_value2 = max(1.0f, pow(max_value1, 1.0f/(48.0f*max(1.0f, 1.0f/correction_stops)*sqrt(max(1.0f, correction_stops)))));
+    
     // subtract black level and rescale intensity to range from 0 to 1
     pixel_value = (pixel_value-black_level)/(float(white_level)-black_level);
     
@@ -1478,6 +1478,7 @@ kernel void correct_underexposure(texture2d<float, access::read_write> final_tex
     
     // apply tone mappting operator inspired by equation (4) in https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
     // The adapted formula is slightly steeper in the shadows and midtones compared to the formula in the publication
+    // It is linear in the shadows and midtones while protecting the highlights
     luminance_after = max_value2/max_value1 * luminance_after*gain_factor/(luminance_after+gain_factor);
            
     // apply scaling derived from luminance values and return to original intensity scale

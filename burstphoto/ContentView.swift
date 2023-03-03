@@ -96,7 +96,7 @@ struct MainView: View {
             
             Spacer()
             
-            Text("*.DNG, *.ARW, *.NEF…")
+            Text("*.DNG, *.ARW, *.NEF, *.CR2…")
                 .font(.system(size: 14, weight: .light))
                 .italic()
                 .opacity(0.8)
@@ -209,21 +209,7 @@ struct SettingsView: View {
      
     var body: some View {
         VStack {
-                   
-            VStack(alignment: .leading) {
-                Text("Compensation of underexposure").font(.system(size: 14, weight: .medium))
-                HStack {
-                    Picker(selection: settings.$comp_underexposure, label: EmptyView()) {
-                        ForEach(comp_underexposures, id: \.self) {
-                            Text($0)
-                        }
-                    }.pickerStyle(SegmentedPickerStyle())
-                    Text("(if specified in EXIF)")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)                    
-                }
-            }.padding(15)
-            
+                       
             VStack(alignment: .leading) {
                 Text("Tile size").font(.system(size: 14, weight: .medium))
                 Picker(selection: settings.$tile_size, label: EmptyView()) {
@@ -242,6 +228,17 @@ struct SettingsView: View {
                 }.pickerStyle(SegmentedPickerStyle())
             }.padding(15)
             
+            VStack(alignment: .leading) {
+                Text("Compensation of underexposure").font(.system(size: 14, weight: .medium))
+                HStack {
+                    Picker(selection: settings.$comp_underexposure, label: EmptyView()) {
+                        ForEach(comp_underexposures, id: \.self) {
+                            Text($0)
+                        }
+                    }.pickerStyle(SegmentedPickerStyle())
+                }
+            }.padding(15)
+
             VStack(alignment: .leading) {
                 
                 (Text("Noise reduction: ") +

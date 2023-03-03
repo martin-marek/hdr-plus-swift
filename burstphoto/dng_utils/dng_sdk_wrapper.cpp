@@ -99,7 +99,8 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
             return 1;
         } else {
             dng_srational exposure_bias_value = exif->fExposureBiasValue;
-            *exposure_bias = exposure_bias_value.n;
+            // scale exposure bias value that it is EV * 100
+            *exposure_bias = exposure_bias_value.n * 100/exposure_bias_value.d;            
         }
         
     }
