@@ -194,6 +194,13 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
             add_texture(textures[comp_idx], final_texture, image_urls.count)
             DispatchQueue.main.async { progress.int += Int(80000000/Double(image_urls.count)) }
         }
+        
+        // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
+        // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
+        if (mosaic_pattern_width == 2 && comp_underexposure == "On") {
+            correct_underexposure(final_texture, white_level[ref_idx], black_level, exposure_bias, ref_idx)
+        }
+        
 
     // alignment and merging of tiles in frequency domain (only 2x2 Bayer pattern)
     } else if merging_algorithm == "Higher quality" {
