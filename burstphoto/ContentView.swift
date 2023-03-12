@@ -198,7 +198,7 @@ struct SettingsView: View {
     let tile_sizes = [16, 32, 64]
     let search_distances = ["Low", "Medium", "High"]
     
-    @State private var isEditing = false
+    @State private var user_changing_nr = false
      
     var body: some View {
         VStack {
@@ -227,15 +227,15 @@ struct SettingsView: View {
             Spacer()
             
             VStack(alignment: .leading) {
-                Text("Noise reduction:  \(Int(AppSettings.noise_reduction+0.5))")
+                Text("Noise reduction:  \(Int(AppSettings.noise_reduction+0.5)) \(Int(AppSettings.noise_reduction+0.5)==25 ? "(simple averaging)" : "")")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(isEditing ? .secondary : .primary)
+                    .foregroundColor(user_changing_nr ? .secondary : .primary)
                 HStack {
                     Slider(value: AppSettings.$noise_reduction, in: 1...25, step: 1.0,
-                            onEditingChanged: { editing in                     isEditing = editing }
+                            onEditingChanged: { editing in user_changing_nr = editing }
                     )
                     Stepper("", value: AppSettings.$noise_reduction, in: 1...25,
-                            onEditingChanged: { editing in                     isEditing = editing }
+                            onEditingChanged: { editing in user_changing_nr = editing }
                     )
                 }
                 Spacer()
