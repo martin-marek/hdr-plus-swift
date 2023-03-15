@@ -849,7 +849,6 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                         texture2d<float, access::write> out_texture_ft [[texture(2)]],
                         constant int& tile_size [[buffer(0)]],
-                        constant float& cosine_factor [[buffer(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
     
     // compute tile positions from gid
@@ -881,8 +880,8 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
                 int const y = n0 + dy;
                 
                 // see section "Overlapped tiles" in https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf or section "Overlapped Tiles and Raised Cosine Window" in https://www.ipol.im/pub/art/2021/336/
-                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication with cosine factor dependending on tile size)
-                norm_cosine = (0.5f-cosine_factor*cos(-angle*(dm+0.5f)))*(0.5f-cosine_factor*cos(-angle*(dy+0.5f)));
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts
+                norm_cosine = (0.5f-0.5f*cos(-angle*(dm+0.5f)))*(0.5f-0.5f*cos(-angle*(dy+0.5f)));
                                 
                 // calculate coefficients
                 coefRe = cos(angle*dn*dy);
@@ -1251,6 +1250,56 @@ kernel void deconvolute_frequency_domain(texture2d<float, access::read_write> fi
 }
 
 
+kernel void reduce_artifacts_tile_border(texture2d<float, access::read_write> output_texture [[texture(0)]],
+                                         texture2d<float, access::read> ref_texture [[texture(1)]],
+                                         constant int& tile_size [[buffer(0)]],
+                                         constant int& black_level0 [[buffer(1)]],
+                                         constant int& black_level1 [[buffer(2)]],
+                                         constant int& black_level2 [[buffer(3)]],
+                                         constant int& black_level3 [[buffer(4)]],
+                                         uint2 gid [[thread_position_in_grid]]) {
+    
+    // compute tile positions from gid
+    int const x0 = gid.x*tile_size;
+    int const y0 = gid.y*tile_size;
+ 
+    // set min values and max values
+    float4 const min_values = float4(black_level0-1.0f, black_level1-1.0f, black_level2-1.0f, black_level3-1.0f);
+    float4 const max_values = float4(float(UINT16_MAX_VAL), float(UINT16_MAX_VAL), float(UINT16_MAX_VAL), float(UINT16_MAX_VAL));
+        
+    float4 pixel_value;
+    float norm_cosine;
+    
+    // pre-calculate factors for sine and cosine calculation
+    float const angle = -2*PI/float(tile_size);
+    
+    for (int dy = 0; dy < tile_size; dy++) {
+        for (int dx = 0; dx < tile_size; dx++) {
+            
+            int const x = x0 + dx;
+            int const y = y0 + dy;
+            
+            // see section "Overlapped tiles" in https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf or section "Overlapped Tiles and Raised Cosine Window" in https://www.ipol.im/pub/art/2021/336/
+            // calculate modified raised cosine window weight for blending tiles to suppress artifacts
+            norm_cosine = (0.5f-0.5f*cos(-angle*(dx+0.5f)))*(0.5f-0.5f*cos(-angle*(dy+0.5f)));
+            
+            // extract RGBA pixel values
+            pixel_value = output_texture.read(uint2(x, y));
+            // clamp values, which reduces potential artifacts (black lines) at tile borders by removing pixels with negative entries (negative when black level is subtracted)
+            pixel_value = clamp(pixel_value, norm_cosine*min_values, max_values);
+            
+            // blend pixel values at tile borders with reference texture
+            if (dx==0 | dx==tile_size-1 | dy==0 | dy==tile_size-1) {
+                
+                pixel_value = 0.5f*(norm_cosine*ref_texture.read(uint2(x, y)) + pixel_value);
+            }
+             
+            output_texture.write(pixel_value, uint2(x, y));
+        }
+    }
+}
+
+
 kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
                                     texture2d<float, access::read> aligned_texture [[texture(1)]],
                                     texture2d<float, access::read> rms_texture [[texture(2)]],
@@ -1501,7 +1550,6 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                         texture2d<float, access::write> out_texture_ft [[texture(2)]],
                         constant int& tile_size [[buffer(0)]],
-                        constant float& cosine_factor [[buffer(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
     
     // compute tile positions from gid
@@ -1547,9 +1595,9 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
             for (int dy = 0; dy < tile_size; dy++) {
       
                 // see section "Overlapped tiles" in https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf or section "Overlapped Tiles and Raised Cosine Window" in https://www.ipol.im/pub/art/2021/336/
-                // calculate modified raised cosine window weight for blending tiles to suppress artifacts (slightly adapted compared to original publication with cosine factor dependending on tile size)
-                norm_cosine0 = (0.5f-cosine_factor*cos(-angle*(dm+0.5f)))*(0.5f-cosine_factor*cos(-angle*(dy+0.5f)));
-                norm_cosine1 = (0.5f-cosine_factor*cos(-angle*(dm+1.5f)))*(0.5f-cosine_factor*cos(-angle*(dy+0.5f)));
+                // calculate modified raised cosine window weight for blending tiles to suppress artifacts
+                norm_cosine0 = (0.5f-0.5f*cos(-angle*(dm+0.5f)))*(0.5f-0.5f*cos(-angle*(dy+0.5f)));
+                norm_cosine1 = (0.5f-0.5f*cos(-angle*(dm+1.5f)))*(0.5f-0.5f*cos(-angle*(dy+0.5f)));
                          
                 // calculate coefficients
                 coefRe = cos(angle*dn*dy);

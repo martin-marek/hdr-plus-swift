@@ -77,6 +77,7 @@ let correct_hotpixels_state = try! device.makeComputePipelineState(function: mfl
 let equalize_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure")!)
 let correct_underexposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_underexposure")!)
 let deconvolute_frequency_domain_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "deconvolute_frequency_domain")!)
+let reduce_artifacts_tile_border_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "reduce_artifacts_tile_border")!)
 
 
 
@@ -243,13 +244,13 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         equalize_exposure(textures, black_level, exposure_bias, ref_idx)
                 
         // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process. The shift equals the tile size used in the merging process here, which later translates into tile_size_merge/2 when each color channel is processed independently
-        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
         
-        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
          
-        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
             
-        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
         
         // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
         // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
@@ -398,7 +399,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
 
 
 // convenience function for the frequency-based merging approach
-func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int, shift_right: Int, shift_top: Int, shift_bottom: Int, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, tile_size_merge: Int, robustness_norm: Double, read_noise: Double, max_motion_norm: Double, exposure_bias: [Int], ft_mode: String, textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int, shift_right: Int, shift_top: Int, shift_bottom: Int, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, tile_size_merge: Int, robustness_norm: Double, read_noise: Double, max_motion_norm: Double, exposure_bias: [Int], black_level: [Int], ft_mode: String, textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // set original texture size
     let texture_width_orig = textures[ref_idx].width
@@ -542,9 +543,13 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     // apply simple deconvolution to slightly correct potential blurring from misalignment of bursts
     deconvolute_frequency_domain(final_texture_ft, total_mismatch_texture, tile_info_merge)
     
-    // transform output texture back to image domain, convert back to the 2x2 pixel structure and crop to original size
-    let output_texture = crop_texture(convert_bayer(backward_ft(final_texture_ft, tmp_texture_ft, tile_info_merge, textures.count, mode: ft_mode)), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
-        
+    // transform output texture back to image domain
+    var output_texture = backward_ft(final_texture_ft, tmp_texture_ft, tile_info_merge, textures.count, mode: ft_mode)
+    // reduce potential artifacts at tile borders
+    reduce_artifacts_tile_border(output_texture, ref_texture_rgba, tile_info_merge, black_level, ref_idx)
+    // convert back to the 2x2 pixel structure and crop to original size
+    output_texture = crop_texture(convert_bayer(output_texture), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
+    
     // add output texture to the final texture to collect all textures of the four iterations
     add_texture(output_texture, final_texture, 1)
 }
@@ -1226,11 +1231,6 @@ func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLT
 
 
 func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ tile_info: TileInfo, mode: String) {
-  
-    var cosine_factor = 0.500    
-    // adapt cosine factor dependent on tile size
-    if (Int32(tile_info.tile_size_merge) == 8) {cosine_factor = 0.530}
-    else if (Int32(tile_info.tile_size_merge) == 16) {cosine_factor = 0.505}
     
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -1243,7 +1243,6 @@ func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_te
     command_encoder.setTexture(tmp_texture_ft, index: 1)
     command_encoder.setTexture(out_texture_ft, index: 2)
     command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Float32(cosine_factor)], length: MemoryLayout<Float32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -1313,6 +1312,30 @@ func deconvolute_frequency_domain(_ final_texture_ft: MTLTexture, _ total_mismat
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
+}
+
+
+func reduce_artifacts_tile_border(_ output_texture: MTLTexture, _ ref_texture: MTLTexture, _ tile_info: TileInfo, _ black_level: [Int], _ ref_idx: Int) {
+        
+    if (black_level[0] != -1) {
+        
+        let command_buffer = command_queue.makeCommandBuffer()!
+        let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        let state = reduce_artifacts_tile_border_state
+        command_encoder.setComputePipelineState(state)
+        let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
+        let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+        command_encoder.setTexture(output_texture, index: 0)
+        command_encoder.setTexture(ref_texture, index: 1)
+        command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
+        command_encoder.setBytes([Int32(black_level[ref_idx*4+0])], length: MemoryLayout<Int32>.stride, index: 1)
+        command_encoder.setBytes([Int32(black_level[ref_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 2)
+        command_encoder.setBytes([Int32(black_level[ref_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 3)
+        command_encoder.setBytes([Int32(black_level[ref_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 4)
+        command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+        command_encoder.endEncoding()
+        command_buffer.commit()
+    }
 }
 
 
