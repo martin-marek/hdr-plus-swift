@@ -86,6 +86,10 @@ let deconvolute_frequency_domain_state = try! device.makeComputePipelineState(fu
 // main function of the burst photo app
 func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, search_distance: String = "Medium", tile_size: Int = 16, kernel_size: Int = 5, noise_reduction: Double = 14.0) throws -> URL {
     
+    // measure execution time
+    var t0 = DispatchTime.now().uptimeNanoseconds
+    var t = t0
+    
     // check that all images are of the same extension
     let image_extension = image_urls[0].pathExtension
     let all_extensions_same = image_urls.allSatisfy{$0.pathExtension == image_extension}
@@ -104,10 +108,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     // create a directory for temporary dngs inside the output directory
     let tmp_dir = out_dir + ".dngs/"
     try FileManager.default.createDirectory(atPath: tmp_dir, withIntermediateDirectories: true)
-    
-    // measure execution time
-    var t = DispatchTime.now().uptimeNanoseconds
-    
+       
     // ensure that all files are .dng, converting them if necessary
     var dng_urls = image_urls
     let convert_to_dng = image_extension.lowercased() != "dng"
@@ -257,8 +258,11 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     
     // delete the temporary dng directory
     try FileManager.default.removeItem(atPath: tmp_dir)
-  
+    
     print("Time to save final image: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
+    print("------------------------------------------------")
+    print("Total processing time for", textures.count, "images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
+    print("------------------------------------------------")
     
     return out_url
 }
