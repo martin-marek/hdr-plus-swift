@@ -1508,13 +1508,10 @@ kernel void correct_underexposure(texture2d<float, access::read_write> final_tex
     
     // calculate gain for intensity correction
     float const correction_stops = float(-exposure_bias/100.0f);
-    float const gain = min(14.0f, pow(2.0f, correction_stops+clamp(0.4f*(correction_stops-0.8f), 0.05f, 0.36f)));
     
-    // the gain factor is used to control the shape of the curve
-    float const gain_factor = max(1.85f, 4.0f/pow(2.0f, correction_stops)*sqrt(max(1.0f, 0.75f/correction_stops)));
-    
-    // the max value is used to control the maximum of the curve at the white point
-    float const max_value = (gain+gain_factor)/(gain*gain_factor);
+    // the gain is limited to 3.5 stops and slightly damped for values > 1.5 stops
+    float gain = min(correction_stops, 3.5f);
+    gain = pow(2.0f, gain-0.1f*max(0.0f, gain-1.5f));
     
     // subtract black level and rescale intensity to range from 0 to 1
     pixel_value = (pixel_value-black_level)/(float(white_level)-black_level);
@@ -1523,11 +1520,10 @@ kernel void correct_underexposure(texture2d<float, access::read_write> final_tex
     float const luminance_before = 0.25f*(pixel_value[0]+pixel_value[1]+pixel_value[2]+pixel_value[3]);
     // apply gain
     float luminance_after = gain * luminance_before;
-    
-    // apply tone mappting operator inspired by equation (4) in https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-    // The adapted formula is slightly steeper in the shadows and midtones compared to the formula in the publication
-    // It is linear in the shadows and midtones while protecting the highlights
-    luminance_after = max_value * luminance_after*gain_factor/(luminance_after+gain_factor);
+        
+    // apply tone mappting operator specified in equation (4) in https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
+    // the operator is linear in the shadows and midtones while protecting the highlights
+    luminance_after = luminance_after * (1.0f+luminance_after/(gain*gain)) / (1.0f+luminance_after);
     
     // apply scaling derived from luminance values and return to original intensity scale
     pixel_value = pixel_value * luminance_after/luminance_before * (float(white_level)-black_level) + black_level;
