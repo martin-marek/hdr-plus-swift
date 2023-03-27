@@ -176,30 +176,25 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     let final_texture = device.makeTexture(descriptor: final_texture_descriptor)!
     fill_with_zeros(final_texture)
     
+    // correction of hot pixels
+    if mosaic_pattern_width == 2 {
+        // correction of hot pixels
+        correct_hotpixels(textures, black_level)
+        
+        // correction of intensities for images with bracketed exposure
+        // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
+        equalize_exposure(textures, black_level, exposure_bias, ref_idx)
+    }
+    
     // special mode: simple temporal averaging without alignment and robust merging
     if noise_reduction == 23.0 {
         print("Special mode: temporal averaging only...")
-         
-        // correction of hot pixels
-        if mosaic_pattern_width == 2 {
-            correct_hotpixels(textures, black_level)
-            
-            // correction of intensities for images with bracketed exposure
-            // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
-            equalize_exposure(textures, black_level, exposure_bias, ref_idx)
-        }
                   
         // iterate over all images
         for comp_idx in 0..<image_urls.count {
             
             add_texture(textures[comp_idx], final_texture, image_urls.count)
             DispatchQueue.main.async { progress.int += Int(80000000/Double(image_urls.count)) }
-        }
-        
-        // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
-        // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-        if (mosaic_pattern_width == 2 && comp_underexposure == "On") {
-            correct_underexposure(final_texture, white_level[ref_idx], black_level, exposure_bias, ref_idx)
         }
         
 
@@ -234,14 +229,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         
         // set mode for Fourier transformations ("DFT" or "FFT")
         // for the mode "FFT", only tile sizes <= 16 are possible due to some restrictions within the function
-        let ft_mode = (tile_size_merge <= Int(16) ? "FFT" : "DFT")
-        
-        // correction of hot pixels
-        correct_hotpixels(textures, black_level)
-        
-        // correction of intensities for images with bracketed exposure
-        // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
-        equalize_exposure(textures, black_level, exposure_bias, ref_idx)
+        let ft_mode = (tile_size_merge <= Int(16) ? "FFT" : "DFT")    
                 
         // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process. The shift equals the tile size used in the merging process here, which later translates into tile_size_merge/2 when each color channel is processed independently
         try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
@@ -251,13 +239,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
             
         try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
-        
-        // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
-        // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-        if comp_underexposure == "On" {
-            correct_underexposure(final_texture, white_level[ref_idx], black_level, exposure_bias, ref_idx)
-        }
-            
+                
         
     // alignment and merging of tiles in the spatial domain (supports non-Bayer sensors)
     } else {
@@ -270,6 +252,12 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         let robustness_norm = 0.12*pow(1.35, robustness_rev) - 0.1380840
     
         try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
+    }
+    
+    // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
+    // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
+    if (mosaic_pattern_width == 2 && comp_underexposure == "On") {
+        correct_underexposure(final_texture, white_level[ref_idx], black_level, exposure_bias, ref_idx)
     }
     
     // convert final image to 16 bit integer
@@ -312,9 +300,9 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     try FileManager.default.removeItem(atPath: tmp_dir)
     
     print("Time to save final image: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
-    print("------------------------------------------------")
+    print("")
     print("Total processing time for", textures.count, "images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
-    print("------------------------------------------------")
+    print("")
     
     return out_url
 }
