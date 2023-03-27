@@ -360,13 +360,12 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
     // load args
     int texture_width = ref_texture.get_width();
     int texture_height = ref_texture.get_height();
-    int tile_half_size = tile_size / 2;
-    
+     
     int ref_tile_x, ref_tile_y, comp_tile_x, comp_tile_y, tmp_index, dx_i, dy_i;
     
     // compute tile position if previous alignment were 0
-    int x0 = int(floor( tile_half_size + float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
-    int y0 = int(floor( tile_half_size + float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
+    int x0 = int(floor( float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
+    int y0 = int(floor( float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
     
     // factor in previous alignmnet
     int4 const prev_align = prev_alignment.read(uint2(gid.x, gid.y));
@@ -378,16 +377,16 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
     float tmp_comp[5*68];
     
     // loop over first 4 rows of comp_texture
-    for (int dy = -tile_half_size-2; dy < -tile_half_size+2; dy++) {
+    for (int dy = -2; dy < +2; dy++) {
         
         // loop over columns of comp_texture to copy first 4 rows of comp_texture into tmp_comp
-        for (int dx = -tile_half_size-2; dx < tile_half_size+2; dx++) {
+        for (int dx = -2; dx < tile_size+2; dx++) {
             
             comp_tile_x = x0 + dx0 + dx;
             comp_tile_y = y0 + dy0 + dy;
             
             // index of corresponding pixel value in tmp_comp
-            tmp_index = (dy+tile_half_size+2)*(tile_size+4) + dx+tile_half_size+2;
+            tmp_index = (dy+2)*(tile_size+4) + dx+2;
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
@@ -399,16 +398,16 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
     }
     
     // loop over rows of ref_texture
-    for (int dy = -tile_half_size; dy < tile_half_size; dy++) {
+    for (int dy = 0; dy < tile_size; dy++) {
         
         // loop over columns of comp_texture to copy 1 additional row of comp_texture into tmp_comp
-        for (int dx = -tile_half_size-2; dx < tile_half_size+2; dx++) {
+        for (int dx = -2; dx < tile_size+2; dx++) {
             
             comp_tile_x = x0 + dx0 + dx;
             comp_tile_y = y0 + dy0 + dy+2;
             
             // index of corresponding pixel value in tmp_comp
-            tmp_index = ((dy+tile_half_size+4)%5)*(tile_size+4) + dx+tile_half_size+2;
+            tmp_index = ((dy+4)%5)*(tile_size+4) + dx+2;
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
@@ -419,7 +418,7 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
         }
         
         // loop over columns of ref_texture
-        for (int dx = -tile_half_size; dx < tile_half_size; dx++) {
+        for (int dx = 0; dx < tile_size; dx++) {
             
             ref_tile_x = x0 + dx;
             ref_tile_y = y0 + dy;
@@ -433,7 +432,7 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
                 dy_i = i / 5;
                 
                 // index of corresponding pixel value in tmp_comp
-                tmp_index = ((dy+tile_half_size+dy_i)%5)*(tile_size+4) + dx+tile_half_size + dx_i;
+                tmp_index = ((dy+dy_i)%5)*(tile_size+4) + dx + dx_i;
                 
                 // add difference to corresponding combination
                 diff[i] += abs(tmp_ref - tmp_comp[tmp_index]);
@@ -499,15 +498,14 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
     // load args
     int texture_width = ref_texture.get_width();
     int texture_height = ref_texture.get_height();
-    int tile_half_size = tile_size / 2;
-    
+     
     // initialize some variables
-    int3 comp_tile_x, comp_tile_y;
-    float ref_val;
+    int comp_tile_x, comp_tile_y, tmp_tile_x, tmp_tile_y;
+    float tmp_ref[64];
     
     // compute tile position if previous alignment were 0
-    int x0 = int(floor( tile_half_size + float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
-    int y0 = int(floor( tile_half_size + float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
+    int const x0 = int(floor( float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
+    int const y0 = int(floor( float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
 
     // calculate shifts of gid index for 3 candidate alignments to evaluate
     int3 const x_shift = int3(0, ((gid.x%2 == 0) ? -1 : 1), 0);
@@ -517,39 +515,73 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
     int3 const y = clamp(int3(gid.y+y_shift), 0, n_tiles_y-1);
     
     // factor in previous alignment for 3 candidates
-    int4 prev_align0 = prev_alignment.read(uint2(x[0], y[0]));
-    int4 prev_align1 = prev_alignment.read(uint2(x[1], y[1]));
-    int4 prev_align2 = prev_alignment.read(uint2(x[2], y[2]));
+    int4 const prev_align0 = prev_alignment.read(uint2(x[0], y[0]));
+    int4 const prev_align1 = prev_alignment.read(uint2(x[1], y[1]));
+    int4 const prev_align2 = prev_alignment.read(uint2(x[2], y[2]));
     
-    int3 dx0 = downscale_factor * int3(prev_align0.x, prev_align1.x, prev_align2.x);
-    int3 dy0 = downscale_factor * int3(prev_align0.y, prev_align1.y, prev_align2.y);
+    int3 const dx0 = downscale_factor * int3(prev_align0.x, prev_align1.x, prev_align2.x);
+    int3 const dy0 = downscale_factor * int3(prev_align0.y, prev_align1.y, prev_align2.y);
      
     // compute tile differences for 3 candidates
     float diff[3] = {0.0f, 0.0f, 0.0f};
-    
-    for (int dx1 = -tile_half_size; dx1 < tile_half_size; dx1++) {
-        for (int dy1 = -tile_half_size; dy1 < tile_half_size; dy1++) {
+        
+    // loop over all rows
+    for (int dy = 0; dy < tile_size; dy += 64/tile_size) {
+           
+        // copy 64/tile_size rows into temp vector
+        for (int i = 0; i < 64; i++) {            
+            tmp_ref[i] = ref_texture.read(uint2(x0+(i % tile_size), y0+dy+int(i / tile_size))).r;
+        }
+        
+        // loop over tmp vector: candidate 0 of alignment vector
+        tmp_tile_x = x0 + dx0[0];
+        tmp_tile_y = y0 + dy0[0] + dy;
+        for (int i = 0; i < 64; i++) {
             
             // compute the indices of the pixels to compare
-            int const ref_tile_x = x0 + dx1;
-            int const ref_tile_y = y0 + dy1;
-            ref_val = ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r;
-             
-            comp_tile_x = ref_tile_x + dx0;
-            comp_tile_y = ref_tile_y + dy0;
+            comp_tile_x = tmp_tile_x + (i % tile_size);
+            comp_tile_y = tmp_tile_y + int(i / tile_size);
             
-            // check 3 candidates
-            for (int i = 0; i < 3; i++) {
+            if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                diff[0] += tmp_ref[i] + 2*UINT16_MAX_VAL;
+            } else {
+                diff[0] += abs(tmp_ref[i] - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+            }
+        }
+        
+        // loop over tmp vector: candidate 0 of alignment vector
+        tmp_tile_x = x0 + dx0[1];
+        tmp_tile_y = y0 + dy0[1] + dy;
+        for (int i = 0; i < 64; i++) {
             
-                if ((comp_tile_x[i] < 0) || (comp_tile_y[i] < 0) || (comp_tile_x[i] >= texture_width) || (comp_tile_y[i] >= texture_height)) {
-                    diff[i] += abs(ref_val + 2*UINT16_MAX_VAL);
-                } else {
-                    diff[i] += abs(ref_val - comp_texture.read(uint2(comp_tile_x[i], comp_tile_y[i])).r);
-                }
+            // compute the indices of the pixels to compare
+            comp_tile_x = tmp_tile_x + (i % tile_size);
+            comp_tile_y = tmp_tile_y + int(i / tile_size);
+            
+            if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                diff[1] += tmp_ref[i] + 2*UINT16_MAX_VAL;
+            } else {
+                diff[1] += abs(tmp_ref[i] - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+            }
+        }
+        
+        // loop over tmp vector: candidate 0 of alignment vector
+        tmp_tile_x = x0 + dx0[2];
+        tmp_tile_y = y0 + dy0[2] + dy;
+        for (int i = 0; i < 64; i++) {
+            
+            // compute the indices of the pixels to compare
+            comp_tile_x = tmp_tile_x + (i % tile_size);
+            comp_tile_y = tmp_tile_y + int(i / tile_size);
+            
+            if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
+                diff[2] += tmp_ref[i] + 2*UINT16_MAX_VAL;
+            } else {
+                diff[2] += abs(tmp_ref[i] - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
             }
         }
     }
-    
+     
     // store corrected (best) alignment
     if(diff[0] < diff[1] & diff[0] < diff[2]) {
         prev_alignment_corrected.write(prev_align0, gid);
