@@ -46,11 +46,11 @@ struct MyProgram {
             // set alignment params
             let ref_idx = image_urls.count / 2
             let noise_reduction = 9.0 //9.0 for child, 15.0 for bench-1, 17.0 for martin 7, 13.0 for Google test, Dark Sky and dinosaur, 7.0 for Klavier
-            let search_distance = "Medium"
+            let merging_algorithm = "Better quality"
             let tile_size = 32
             
             // align+merge
-            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, noise_reduction: noise_reduction)
+            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: merging_algorithm, tile_size: tile_size, noise_reduction: noise_reduction)
             
             print("Image saved in:", out_url.relativePath)            
         }

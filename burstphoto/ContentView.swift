@@ -6,9 +6,9 @@ enum AppState {
 }
 
 class AppSettings: ObservableObject {
-    @AppStorage("tile_size") static var tile_size: Int = 16
-    @AppStorage("search_distance") static var search_distance: String = "Medium"
-    @AppStorage("noise_reduction") static var noise_reduction: Double = 14.0
+    @AppStorage("tile_size") static var tile_size: Int = 32
+    @AppStorage("merging_algorithm") static var merging_algorithm: String = "Better speed"
+    @AppStorage("noise_reduction") static var noise_reduction: Double = 13.0
 }
 
 struct MyAlert {
@@ -196,7 +196,7 @@ struct ProcessingView: View {
 
 struct SettingsView: View {
     let tile_sizes = [16, 32, 64]
-    let search_distances = ["Low", "Medium", "High"]
+    let merging_algorithms = ["Better speed", "Better quality"]
     
     @State private var user_changing_nr = false
      
@@ -216,9 +216,9 @@ struct SettingsView: View {
             Spacer()
             
             VStack(alignment: .leading) {
-                Text("Search distance").font(.system(size: 14, weight: .medium))
-                Picker(selection: AppSettings.$search_distance, label: EmptyView()) {
-                    ForEach(search_distances, id: \.self) {
+                Text("Merging algorithm").font(.system(size: 14, weight: .medium))
+                Picker(selection: AppSettings.$merging_algorithm, label: EmptyView()) {
+                    ForEach(merging_algorithms, id: \.self) {
                         Text($0)
                     }
                 }.pickerStyle(SegmentedPickerStyle())
@@ -227,26 +227,26 @@ struct SettingsView: View {
             Spacer()
             
             VStack(alignment: .leading) {
-                Text("Noise reduction:  \(Int(AppSettings.noise_reduction+0.5)) \(Int(AppSettings.noise_reduction+0.5)==25 ? "(simple averaging)" : "")")
+                Text("Noise reduction: \(Int(AppSettings.noise_reduction+0.5)==23 ? " avg (simple averaging)" : " \(Int(AppSettings.noise_reduction+0.5))")")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(user_changing_nr ? .secondary : .primary)
                 HStack {
-                    Slider(value: AppSettings.$noise_reduction, in: 1...25, step: 1.0,
+                    Slider(value: AppSettings.$noise_reduction, in: 1...23, step: 1.0,
                             onEditingChanged: { editing in user_changing_nr = editing }
                     )
-                    Stepper("", value: AppSettings.$noise_reduction, in: 1...25,
+                    Stepper("", value: AppSettings.$noise_reduction, in: 1...23,
                             onEditingChanged: { editing in user_changing_nr = editing }
                     )
                 }
-                Spacer()
-                Spacer()
-                Text("Please adjust according to your burst image series and taste:")
+
+                Text("  <      daylight scene      >          ....        <     night scene     >")
                     .font(.system(size: 12))
-                    .foregroundColor(.accentColor)
-                Text("Small values increase motion robustness and image sharpness.")
+                    .foregroundColor(.primary)
+                Text("")
+                Text("Small values increase motion robustness and image sharpness")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
-                Text("Large values increase the strength of noise reduction.")
+                Text("Large values increase the strength of noise reduction")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
             }.padding(20)
@@ -325,7 +325,7 @@ struct MyDropDelegate: DropDelegate {
                 let ref_idx = image_urls.count / 2
 
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, noise_reduction: AppSettings.noise_reduction)
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: AppSettings.merging_algorithm, tile_size: AppSettings.tile_size, noise_reduction: AppSettings.noise_reduction)
                 
                 // inform the user about the saved image
                 app_state = .image_saved
