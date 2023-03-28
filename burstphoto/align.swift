@@ -220,7 +220,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     } else {
         print("Merging in the spatial domain...")
     
-        let kernel_size = Int(8) // kernel size of binomial filtering used for blurring the image
+        let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
         
         // derive normalized robustness value: four steps in noise_reduction (-4.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the sd of shot noise increases by a factor of sqrt(2) per iso level
         let robustness_rev = 0.5*(25.0-Double(Int(noise_reduction+0.5)))
@@ -307,8 +307,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
     
     // blur reference texure and estimate noise standard deviation
     // -  the computation is done here to avoid repeating the same computation in 'robust_merge()'
-    var ref_texture_blurred = blur_mosaic_texture(textures[ref_idx], kernel_size, mosaic_pattern_width)
-    ref_texture_blurred = blur_mosaic_texture(ref_texture_blurred, kernel_size, mosaic_pattern_width)
+    let ref_texture_blurred = blur_mosaic_texture(textures[ref_idx], kernel_size, mosaic_pattern_width)
     let noise_sd = estimate_color_noise(textures[ref_idx], ref_texture_blurred, mosaic_pattern_width)
 
     // iterate over comparison images
@@ -627,6 +626,8 @@ func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_
     let blur_x = texture_like(in_texture)
     let blur_xy = texture_like(in_texture)
     
+    let kernel_size_mapped = (kernel_size == 16) ? 16 : max(0, min(8, kernel_size))
+    
     // blur the texture along the x-axis
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -636,7 +637,7 @@ func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(blur_x, index: 1)
-    command_encoder.setBytes([Int32(kernel_size)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(kernel_size_mapped)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
 
@@ -1099,8 +1100,7 @@ func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, 
 func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, _ comp_texture: MTLTexture, _ kernel_size: Int, _ robustness: Double, _ noise_sd: MTLBuffer, _ mosaic_pattern_width: Int) -> MTLTexture {
     
     // blur comparison texture
-    var comp_texture_blurred = blur_mosaic_texture(comp_texture, kernel_size, mosaic_pattern_width)
-    comp_texture_blurred = blur_mosaic_texture(comp_texture_blurred, kernel_size, mosaic_pattern_width)
+    let comp_texture_blurred = blur_mosaic_texture(comp_texture, kernel_size, mosaic_pattern_width)
     
     // compute the color difference of each superpixel between the blurred reference and the comparison textures
     let texture_diff = color_difference(ref_texture_blurred, comp_texture_blurred, mosaic_pattern_width)

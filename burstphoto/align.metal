@@ -122,27 +122,27 @@ kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)
     // load args
     int texture_width = in_texture.get_width();
     
-    // clamp kernel_size to a maximum of 8
-    int const kernel_size_c = clamp(kernel_size, 0, 8);
-    
-    // set kernel weights of binomial filter
+    // set kernel weights of binomial filter for identity operation
     float bw[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+    int kernel_size_trunc = 0;
     
-    if(kernel_size_c == 1)      {bw[0]=    2; bw[1]=    1;}
-    else if(kernel_size_c == 2) {bw[0]=    6; bw[1]=    4; bw[2]=   1;}
-    else if(kernel_size_c == 3) {bw[0]=   20; bw[1]=   15; bw[2]=   6; bw[3]=   1;}
-    else if(kernel_size_c == 4) {bw[0]=   70; bw[1]=   56; bw[2]=  28; bw[3]=   8; bw[4]=   1;}
-    else if(kernel_size_c == 5) {bw[0]=  252; bw[1]=  210; bw[2]= 120; bw[3]=  45; bw[4]=  10; bw[5]=  1;}
-    else if(kernel_size_c == 6) {bw[0]=  924; bw[1]=  792; bw[2]= 495; bw[3]= 220; bw[4]=  66; bw[5]= 12; bw[6]=  1;}
-    else if(kernel_size_c == 7) {bw[0]= 3432; bw[1]= 3003; bw[2]=2002; bw[3]=1001; bw[4]= 364; bw[5]= 91; bw[6]= 14; bw[7]= 1;}
-    else if(kernel_size_c == 8) {bw[0]=12870; bw[1]=11440; bw[2]=8008; bw[3]=4368; bw[4]=1820; bw[5]=560; bw[6]=120; bw[7]=16; bw[8]=1;}
-
+    // to speed up calculations, kernels are truncated in such a way that the total contribution of removed weights is smaller than 0.25%
+    if (kernel_size== 1)      {bw[0]=    2; bw[1]=    1;}
+    else if (kernel_size== 2) {bw[0]=    6; bw[1]=    4; bw[2]=   1;}
+    else if (kernel_size== 3) {bw[0]=   20; bw[1]=   15; bw[2]=   6; bw[3]=   1;}
+    else if (kernel_size== 4) {bw[0]=   70; bw[1]=   56; bw[2]=  28; bw[3]=   8; bw[4]=   1;}
+    else if (kernel_size== 5) {bw[0]=  252; bw[1]=  210; bw[2]= 120; bw[3]=  45; bw[4]=  10; kernel_size_trunc=4;}
+    else if (kernel_size== 6) {bw[0]=  924; bw[1]=  792; bw[2]= 495; bw[3]= 220; bw[4]=  66; bw[5]= 12; kernel_size_trunc=5;}
+    else if (kernel_size== 7) {bw[0]= 3432; bw[1]= 3003; bw[2]=2002; bw[3]=1001; bw[4]= 364; bw[5]= 91; kernel_size_trunc=5;}
+    else if (kernel_size== 8) {bw[0]=12870; bw[1]=11440; bw[2]=8008; bw[3]=4368; bw[4]=1820; bw[5]=560; bw[6]=120; kernel_size_trunc=6;}
+    else if (kernel_size==16) {bw[0]=601080390; bw[1]=565722720; bw[2]=471435600; bw[3]=347373600; bw[4]=225792840; bw[5]=129024480; bw[6]=64512240; bw[7]=28048800; bw[8]=10518300; kernel_size_trunc=8;}
+    
     // compute a sigle output pixel
     float total_intensity = 0;
     float total_weight = 0;
     int y = gid.y;
     
-    for (int dx = -kernel_size_c; dx <= kernel_size_c; dx++) {
+    for (int dx = -kernel_size_trunc; dx <= kernel_size_trunc; dx++) {
         int x = gid.x + mosaic_pattern_width*dx;
         if (0 <= x && x < texture_width) {
 
@@ -167,27 +167,27 @@ kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)
     // load args
     int texture_height = in_texture.get_height();
     
-    // set kernel weights of binomial filter and clamp kernel_size to a maximum of 8
-    int const kernel_size_c = clamp(kernel_size, 0, 8);
-   
-    // set kernel weights of binomial filter
+    // set kernel weights of binomial filter for identity operation
     float bw[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+    int kernel_size_trunc = 0;
     
-    if(kernel_size_c == 1)      {bw[0]=    2; bw[1]=    1;}
-    else if(kernel_size_c == 2) {bw[0]=    6; bw[1]=    4; bw[2]=   1;}
-    else if(kernel_size_c == 3) {bw[0]=   20; bw[1]=   15; bw[2]=   6; bw[3]=   1;}
-    else if(kernel_size_c == 4) {bw[0]=   70; bw[1]=   56; bw[2]=  28; bw[3]=   8; bw[4]=   1;}
-    else if(kernel_size_c == 5) {bw[0]=  252; bw[1]=  210; bw[2]= 120; bw[3]=  45; bw[4]=  10; bw[5]=  1;}
-    else if(kernel_size_c == 6) {bw[0]=  924; bw[1]=  792; bw[2]= 495; bw[3]= 220; bw[4]=  66; bw[5]= 12; bw[6]=  1;}
-    else if(kernel_size_c == 7) {bw[0]= 3432; bw[1]= 3003; bw[2]=2002; bw[3]=1001; bw[4]= 364; bw[5]= 91; bw[6]= 14; bw[7]= 1;}
-    else if(kernel_size_c == 8) {bw[0]=12870; bw[1]=11440; bw[2]=8008; bw[3]=4368; bw[4]=1820; bw[5]=560; bw[6]=120; bw[7]=16; bw[8]=1;}
+    // to speed up calculations, kernels are truncated in such a way that the total contribution of removed weights is smaller than 0.25%
+    if (kernel_size== 1)      {bw[0]=    2; bw[1]=    1;}
+    else if (kernel_size== 2) {bw[0]=    6; bw[1]=    4; bw[2]=   1;}
+    else if (kernel_size== 3) {bw[0]=   20; bw[1]=   15; bw[2]=   6; bw[3]=   1;}
+    else if (kernel_size== 4) {bw[0]=   70; bw[1]=   56; bw[2]=  28; bw[3]=   8; bw[4]=   1;}
+    else if (kernel_size== 5) {bw[0]=  252; bw[1]=  210; bw[2]= 120; bw[3]=  45; bw[4]=  10; kernel_size_trunc=4;}
+    else if (kernel_size== 6) {bw[0]=  924; bw[1]=  792; bw[2]= 495; bw[3]= 220; bw[4]=  66; bw[5]= 12; kernel_size_trunc=5;}
+    else if (kernel_size== 7) {bw[0]= 3432; bw[1]= 3003; bw[2]=2002; bw[3]=1001; bw[4]= 364; bw[5]= 91; kernel_size_trunc=5;}
+    else if (kernel_size== 8) {bw[0]=12870; bw[1]=11440; bw[2]=8008; bw[3]=4368; bw[4]=1820; bw[5]=560; bw[6]=120; kernel_size_trunc=6;}
+    else if (kernel_size==16) {bw[0]=601080390; bw[1]=565722720; bw[2]=471435600; bw[3]=347373600; bw[4]=225792840; bw[5]=129024480; bw[6]=64512240; bw[7]=28048800; bw[8]=10518300; kernel_size_trunc=8;}
     
     // compute a sigle output pixel
     float total_intensity = 0;
     float total_weight = 0;
     int x = gid.x;
     
-    for (int dy = -kernel_size_c; dy <= kernel_size_c; dy++) {
+    for (int dy = -kernel_size_trunc; dy <= kernel_size_trunc; dy++) {
         int y = gid.y + mosaic_pattern_width*dy;
         if (0 <= y && y < texture_height) {
            
