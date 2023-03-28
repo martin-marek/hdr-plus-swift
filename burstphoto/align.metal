@@ -550,7 +550,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
             }
         }
         
-        // loop over tmp vector: candidate 0 of alignment vector
+        // loop over tmp vector: candidate 1 of alignment vector
         tmp_tile_x = x0 + dx0[1];
         tmp_tile_y = y0 + dy0[1] + dy;
         for (int i = 0; i < 64; i++) {
@@ -566,7 +566,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
             }
         }
         
-        // loop over tmp vector: candidate 0 of alignment vector
+        // loop over tmp vector: candidate 2 of alignment vector
         tmp_tile_x = x0 + dx0[2];
         tmp_tile_y = y0 + dy0[2] + dy;
         for (int i = 0; i < 64; i++) {
