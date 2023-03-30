@@ -124,7 +124,7 @@ kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)
     
     // set kernel weights of binomial filter for identity operation
     float bw[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
-    int kernel_size_trunc = 0;
+    int kernel_size_trunc = kernel_size;
     
     // to speed up calculations, kernels are truncated in such a way that the total contribution of removed weights is smaller than 0.25%
     if (kernel_size== 1)      {bw[0]=    2; bw[1]=    1;}
@@ -169,7 +169,7 @@ kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)
     
     // set kernel weights of binomial filter for identity operation
     float bw[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
-    int kernel_size_trunc = 0;
+    int kernel_size_trunc = kernel_size;
     
     // to speed up calculations, kernels are truncated in such a way that the total contribution of removed weights is smaller than 0.25%
     if (kernel_size== 1)      {bw[0]=    2; bw[1]=    1;}
