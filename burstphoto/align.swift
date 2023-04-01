@@ -87,7 +87,7 @@ let reduce_artifacts_tile_border_state = try! device.makeComputePipelineState(fu
 
 
 // main function of the burst photo app
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: Int = 32, kernel_size: Int = 5, noise_reduction: Double = 13.0, comp_underexposure: String = "Off") throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", kernel_size: Int = 5, noise_reduction: Double = 13.0, comp_underexposure: String = "Correction off") throws -> URL {
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -162,12 +162,20 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // convert images from uint16 to float16
     textures = textures.map{texture_uint16_to_float($0)}
      
+    // set the tile size for the alignment
+    let tile_size_dict = [
+        "Small": 16,
+        "Medium": 32,
+        "Large": 64,
+    ]
+    let tile_size_int = tile_size_dict[tile_size]!
+    
     // set the maximum resolution of the smallest pyramid layer
     let search_distance_dict = [
-            "Low": 128,
-            "Medium": 64,
-            "High": 32,
-        ]
+        "Small": 128,
+        "Medium": 64,
+        "Large": 32,
+    ]
     let search_distance_int = search_distance_dict[search_distance]!
     
     // use a 32 bit float as final image
@@ -228,13 +236,13 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         let max_motion_norm = max(1.0, pow(1.3, (11.0-robustness_rev)));
                 
         // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process. The shift equals the tile size used in the merging process here, which later translates into tile_size_merge/2 when each color channel is processed independently
-        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
         
-        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
          
-        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
             
-        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
                 
         
     // alignment and merging of tiles in the spatial domain (supports non-Bayer sensors)
@@ -247,12 +255,12 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         let robustness_rev = 0.5*(32.0-Double(Int(noise_reduction+0.5)))
         let robustness_norm = 0.12*pow(1.35, robustness_rev) - 0.1380840
     
-        try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
+        try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
     }
     
     // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
     // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-    if (mosaic_pattern_width == 2 && comp_underexposure == "On") {
+    if (mosaic_pattern_width == 2 && comp_underexposure == "Correction on") {
         correct_underexposure(final_texture, white_level[ref_idx], black_level, exposure_bias, ref_idx)
     }
     
