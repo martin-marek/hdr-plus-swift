@@ -16,19 +16,9 @@ struct MyProgram {
         // create a list of bursts to process
         let burst_dirs = [
                      
-            "/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child/Test/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Child Kopie/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/DNG_Klavier/Test/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/burst002_iso1000/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Moon/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Dark Sky/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/dinosaur order/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/highlights/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/33TJ_20150614_232110_642_dng order/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/bench-1/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/martin 7/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/Jozef-1-dng/",
-            //"/Volumes/T7 2021/Workspace Photolab/Burst Photo Test/mountains-1/",
+            "/Volumes/My Burst Folder/Burst 01/",
+            //"/Volumes/My Burst Folder/Burst 02/",
+            //"/Volumes/My Burst Folder/Burst 03/",
         ]
         
         // iterate over bursts
@@ -42,11 +32,14 @@ struct MyProgram {
             
             // ProcessingProgress is only useful for a GUI, but we have to instantiate one anyway
             let progress = ProcessingProgress()
-
-            // set alignment params
+            
+            // set index of reference texture
             let ref_idx = image_urls.count / 2
-            let noise_reduction = 9.0 //9.0 for child, 15.0 for bench-1, 17.0 for martin 7, 13.0 for Google test, Dark Sky and dinosaur, 7.0 for Klavier
-            let merging_algorithm = "Better quality"
+            // options: value range from 1.0 to 23.0
+            let noise_reduction = 13.0
+            // options: "Better speed" or "Better quality"
+            let merging_algorithm = "Better speed"
+            // options: 16, 32, 64
             let tile_size = 32
             
             // align+merge
