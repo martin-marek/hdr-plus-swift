@@ -1393,7 +1393,6 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
 kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]],
                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                         texture2d<float, access::write> out_texture_ft [[texture(2)]],
-                        texture2d<float, access::write> out_texture_mag [[texture(3)]],
                         constant int& tile_size [[buffer(0)]],
                         constant float& cosine_factor [[buffer(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
