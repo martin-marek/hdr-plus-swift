@@ -194,7 +194,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         let read_noise = pow(pow(2.0, (-robustness_rev + 10.0)), 1.6);
         
         // derive a maximum value for the motion norm with the idea that denoising can be stronger in static regions with good alignment compared to regions with motion
-        // factors from Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a linear scaling derived from the robustness value to cover a similar range as proposed in the paper
+        // factors from Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a continuous value derived from the robustness value to cover a similar range as proposed in the paper
         // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
         let max_motion_norm = max(1.0, pow(1.3, (11.0-robustness_rev)));
         
@@ -281,6 +281,8 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]
     var div = mosaic_pattern_width
+    
+    // This loop generates lists, which include information on different parameters required for the alignment on different resolution levels. For each pyramid level, the downscale factor compared to the neighboring resolution, the search distance, tile size, resolution (only for lowest level) and total downscale factor compared to the original resolution (only for lowest level) are calculated.
     while (res > search_distance) {
         downscale_factor_array.append(2)
         search_dist_array.append(2)
@@ -289,7 +291,8 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         div *= 2
     }
      
-    // calculate padding for extension of the image frame with zeros in such a way that the original image resolution is a multiple of all resolution levels used during alignment and nearest neighbor upsampling of motion vector fields is sufficient
+    // calculate padding for extension of the image frame with zeros
+    // For the alignment, the frame may be extended further by pad_align due to the following reason: the alignment is performed on different resolution levels and alignment vectors are upscaled by a simple multiplication by 2. As a consequence, the frame at all resolution levels has to be a multiple of the tile sizes of these resolution levels.
     let tile_factor = div*Int(tile_size_array.last!)
     
     var pad_align_x = Int(ceil(Float(texture_width_orig)/Float(tile_factor)))
@@ -356,6 +359,8 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]
     var div = mosaic_pattern_width
+    
+    // This loop generates lists, which include information on different parameters required for the alignment on different resolution levels. For each pyramid level, the downscale factor compared to the neighboring resolution, the search distance, tile size, resolution (only for lowest level) and total downscale factor compared to the original resolution (only for lowest level) are calculated.
     while (res > search_distance) {
         downscale_factor_array.append(2)
         search_dist_array.append(2)
@@ -364,7 +369,9 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         div *= 2
     }
      
-    // calculate padding for extension of the image frame with zeros in such a way that the original image resolution is a multiple of all resolution levels used during alignment and nearest neighbor upsampling of motion vector fields is sufficient
+    // calculate padding for extension of the image frame with zeros
+    // The minimum size of the frame for the frequency merging has to be texture size + tile_size_merge as 4 frames shifted by tile_size_merge in x, y and x, y are processed in four consecutive runs.
+    // For the alignment, the frame may be extended further by pad_align due to the following reason: the alignment is performed on different resolution levels and alignment vectors are upscaled by a simple multiplication by 2. As a consequence, the frame at all resolution levels has to be a multiple of the tile sizes of these resolution levels.
     let tile_factor = div*Int(tile_size_array.last!)
     
     var pad_align_x = Int(ceil(Float(texture_width_orig+tile_size_merge)/Float(tile_factor)))
@@ -797,6 +804,8 @@ func convert_bayer(_ in_texture: MTLTexture) -> MTLTexture {
 
 
 func texture_mean(_ in_texture: MTLTexture, _ pixelformat: String) -> MTLBuffer {
+    
+    // If the parameter pixelformat has the value "rgba", the texture mean is calculated for the four color channels independently. An input texture in pixelformat "rgba" is expected for that purpose. In all other cases, a single mean value of the texture is calculated.
     
     // create a 1d texture that will contain the averages of the input texture along the x-axis
     let texture_descriptor = MTLTextureDescriptor()

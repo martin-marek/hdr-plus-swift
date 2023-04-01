@@ -22,7 +22,6 @@ kernel void texture_uint16_to_float(texture2d<uint, access::read> in_texture [[t
     
     uint4 val_unint = in_texture.read(gid);
     
-    // removed scaling to the range 0 to 1 to improve fidelity of float16 values
     float4 val_float = float4(val_unint);
     out_texture.write(val_float, gid); 
 }
@@ -346,6 +345,7 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
 
 
 // highly-optimized function for computation of tile differences that works only for search distance 2 (in total 25 combinations)
+// The aim of this function is to reduce the number of memory accesses required compared to the more simple function compute_tile_differences() while providing equal results. As the alignment always checks shifts on a 5x5 pixel grid, a simple implementation would read 25 pixels in the comparison texture for each pixel in the reference texture. This optimized function however uses a buffer vector covering 5 complete rows of the texture that slides line by line through the comparison texture and reduces the number of memory reads considerably.
 kernel void compute_tile_differences25(texture2d<float, access::read> ref_texture [[texture(0)]],
                                        texture2d<float, access::read> comp_texture [[texture(1)]],
                                        texture2d<int, access::read> prev_alignment [[texture(2)]],
@@ -484,6 +484,7 @@ kernel void compute_tile_alignments(texture3d<float, access::read> tile_diff [[t
 }
 
 
+// At transitions between moving objects and non-moving background, the alignment vectors from downsampled images may be inaccurate. Therefore, after upsampling to the next resolution level, three candidate alignment vectors are evaluated for each tile. In addition to the vector obtained from upsampling, two vectors from neighboring tiles are checked. As a consequence, alignment at the transition regions described above is more accurate.
 // see section on "Hierarchical alignment" in https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf and section "Multi-scale Pyramid Alignment" in https://www.ipol.im/pub/art/2021/336/
 kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture [[texture(0)]],
                                      texture2d<float, access::read> comp_texture [[texture(1)]],
@@ -1390,6 +1391,11 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
 
 
 // highly-optimized fast Fourier transform applied to each color channel independently
+// The aim of this function is to provide improved performance compared to the more simple function forward_dft() while providing equal results. It uses the following features for reduced calculation times:
+// - the four color channels are stored as a float4 and all calculations employ SIMD instructions.
+// - the one-dimensional transformation along y-direction is a discrete Fourier transform. As the input image is real-valued, the frequency domain representation is symmetric and only values for N/2+1 rows have to be calculated.
+// - the one-dimensional transformation along x-direction employs the fast Fourier transform algorithm: At first, 4 small DFTs are calculated and then final results are obtained by two steps of cross-combination of values (based on a so-called butterfly diagram). This approach reduces the total number of memory reads and computational steps considerably.
+// - due to the symmetry mentioned earlier, only N/2+1 rows have to be transformed and the remaining N/2-1 rows can be directly inferred.
 kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]],
                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                         texture2d<float, access::write> out_texture_ft [[texture(2)]],
@@ -1574,6 +1580,10 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
 
 
 // highly-optimized fast Fourier transform applied to each color channel independently
+// The aim of this function is to provide improved performance compared to the more simple function backward_dft() while providing equal results. It uses the following features for reduced calculation times:
+// - the four color channels are stored as a float4 and all calculations employ SIMD instructions.
+// - the one-dimensional transformation along y-direction employs the fast Fourier transform algorithm: At first, 4 small DFTs are calculated and then final results are obtained by two steps of cross-combination of values (based on a so-called butterfly diagram). This approach reduces the total number of memory reads and computational steps considerably.
+// - the one-dimensional transformation along x-direction employs the fast Fourier transform algorithm: At first, 4 small DFTs are calculated and then final results are obtained by two steps of cross-combination of values (based on a so-called butterfly diagram). This approach reduces the total number of memory reads and computational steps considerably.
 kernel void backward_fft(texture2d<float, access::read> in_texture_ft [[texture(0)]],
                          texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
                          texture2d<float, access::write> out_texture [[texture(2)]],
