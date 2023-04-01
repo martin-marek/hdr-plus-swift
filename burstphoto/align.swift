@@ -260,13 +260,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     
     // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
     // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-    if (mosaic_pattern_width == 2 && target_exposure != "Off") {
-        correct_exposure(final_texture, white_level[ref_idx], black_level, target_exposure, exposure_bias, ref_idx)
-    }
-    
-    // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
-    // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-    if (mosaic_pattern_width == 2 && comp_underexposure == "On") {
+    if (mosaic_pattern_width == 2 && comp_underexposure == "Correction on") {
         correct_underexposure(final_texture, white_level[ref_idx], black_level, exposure_bias, ref_idx)
     }
     
