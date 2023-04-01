@@ -87,7 +87,7 @@ let reduce_artifacts_tile_border_state = try! device.makeComputePipelineState(fu
 
 
 // main function of the burst photo app
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", kernel_size: Int = 5, noise_reduction: Double = 13.0, comp_underexposure: String = "Correction off") throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, comp_underexposure: String = "Correction off") throws -> URL {
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
