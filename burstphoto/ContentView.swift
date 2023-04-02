@@ -211,7 +211,7 @@ struct SettingsView: View {
                         Text(String($0))
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-            }.padding(20)
+            }.padding(15)
             
             Spacer()
             
@@ -222,7 +222,7 @@ struct SettingsView: View {
                         Text($0)
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-            }.padding(20)
+            }.padding(15)
             
             Spacer()
             
@@ -249,7 +249,7 @@ struct SettingsView: View {
                 Text("Large values increase the strength of noise reduction")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
-            }.padding(20)
+            }.padding(15)
             
         }
         .frame(width: 400)
