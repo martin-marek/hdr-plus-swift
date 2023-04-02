@@ -222,8 +222,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
         
         // derive normalized robustness value: four steps in noise_reduction (-4.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the sd of shot noise increases by a factor of sqrt(2) per iso level
-        let robustness_rev = 0.5*(26.0-Double(Int(noise_reduction+0.5)))
-        let robustness_norm = 0.15*pow(sqrt(2), robustness_rev) + 0.2
+        let robustness_rev = 0.5*(32.0-Double(Int(noise_reduction+0.5)))
+        let robustness_norm = 0.12*pow(1.35, robustness_rev) - 0.1380840
     
         try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness_norm, textures: textures, final_texture: final_texture)
     }
