@@ -41,9 +41,11 @@ struct MyProgram {
             let merging_algorithm = "Better speed"
             // options: 16, 32, 64
             let tile_size = 32
+            // options: "Low", "Medium", "High"
+            let search_distance = "Medium"
             
             // align+merge
-            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: merging_algorithm, tile_size: tile_size, noise_reduction: noise_reduction)
+            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: merging_algorithm, tile_size: tile_size, search_distance: search_distance, noise_reduction: noise_reduction)
             
             print("Image saved in:", out_url.relativePath)            
         }

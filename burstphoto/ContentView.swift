@@ -7,6 +7,7 @@ enum AppState {
 
 class AppSettings: ObservableObject {
     @AppStorage("tile_size") static var tile_size: Int = 32
+    @AppStorage("search_distance") static var search_distance: String = "Medium"
     @AppStorage("merging_algorithm") static var merging_algorithm: String = "Better speed"
     @AppStorage("noise_reduction") static var noise_reduction: Double = 13.0
 }
@@ -196,18 +197,29 @@ struct ProcessingView: View {
 
 struct SettingsView: View {
     let tile_sizes = [16, 32, 64]
+    let search_distances = ["Low", "Medium", "High"]
     let merging_algorithms = ["Better speed", "Better quality"]
     
     @State private var user_changing_nr = false
      
     var body: some View {
         VStack {
-            Spacer()
             
             VStack(alignment: .leading) {
                 Text("Tile size").font(.system(size: 14, weight: .medium))
                 Picker(selection: AppSettings.$tile_size, label: EmptyView()) {
                     ForEach(tile_sizes, id: \.self) {
+                        Text(String($0))
+                    }
+                }.pickerStyle(SegmentedPickerStyle())
+            }.padding(15)
+            
+            Spacer()
+            
+            VStack(alignment: .leading) {
+                Text("Search distance").font(.system(size: 14, weight: .medium))
+                Picker(selection: AppSettings.$search_distance, label: EmptyView()) {
+                    ForEach(search_distances, id: \.self) {
                         Text(String($0))
                     }
                 }.pickerStyle(SegmentedPickerStyle())
@@ -325,7 +337,7 @@ struct MyDropDelegate: DropDelegate {
                 let ref_idx = image_urls.count / 2
 
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: AppSettings.merging_algorithm, tile_size: AppSettings.tile_size, noise_reduction: AppSettings.noise_reduction)
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: AppSettings.merging_algorithm, tile_size: AppSettings.tile_size, search_distance: AppSettings.search_distance, noise_reduction: AppSettings.noise_reduction)
                 
                 // inform the user about the saved image
                 app_state = .image_saved

@@ -84,7 +84,7 @@ let deconvolute_frequency_domain_state = try! device.makeComputePipelineState(fu
 
 
 // main function of the burst photo app
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, merging_algorithm: String = "Better speed", tile_size: Int = 32, kernel_size: Int = 5, noise_reduction: Double = 13.0) throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, merging_algorithm: String = "Better speed", tile_size: Int = 32, search_distance: String = "Medium", kernel_size: Int = 5, noise_reduction: Double = 13.0) throws -> URL {
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -150,10 +150,12 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     textures = textures.map{texture_uint16_to_float($0)}
      
     // set the maximum resolution of the smallest pyramid layer
-    // Low: 128
-    // Medium: 64
-    // High: 32
-    let search_distance_int = 64
+    let search_distance_dict = [
+            "Low": 128,
+            "Medium": 64,
+            "High": 32,
+        ]
+    let search_distance_int = search_distance_dict[search_distance]!
     
     // use a 32 bit float as final image
     let final_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[ref_idx].width, height: textures[ref_idx].height, mipmapped: false)
