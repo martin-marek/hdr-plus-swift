@@ -189,7 +189,7 @@ struct SettingsView: View {
     let tile_sizes = ["Small", "Medium", "Large"]
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
-    let target_exposures = ["Off", "0 EV", "+1 EV"]
+    let target_exposures = ["Off", "Balanced", "Brighter"]
     
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
@@ -205,7 +205,7 @@ struct SettingsView: View {
                         Text(String($0))
                     }
                 }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
-            }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 10)
+            }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 11)
             
             HStack {
                 Text("Search distance").font(.system(size: 14, weight: .medium))
@@ -215,27 +215,43 @@ struct SettingsView: View {
                         Text(String($0))
                     }
                 }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
-            }.padding(.horizontal, 15).padding(.vertical, 10)
+            }.padding(.horizontal, 15).padding(.vertical, 11)
             
-            HStack {
-                Text("Target exposure*").font(.system(size: 14, weight: .medium))
-                Spacer()
-                Picker(selection: settings.$target_exposure, label: EmptyView()) {
-                    ForEach(target_exposures, id: \.self) {
-                        Text(String($0))
-                    }
-                }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
-            }.padding(.horizontal, 15).padding(.vertical, 10)
+            VStack {
+                HStack {
+                    Text("Target exposure").font(.system(size: 14, weight: .medium))
+                    Spacer()
+                    Picker(selection: settings.$target_exposure, label: EmptyView()) {
+                        ForEach(target_exposures, id: \.self) {
+                            Text(String($0))
+                        }
+                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
+                }
+                HStack {
+                    Spacer()
+                    Text("Affects only images with Bayer mosaic pattern ")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(.secondary)
+                }
+            }.padding(.horizontal, 15).padding(.top, 11).padding(.bottom, 5)
             
-            HStack {
-                Text("Merging algorithm*").font(.system(size: 14, weight: .medium))
-                Spacer()
-                Picker(selection: settings.$merging_algorithm, label: EmptyView()) {
-                    ForEach(merging_algorithms, id: \.self) {
-                        Text($0)
-                    }
-                }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)                
-            }.padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 6)
+            VStack {
+                HStack {
+                    Text("Merging algorithm").font(.system(size: 14, weight: .medium))
+                    Spacer()
+                    Picker(selection: settings.$merging_algorithm, label: EmptyView()) {
+                        ForEach(merging_algorithms, id: \.self) {
+                            Text($0)
+                        }
+                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
+                }
+                HStack {
+                    Spacer()
+                    Text("Affects only images with Bayer mosaic pattern ")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(.secondary)
+                }
+            }.padding(.horizontal, 15).padding(.top, 0).padding(.bottom, 2.5)
             
             VStack(alignment: .leading) {
                 
@@ -264,7 +280,6 @@ struct SettingsView: View {
                             skip_haptic_feedback = editing // avoid proving haptic feedback on the first click
                     })
                 }
-
                 Text("  <      daylight scene      >          ....        <     night scene     >")
                     .font(.system(size: 12))
                     .foregroundColor(.primary)
@@ -275,11 +290,7 @@ struct SettingsView: View {
                 Text("Large values increase the strength of noise reduction")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
-                Text("")
-                Text("* Affects only images with Bayer mosaic pattern")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-            }.padding(15)
+            }.padding(.horizontal, 15).padding(.top, 4).padding(.bottom, 15)
             
         }
         .frame(width: 400)

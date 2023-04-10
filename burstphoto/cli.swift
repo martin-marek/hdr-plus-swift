@@ -41,7 +41,7 @@ struct MyProgram {
             let tile_size = "Medium"
             // options: "Small", "Medium" or "Large"
             let search_distance = "Medium"
-            // options: "Off", "0 EV" or "+1 EV"
+            // options: "Off", "Balanced" or "Brighter"
             let target_exposure = "Off"
             
             // align+merge
