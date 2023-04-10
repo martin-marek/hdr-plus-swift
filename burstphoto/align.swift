@@ -260,8 +260,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     
     // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
     // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-    if (mosaic_pattern_width == 2 && comp_underexposure == "Correction on") {
-        correct_underexposure(final_texture, white_level[ref_idx], black_level, exposure_bias, ref_idx)
+    if (mosaic_pattern_width == 2 && target_exposure != "Off") {
+        correct_exposure(final_texture, white_level[ref_idx], black_level, target_exposure, exposure_bias, ref_idx)
     }
     
     // convert final image to 16 bit integer
@@ -1535,11 +1535,19 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [Int], _ exposur
 }
 
 
-func correct_underexposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ exposure_bias: [Int], _ ref_idx: Int) {
-          
-    // only apply exposure correction if reference image is underexposed
-    if (exposure_bias[ref_idx] < -1 && white_level != -1 && black_level[0] != -1) {
-     
+func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ target_exposure: String, _ exposure_bias: [Int], _ ref_idx: Int) {
+      
+    // set target exposure
+    let target_exposure_dict = [
+        "Off": -10000,
+        "0 EV": 0,
+        "+1 EV": +100,
+    ]
+    let target_exposure_int = target_exposure_dict[target_exposure]!
+        
+    // only apply exposure correction if reference image has an exposure, which is lower than the target exposure
+    if (exposure_bias[ref_idx] < target_exposure_int && white_level != -1 && black_level[0] != -1) {
+           
         var exp_idx = 0
         var uniform_exposure = true
         // find index of image with longest exposure to use the most robust black level value
@@ -1579,17 +1587,18 @@ func correct_underexposure(_ final_texture: MTLTexture, _ white_level: Int, _ bl
     
         let command_buffer = command_queue.makeCommandBuffer()!
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
-        let state = correct_underexposure_state
+        let state = correct_exposure_state
         command_encoder.setComputePipelineState(state)
         let threads_per_grid = MTLSize(width: final_texture.width/2, height: final_texture.height/2, depth: 1)
         let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
         command_encoder.setTexture(final_texture, index: 0)
         command_encoder.setBytes([Int32(exposure_bias[ref_idx])], length: MemoryLayout<Int32>.stride, index: 0)
-        command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 1)
-        command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 2)
-        command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 3)
-        command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 4)
-        command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 5)
+        command_encoder.setBytes([Int32(target_exposure_int)], length: MemoryLayout<Int32>.stride, index: 1)
+        command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 2)
+        command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 3)
+        command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 4)
+        command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 5)
+        command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 6)
         command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
         command_encoder.endEncoding()
         command_buffer.commit()
