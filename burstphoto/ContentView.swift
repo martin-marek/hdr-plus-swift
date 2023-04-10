@@ -189,8 +189,8 @@ struct SettingsView: View {
     let tile_sizes = ["Small", "Medium", "Large"]
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
-    let comp_underexposures = ["Correction off", "Correction on"]
-   
+    let target_exposures = ["Off", "0 EV", "+1 EV"]
+    
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
      
@@ -218,23 +218,23 @@ struct SettingsView: View {
             }.padding(.horizontal, 15).padding(.vertical, 10)
             
             HStack {
-                Text("Underexposure").font(.system(size: 14, weight: .medium))
+                Text("Target exposure*").font(.system(size: 14, weight: .medium))
                 Spacer()
-                Picker(selection: settings.$comp_underexposure, label: EmptyView()) {
-                    ForEach(comp_underexposures, id: \.self) {
+                Picker(selection: settings.$target_exposure, label: EmptyView()) {
+                    ForEach(target_exposures, id: \.self) {
                         Text(String($0))
                     }
                 }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
             }.padding(.horizontal, 15).padding(.vertical, 10)
             
             HStack {
-                Text("Merging algorithm").font(.system(size: 14, weight: .medium))
+                Text("Merging algorithm*").font(.system(size: 14, weight: .medium))
                 Spacer()
                 Picker(selection: settings.$merging_algorithm, label: EmptyView()) {
                     ForEach(merging_algorithms, id: \.self) {
                         Text($0)
                     }
-                }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
+                }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)                
             }.padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 6)
             
             VStack(alignment: .leading) {
@@ -273,6 +273,10 @@ struct SettingsView: View {
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
                 Text("Large values increase the strength of noise reduction")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("")
+                Text("* Affects only images with Bayer mosaic pattern")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
             }.padding(15)
@@ -349,7 +353,7 @@ struct MyDropDelegate: DropDelegate {
             
             do {               
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, comp_underexposure: settings.comp_underexposure)
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, target_exposure: settings.target_exposure)
                    
                 // inform the user about the saved image
                 app_state = .image_saved

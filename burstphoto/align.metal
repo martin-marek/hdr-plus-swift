@@ -1485,14 +1485,15 @@ kernel void equalize_exposure(texture2d<float, access::read_write> comp_texture 
 
 // correction of underexposure with reinhard tone mapping operator
 // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-kernel void correct_underexposure(texture2d<float, access::read_write> final_texture [[texture(0)]],
-                                  constant int& exposure_bias [[buffer(0)]],
-                                  constant int& white_level [[buffer(1)]],
-                                  constant float& black_level0 [[buffer(2)]],
-                                  constant float& black_level1 [[buffer(3)]],
-                                  constant float& black_level2 [[buffer(4)]],
-                                  constant float& black_level3 [[buffer(5)]],
-                                  uint2 gid [[thread_position_in_grid]]) {
+kernel void correct_exposure(texture2d<float, access::read_write> final_texture [[texture(0)]],
+                             constant int& exposure_bias [[buffer(0)]],
+                             constant int& target_exposure [[buffer(1)]],
+                             constant int& white_level [[buffer(2)]],
+                             constant float& black_level0 [[buffer(3)]],
+                             constant float& black_level1 [[buffer(4)]],
+                             constant float& black_level2 [[buffer(5)]],
+                             constant float& black_level3 [[buffer(6)]],
+                             uint2 gid [[thread_position_in_grid]]) {
       
     int const x = gid.x*2;
     int const y = gid.y*2;
@@ -1507,10 +1508,10 @@ kernel void correct_underexposure(texture2d<float, access::read_write> final_tex
                                 final_texture.read(uint2(x+1, y+1)).r);
     
     // calculate gain for intensity correction
-    float const correction_stops = float(-exposure_bias/100.0f);
+    float const correction_stops = float((target_exposure-exposure_bias)/100.0f);
     
-    // the gain is limited to 3.5 stops and slightly damped for values > 1.5 stops
-    float gain = min(correction_stops, 3.5f);
+    // the gain is limited to 4.0 stops and it is slightly damped for values > 1.5 stops
+    float gain = min(correction_stops, 4.0f);
     gain = pow(2.0f, gain-0.1f*max(0.0f, gain-1.5f));
     
     // subtract black level and rescale intensity to range from 0 to 1
