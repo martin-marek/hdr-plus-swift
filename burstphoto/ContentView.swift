@@ -212,9 +212,7 @@ struct SettingsView: View {
                         Text(String($0))
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-            }.padding(15)
-            
-            Spacer()
+            }.padding(.horizontal, 15).padding(.top, 15).padding(.bottom, 10)
             
             VStack(alignment: .leading) {
                 Text("Search distance").font(.system(size: 14, weight: .medium))
@@ -223,9 +221,7 @@ struct SettingsView: View {
                         Text(String($0))
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-            }.padding(15)
-            
-            Spacer()
+            }.padding(.horizontal, 15).padding(.vertical, 10)
             
             VStack(alignment: .leading) {
                 Text("Merging algorithm").font(.system(size: 14, weight: .medium))
@@ -234,9 +230,10 @@ struct SettingsView: View {
                         Text($0)
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-            }.padding(15)
-            
-            Spacer()
+                Text("Affects only images with Bayer mosaic pattern")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }.padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 3)
             
             VStack(alignment: .leading) {
                 Text("Noise reduction: \(Int(AppSettings.noise_reduction+0.5)==23 ? " avg (simple averaging)" : " \(Int(AppSettings.noise_reduction+0.5))")")
