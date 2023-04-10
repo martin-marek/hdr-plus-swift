@@ -1540,8 +1540,8 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
     // set target exposure
     let target_exposure_dict = [
         "Off": -10000,
-        "0 EV": 0,
-        "+1 EV": +100,
+        "Balanced": 0,
+        "Brighter": +100,
     ]
     let target_exposure_int = target_exposure_dict[target_exposure]!
         
