@@ -241,6 +241,70 @@ kernel void add_texture(texture2d<float, access::read> in_texture [[texture(0)]]
 }
 
 
+kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[texture(0)]],
+                                 texture2d<float, access::read_write> out_texture [[texture(1)]],
+                                 texture2d<float, access::read_write> norm_texture [[texture(2)]],
+                                 constant int& exposure_bias [[buffer(0)]],
+                                 constant int& white_level [[buffer(1)]],
+                                 constant float& black_level0 [[buffer(2)]],
+                                 constant float& black_level1 [[buffer(3)]],
+                                 constant float& black_level2 [[buffer(4)]],
+                                 constant float& black_level3 [[buffer(5)]],
+                                 uint2 gid [[thread_position_in_grid]]) {
+          
+    int const x = gid.x*2;
+    int const y = gid.y*2;
+       
+    // load args
+    float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
+   
+    // calculate weight based on exposure bias
+    float weight = pow(2.0f, float(exposure_bias/100.0f));
+    
+    // extract pixel values of 2x2 super pixel
+    float4 pixel_value = float4(in_texture.read(uint2(x,   y)).r,
+                                in_texture.read(uint2(x+1, y)).r,
+                                in_texture.read(uint2(x,   y+1)).r,
+                                in_texture.read(uint2(x+1, y+1)).r);
+    
+    // calculate original pixel values
+    float4 const pixel_value_orig = (pixel_value-black_level)*weight + black_level;
+    
+    // find maximum of the four pixels
+    float const max_pixel_value = max(pixel_value_orig[0], max(pixel_value_orig[1], max(pixel_value_orig[2], pixel_value_orig[3])));
+    
+    // add pixel values only if none of the pixels are clipped
+    if (max_pixel_value < white_level-1) {
+        
+        // apply optimal weight based on exposure of pixel
+        pixel_value = weight*pixel_value;
+        
+        out_texture.write(out_texture.read(uint2(x,   y)).r   + pixel_value[0], uint2(x,   y));
+        out_texture.write(out_texture.read(uint2(x+1, y)).r   + pixel_value[1], uint2(x+1, y));
+        out_texture.write(out_texture.read(uint2(x,   y+1)).r + pixel_value[2], uint2(x,   y+1));
+        out_texture.write(out_texture.read(uint2(x+1, y+1)).r + pixel_value[3], uint2(x+1, y+1));
+        
+        norm_texture.write(norm_texture.read(gid).r + weight, gid);
+    }
+}
+
+
+kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[texture(0)]],
+                              texture2d<float, access::read> norm_texture [[texture(1)]],
+                              uint2 gid [[thread_position_in_grid]]) {
+    
+    int const x = gid.x*2;
+    int const y = gid.y*2;
+   
+    float const norm_value = norm_texture.read(gid).r;
+        
+    in_texture.write(in_texture.read(uint2(x,   y)).r/norm_value,   uint2(x,   y));
+    in_texture.write(in_texture.read(uint2(x+1, y)).r/norm_value,   uint2(x+1, y));
+    in_texture.write(in_texture.read(uint2(x,   y+1)).r/norm_value, uint2(x,   y+1));
+    in_texture.write(in_texture.read(uint2(x+1, y+1)).r/norm_value, uint2(x+1, y+1));
+}
+
+
 kernel void copy_texture(texture2d<float, access::read> in_texture [[texture(0)]],
                          texture2d<float, access::write> out_texture [[texture(1)]],
                          uint2 gid [[thread_position_in_grid]]) {
@@ -670,11 +734,11 @@ kernel void warp_texture(texture2d<float, access::read> in_texture [[texture(0)]
 // Function specific to merging in the spatial domain
 // ===========================================================================================================
 
-kernel void add_textures_weighted(texture2d<float, access::read> texture1 [[texture(0)]],
-                                  texture2d<float, access::read> texture2 [[texture(1)]],
-                                  texture2d<float, access::read> weight_texture [[texture(2)]],
-                                  texture2d<float, access::write> out_texture [[texture(3)]],
-                                  uint2 gid [[thread_position_in_grid]]) {
+kernel void add_texture_weighted(texture2d<float, access::read> texture1 [[texture(0)]],
+                                 texture2d<float, access::read> texture2 [[texture(1)]],
+                                 texture2d<float, access::read> weight_texture [[texture(2)]],
+                                 texture2d<float, access::write> out_texture [[texture(3)]],
+                                 uint2 gid [[thread_position_in_grid]]) {
     
     float intensity1 = texture1.read(gid).r;
     float intensity2 = texture2.read(gid).r;
@@ -1510,24 +1574,34 @@ kernel void correct_exposure(texture2d<float, access::read_write> final_texture 
     // calculate gain for intensity correction
     float const correction_stops = float((target_exposure-exposure_bias)/100.0f);
     
-    // the gain is limited to 4.0 stops and it is slightly damped for values > 1.5 stops
-    float gain = min(correction_stops, 4.0f);
-    gain = pow(2.0f, gain-0.1f*max(0.0f, gain-1.5f));
+    // the gain is limited to 4.0 stops and it is slightly damped for values > 2.0 stops
+    float gain_stops = min(correction_stops, 4.0f);
+    float const gain0 = pow(2.0f, gain_stops-0.05f*max(0.0f, gain_stops-1.5f));
+    float const gain1 = pow(2.0f, gain_stops/1.4f);
     
     // subtract black level and rescale intensity to range from 0 to 1
     pixel_value = (pixel_value-black_level)/(float(white_level)-black_level);
     
     // use luminance to ensure that the four color channels are treated equally
     float const luminance_before = 0.25f*(pixel_value[0]+pixel_value[1]+pixel_value[2]+pixel_value[3]);
-    // apply gain
-    float luminance_after = gain * luminance_before;
+            
+    // apply gains
+    float luminance_after0 = gain0 * luminance_before;
+    float luminance_after1 = gain1 * luminance_before;
         
     // apply tone mappting operator specified in equation (4) in https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
     // the operator is linear in the shadows and midtones while protecting the highlights
-    luminance_after = luminance_after * (1.0f+luminance_after/(gain*gain)) / (1.0f+luminance_after);
+    luminance_after0 = luminance_after0 * (1.0f+luminance_after0/(gain0*gain0)) / (1.0f+luminance_after0);
+    
+    // apply a modified tone mapping operator, which better protects the highlights
+    float const luminance_max = gain1 * (0.4f+gain1/(gain1*gain1)) / (0.4f+gain1);
+    luminance_after1 = luminance_after1 * (0.4f+luminance_after1/(gain1*gain1)) / ((0.4f+luminance_after1)*luminance_max);
+    
+    // calculate weight for blending the two tone mapping curves dependent on the magnitude of the gain
+    float const weight = max(0.0f, gain_stops*0.25f - 0.10f);
     
     // apply scaling derived from luminance values and return to original intensity scale
-    pixel_value = pixel_value * luminance_after/luminance_before * (float(white_level)-black_level) + black_level;
+    pixel_value = pixel_value * ((1.0f-weight)*luminance_after0 + weight*luminance_after1)/luminance_before * (float(white_level)-black_level) + black_level;
     pixel_value = clamp(pixel_value, 0.0f, float(UINT16_MAX_VAL));
 
     final_texture.write(pixel_value[0], uint2(x,   y));
