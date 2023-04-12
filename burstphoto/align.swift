@@ -1550,10 +1550,14 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
            
         var exp_idx = 0
         var uniform_exposure = true
-        // find index of image with longest exposure to use the most robust black level value
+        
         for comp_idx in 0..<exposure_bias.count {         
-            if (exposure_bias[comp_idx] > exposure_bias[exp_idx]) {
+             // find index of image with longest exposure to use the most robust black level value
+             if (exposure_bias[comp_idx] > exposure_bias[exp_idx]) {
                 exp_idx = comp_idx
+            }
+            // check if exposure is uniform or bracketed
+            if (exposure_bias[comp_idx] != exposure_bias[0]) {
                 uniform_exposure = false
             }
         }
