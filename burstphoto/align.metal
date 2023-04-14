@@ -251,38 +251,46 @@ kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[tex
                                  constant float& black_level2 [[buffer(4)]],
                                  constant float& black_level3 [[buffer(5)]],
                                  uint2 gid [[thread_position_in_grid]]) {
-          
-    int const x = gid.x*2;
-    int const y = gid.y*2;
        
     // load args
-    float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
-   
+    int texture_width  = in_texture.get_width();
+    int texture_height = in_texture.get_height();
+    
+    // calculate average black level, which is sufficient here as an approximation
+    float const black_level = 0.25f*(black_level0 + black_level1 + black_level2 + black_level3);
+ 
     // calculate weight based on exposure bias
     float weight = pow(2.0f, float(exposure_bias/100.0f));
     
-    // extract pixel values of 2x2 super pixel
-    float4 pixel_value = float4(in_texture.read(uint2(x,   y)).r,
-                                in_texture.read(uint2(x+1, y)).r,
-                                in_texture.read(uint2(x,   y+1)).r,
-                                in_texture.read(uint2(x+1, y+1)).r);
+    // extract pixel value
+    float pixel_value = in_texture.read(gid).r;
     
-    // calculate original pixel values
-    float4 const pixel_value_orig = (pixel_value-black_level)*weight + black_level;
+    // find the maximum intensity in a 5x5 window around the main pixel
+    float pixel_value_max = 0.0f;
+      
+    for (int dy = -2; dy <= 2; dy++) {
+        int y = gid.y + dy;
+        
+        if (0 <= y && y < texture_height) {
+            for (int dx = -2; dx <= 2; dx++) {
+                int x = gid.x + dx;
+                
+                if (0 <= x && x < texture_width) {
+                    pixel_value_max = max(pixel_value_max, in_texture.read(uint2(x, y)).r);
+                }
+            }
+        }
+    }    
     
-    // find maximum of the four pixels
-    float const max_pixel_value = max(pixel_value_orig[0], max(pixel_value_orig[1], max(pixel_value_orig[2], pixel_value_orig[3])));
-    
-    // add pixel values only if none of the pixels are clipped
-    if (max_pixel_value < white_level-1) {
+    pixel_value_max = (pixel_value_max-black_level)*weight + black_level;
+
+    // add pixel values only if none of the pixels in the 5x5 window are clipped (clipping point set approx. 0.5 stops below the white level)
+    if (pixel_value_max < 0.75f*white_level) {
         
         // apply optimal weight based on exposure of pixel
         pixel_value = weight*pixel_value;
         
-        out_texture.write(out_texture.read(uint2(x,   y)).r   + pixel_value[0], uint2(x,   y));
-        out_texture.write(out_texture.read(uint2(x+1, y)).r   + pixel_value[1], uint2(x+1, y));
-        out_texture.write(out_texture.read(uint2(x,   y+1)).r + pixel_value[2], uint2(x,   y+1));
-        out_texture.write(out_texture.read(uint2(x+1, y+1)).r + pixel_value[3], uint2(x+1, y+1));
+        out_texture.write(out_texture.read(gid).r + pixel_value, gid);
         
         norm_texture.write(norm_texture.read(gid).r + weight, gid);
     }
@@ -292,16 +300,10 @@ kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[tex
 kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[texture(0)]],
                               texture2d<float, access::read> norm_texture [[texture(1)]],
                               uint2 gid [[thread_position_in_grid]]) {
-    
-    int const x = gid.x*2;
-    int const y = gid.y*2;
    
     float const norm_value = norm_texture.read(gid).r;
         
-    in_texture.write(in_texture.read(uint2(x,   y)).r/norm_value,   uint2(x,   y));
-    in_texture.write(in_texture.read(uint2(x+1, y)).r/norm_value,   uint2(x+1, y));
-    in_texture.write(in_texture.read(uint2(x,   y+1)).r/norm_value, uint2(x,   y+1));
-    in_texture.write(in_texture.read(uint2(x+1, y+1)).r/norm_value, uint2(x+1, y+1));
+    in_texture.write(in_texture.read(gid).r/norm_value, gid);
 }
 
 

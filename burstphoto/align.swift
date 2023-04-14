@@ -211,18 +211,21 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
         let tile_size_merge = Int(8)
 
-        // This correction accounts for the fact that bursts with exposure bracketing include images with longer exposure times, which exhibit a better signal-to-noise ratio. Thus the average noise level to be expected has to be reduced. As the same correction is applied to all images, images with longer exposures are slightly preferred by the merging algorithm compared to images with lower exposure. This simplified formula does not correctly include read noise (a square is ignored) and as a consequence, merging weights in the shadows will be very slightly overestimated. As the shadows are typically lifted heavily in HDR shots, this effect may be even preferable.
-        var robustness_exposure_corr = 0.0
+        // These corrections account for the fact that bursts with exposure bracketing include images with longer exposure times, which exhibit a better signal-to-noise ratio. Thus the expected noise level n used in the merging equation d^2/(d^2 + n) has to be reduced to get a comparable noise reduction strength on average (exposure_corr1). Furthermore, a second correction (exposure_corr2) takes into account that images with longer exposure get slightly larger weights than images with shorter exposure (applied as an increased value for the parameter max_motion_norm => see call of function merge_frequency_domain). The simplified formulas do not correctly include read noise (a square is ignored) and as a consequence, merging weights in the shadows will be very slightly overestimated. As the shadows are typically lifted heavily in HDR shots, this effect may be even preferable.
+        var exposure_corr1 = 0.0
+        var exposure_corr2 = 0.0
 
         for comp_idx in 0..<exposure_bias.count {
             let exposure_factor = pow(2.0, (Double(exposure_bias[comp_idx]-exposure_bias[ref_idx])/100.0))
-            robustness_exposure_corr += (0.5 + 0.5/exposure_factor)
+            exposure_corr1 += (0.5 + 0.5/exposure_factor)
+            exposure_corr2 += min(4.0, exposure_factor);
         }
-        robustness_exposure_corr /= Double(exposure_bias.count)
+        exposure_corr1 /= Double(exposure_bias.count)
+        exposure_corr2 /= Double(exposure_bias.count)
                 
         // derive normalized robustness value: two steps in noise_reduction (-2.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the variance of shot noise increases by a factor of two per iso level
         let robustness_rev = 0.5*(26.5-Double(Int(noise_reduction+0.5)))
-        let robustness_norm = robustness_exposure_corr*pow(2.0, (-robustness_rev + 7.5));
+        let robustness_norm = exposure_corr1/exposure_corr2*pow(2.0, (-robustness_rev + 7.5));
         
         // derive estimate of read noise with the idea that read noise increases approx. by a factor of three (stronger than increase in shot noise) per iso level to increase noise reduction in darker regions relative to bright regions
         let read_noise = pow(pow(2.0, (-robustness_rev + 10.0)), 1.6);
@@ -329,7 +332,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
     if (!uniform_exposure && white_level != -1 && black_level[0] != -1 && mosaic_pattern_width == 2) {
         
         // initialize weight texture used for normalization of the final image
-        let norm_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: final_texture.width/2, height: final_texture.height/2, mipmapped: false)
+        let norm_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: final_texture.width, height: final_texture.height, mipmapped: false)
         norm_texture_descriptor.usage = [.shaderRead, .shaderWrite]
         let norm_texture = device.makeTexture(descriptor: norm_texture_descriptor)!
         fill_with_zeros(norm_texture)
@@ -565,7 +568,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         forward_ft(aligned_texture_rgba, aligned_texture_ft, tmp_texture_ft, tile_info_merge)
         
         // merge aligned comparison texture with reference texture in the frequency domain
-        merge_frequency_domain(ref_texture_ft, aligned_texture_ft, final_texture_ft, rms_texture, mismatch_texture, robustness_norm, read_noise, max_motion_norm, tile_info_merge);
+        merge_frequency_domain(ref_texture_ft, aligned_texture_ft, final_texture_ft, rms_texture, mismatch_texture, robustness_norm, read_noise, min(4.0, exposure_factor)*max_motion_norm, tile_info_merge);
                
         // stop debug capture
         //capture_manager.stopCapture()
@@ -828,7 +831,7 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = add_texture_exposure_state
     command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: in_texture.width/2, height: in_texture.height/2, depth: 1)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(out_texture, index: 1)
@@ -851,7 +854,7 @@ func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture) {
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = normalize_texture_state
     command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: in_texture.width/2, height: in_texture.height/2, depth: 1)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(norm_texture, index: 1)
