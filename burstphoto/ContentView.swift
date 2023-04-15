@@ -201,6 +201,8 @@ struct SettingsView: View {
     let merging_algorithms = ["Better speed", "Better quality"]
     
     @State private var user_changing_nr = false
+    @State private var skip_haptic_feedback = false
+    @State private var noise_reduction: Double = AppSettings.noise_reduction
      
     var body: some View {
         VStack {
@@ -236,16 +238,32 @@ struct SettingsView: View {
             }.padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 3)
             
             VStack(alignment: .leading) {
-                Text("Noise reduction: \(Int(AppSettings.noise_reduction+0.5)==23 ? " avg (simple averaging)" : " \(Int(AppSettings.noise_reduction+0.5))")")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(user_changing_nr ? .secondary : .primary)
+                
+                (Text("Noise reduction: ") +
+                 (noise_reduction == 23
+                   ? Text("max. ").foregroundColor(.red) + Text("(simple average w/o alignment)")
+                   : Text("\(Int(noise_reduction))")
+                )).font(.system(size: 14, weight: .medium))
+                .opacity(user_changing_nr ? 0.7 : 1.0)
+                    
+                // the slider/stepper should provide haptic feedback when value changes
+                // but there's one exception: we don't provide feedback on the first click of the stepper,
+                // to avoid providing haptic feedback together with a system click
                 HStack {
-                    Slider(value: AppSettings.$noise_reduction, in: 1...23, step: 1.0,
-                            onEditingChanged: { editing in user_changing_nr = editing }
-                    )
-                    Stepper("", value: AppSettings.$noise_reduction, in: 1...23,
-                            onEditingChanged: { editing in user_changing_nr = editing }
-                    )
+                    Slider(value: $noise_reduction, in: 1...23, step: 1,
+                        onEditingChanged: { editing in user_changing_nr = editing }
+                    ).onChange(of: noise_reduction) { _ in
+                        AppSettings.noise_reduction = noise_reduction
+                        if !skip_haptic_feedback {
+                            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                        }
+                        skip_haptic_feedback = false
+                    }
+                    Stepper("", value: $noise_reduction, in: 1...23,
+                        onEditingChanged: { editing in
+                            user_changing_nr = editing
+                            skip_haptic_feedback = editing // avoid proving haptic feedback on the first click
+                    })
                 }
 
                 Text("  <      daylight scene      >          ....        <     night scene     >")
