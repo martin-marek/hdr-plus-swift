@@ -12,7 +12,7 @@ extern "C" {
     void terminate_xmp_sdk();
 
     // function to read a dng image and store its pixel values
-    int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pettern_width);
+    int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width);
 
     // function to read a dng image, overwrite its pixel values, and save the result
     int write_image(const char *in_path, const char *out_path, void** pixel_bytes_pointer);

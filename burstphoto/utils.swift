@@ -18,27 +18,24 @@ func optionally_convert_dir_to_urls(_ urls: [URL]) -> [URL] {
     return urls
 }
 
-func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> ([MTLTexture], Int) {
+func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int) {
     
     var textures_dict: [Int: MTLTexture] = [:]
     let compute_group = DispatchGroup()
     let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
     let access_queue = DispatchQueue(label: "") // this is a serial queue to read/save data thread-safely
-    var mosaic_pettern_width: Int?
+    var mosaic_pattern_width: Int?
 
     for i in 0..<urls.count {
         compute_queue.async(group: compute_group) {
     
             // asynchronously load texture
-            if let (texture, _mosaic_pettern_width) = try? image_url_to_texture(urls[i], device) {
-    
-                // sync GUI progress
-                DispatchQueue.main.async { progress.int += 1 }
-    
+            if let (texture, _mosaic_pattern_width) = try? image_url_to_texture(urls[i], device) {
+        
                 // thread-safely save the texture
                 access_queue.sync {
                     textures_dict[i] = texture
-                    mosaic_pettern_width = _mosaic_pettern_width
+                    mosaic_pattern_width = _mosaic_pattern_width
                 }
             }
         }
@@ -63,7 +60,7 @@ func load_images(_ urls: [URL], _ progress: ProcessingProgress) throws -> ([MTLT
         }
     }
     
-    return (textures_list, mosaic_pettern_width!)
+    return (textures_list, mosaic_pattern_width!)
 }
 
 // https://stackoverflow.com/questions/26971240/how-do-i-run-a-terminal-command-in-a-swift-script-e-g-xcodebuild
@@ -86,11 +83,12 @@ func safeShell(_ command: String) throws -> String {
     return output
 }
 
-func convert_images_to_dng(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String, _ progress: ProcessingProgress) throws -> [URL] {
+func convert_images_to_dng(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String) throws -> [URL] {
 
-    // creade command string
+    // create command string
     let executable_path = dng_converter_path + "/Contents/MacOS/Adobe DNG Converter"
-    let args = "--args -u -p0 -d \"\(tmp_dir)\""
+    // changed args to convert raw files to compressed DNGs
+    let args = "--args -c -p0 -d \"\(tmp_dir)\""
     var command = "\"\(executable_path)\" \(args)"
     for url in in_urls {
         command += " \"\(url.relativePath)\""

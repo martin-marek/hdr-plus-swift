@@ -15,11 +15,10 @@ struct MyProgram {
         
         // create a list of bursts to process
         let burst_dirs = [
-            //"/Users/martinmarek/Downloads/rafs mini/",
-            "/Users/martinmarek/My Drive/Coding/Burst/bursts/Fuji X-trans RAF/",
-            // "/Users/martinmarek/My Drive/Coding/Burst/bursts/33TJ_20150614_232110_642_dng/",
-            // "/Users/martinmarek/My Drive/Coding/Burst/bursts/Monika-HP-dng/",
-            // "/Users/martinmarek/My Drive/Coding/Burst/bursts/Monika-stars-DNG/",
+                     
+            "/Volumes/My Burst Folder/Burst 01/",
+            //"/Volumes/My Burst Folder/Burst 02/",
+            //"/Volumes/My Burst Folder/Burst 03/",
         ]
         
         // iterate over bursts
@@ -33,18 +32,22 @@ struct MyProgram {
             
             // ProcessingProgress is only useful for a GUI, but we have to instantiate one anyway
             let progress = ProcessingProgress()
-
-            // set alignment params
+            
+            // set index of reference texture
             let ref_idx = image_urls.count / 2
-            let robustness = 0.5
+            // options: value range from 1.0 to 23.0
+            let noise_reduction = 13.0
+            // options: "Better speed" or "Better quality"
+            let merging_algorithm = "Better speed"
+            // options: 16, 32, 64
+            let tile_size = 32
+            // options: "Low", "Medium", "High"
             let search_distance = "Medium"
-            let tile_size = 16
-            let kernel_size = 5
             
             // align+merge
-            let out_url = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: search_distance, tile_size: tile_size, kernel_size: kernel_size, robustness: robustness)
-            print("Image saved in:", out_url.relativePath)
+            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: merging_algorithm, tile_size: tile_size, search_distance: search_distance, noise_reduction: noise_reduction)
             
+            print("Image saved in:", out_url.relativePath)            
         }
         
         // terminate Adobe XMP SDK

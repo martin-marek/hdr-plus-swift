@@ -17,11 +17,11 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     var pixel_bytes: UnsafeMutableRawPointer?
     var width: Int32 = 0;
     var height: Int32 = 0;
-    var mosaic_pettern_width: Int32 = 0;
-    error_code = read_image(url.path, &pixel_bytes, &width, &height, &mosaic_pettern_width)
+    var mosaic_pattern_width: Int32 = 0;
+    error_code = read_image(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width)
     if (error_code != 0) {throw ImageIOError.load_error}
     
-    // conver image bitmap to MTLTexture
+    // convert image bitmap to MTLTexture
     let bytes_per_pixel = 2
     let bytes_per_row = bytes_per_pixel * Int(width)
     let texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: Int(width), height: Int(height), mipmapped: false)
@@ -33,7 +33,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     // free memory
     free(pixel_bytes!)
 
-    return (texture, Int(mosaic_pettern_width))
+    return (texture, Int(mosaic_pattern_width))
 }
 
 

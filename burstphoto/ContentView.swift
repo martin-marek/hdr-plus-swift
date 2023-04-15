@@ -6,9 +6,10 @@ enum AppState {
 }
 
 class AppSettings: ObservableObject {
-    @AppStorage("tile_size") static var tile_size: Int = 16
+    @AppStorage("tile_size") static var tile_size: Int = 32
     @AppStorage("search_distance") static var search_distance: String = "Medium"
-    @AppStorage("robustness") static var robustness: Double = 0.5
+    @AppStorage("merging_algorithm") static var merging_algorithm: String = "Better speed"
+    @AppStorage("noise_reduction") static var noise_reduction: Double = 13.0
 }
 
 struct MyAlert {
@@ -151,24 +152,33 @@ struct ImageSavedView: View {
 struct ProcessingView: View {
     @Binding var image_urls: [URL]
     @ObservedObject var progress: ProcessingProgress
-    let saving_as_num_of_images = 0
-    
+        
     func progress_int_to_str(_ int: Int) -> String {
+                
         if progress.includes_conversion {
-            if progress.int < image_urls.count {
+            if progress.int < 10000000 {
                 return "Converting images to DNG (this might take a while)..."
-            } else if progress.int < 2*image_urls.count {
-                return "Loading \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
-            } else if progress.int < 3*image_urls.count {
-                return "Processing \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            } else if progress.int < 20000000 {
+                return "Loading images..."
+            } else if progress.int < 100000000 {
+                
+                // use a very high number for the 100% mark to minimize any rounding errors
+                let percent = round(Double(progress.int-20000000)/800000*10)/10.0
+                           
+                return "Processing images (\(percent)%)..."
+                
             } else {
                 return "Saving processed image..."
             }
         } else {
-            if progress.int < image_urls.count {
-                return "Loading \(image_urls[progress.int].lastPathComponent)..."
-            } else if progress.int < 2*image_urls.count {
-                return "Processing \(image_urls[progress.int % image_urls.count].lastPathComponent)..."
+            if progress.int < 20000000 {
+                return "Loading images..."
+            } else if progress.int < 100000000 {
+                
+                // use a very high number for the 100% mark to minimize any rounding errors
+                let percent = round(Double(progress.int-20000000)/800000*10)/10.0
+           
+                return "Processing images (\(percent)%)..."
             } else {
                 return "Saving processed image..."
             }
@@ -176,7 +186,7 @@ struct ProcessingView: View {
     }
     
     var body: some View {
-        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: Double((progress.includes_conversion ? 3 : 2)*image_urls.count + saving_as_num_of_images))
+        ProgressView(progress_int_to_str(progress.int), value: Double(progress.int), total: 110000000.0)
             .font(.system(size: 16, weight: .medium))
             .opacity(0.8)
             .padding(20)
@@ -186,12 +196,14 @@ struct ProcessingView: View {
 
 
 struct SettingsView: View {
-    let tile_sizes = [8, 16, 32, 64]
+    let tile_sizes = [16, 32, 64]
     let search_distances = ["Low", "Medium", "High"]
-
+    let merging_algorithms = ["Better speed", "Better quality"]
+    
+    @State private var user_changing_nr = false
+     
     var body: some View {
         VStack {
-            Spacer()
             
             VStack(alignment: .leading) {
                 Text("Tile size").font(.system(size: 14, weight: .medium))
@@ -200,32 +212,56 @@ struct SettingsView: View {
                         Text(String($0))
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-            }.padding(20)
-            
-            Spacer()
+            }.padding(.horizontal, 15).padding(.top, 15).padding(.bottom, 10)
             
             VStack(alignment: .leading) {
                 Text("Search distance").font(.system(size: 14, weight: .medium))
                 Picker(selection: AppSettings.$search_distance, label: EmptyView()) {
                     ForEach(search_distances, id: \.self) {
+                        Text(String($0))
+                    }
+                }.pickerStyle(SegmentedPickerStyle())
+            }.padding(.horizontal, 15).padding(.vertical, 10)
+            
+            VStack(alignment: .leading) {
+                Text("Merging algorithm").font(.system(size: 14, weight: .medium))
+                Picker(selection: AppSettings.$merging_algorithm, label: EmptyView()) {
+                    ForEach(merging_algorithms, id: \.self) {
                         Text($0)
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-            }.padding(20)
-            
-            Spacer()
+                Text("Affects only images with Bayer mosaic pattern")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }.padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 3)
             
             VStack(alignment: .leading) {
-                Text("Robustness").font(.system(size: 14, weight: .medium))
+                Text("Noise reduction: \(Int(AppSettings.noise_reduction+0.5)==23 ? " avg (simple averaging)" : " \(Int(AppSettings.noise_reduction+0.5))")")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(user_changing_nr ? .secondary : .primary)
                 HStack {
-                    Text("Low")
-                    Slider(value: AppSettings.$robustness, in: 0...1, step: 0.1)
-                    Text("High")
+                    Slider(value: AppSettings.$noise_reduction, in: 1...23, step: 1.0,
+                            onEditingChanged: { editing in user_changing_nr = editing }
+                    )
+                    Stepper("", value: AppSettings.$noise_reduction, in: 1...23,
+                            onEditingChanged: { editing in user_changing_nr = editing }
+                    )
                 }
-            }.padding(20)
+
+                Text("  <      daylight scene      >          ....        <     night scene     >")
+                    .font(.system(size: 12))
+                    .foregroundColor(.primary)
+                Text("")
+                Text("Small values increase motion robustness and image sharpness")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("Large values increase the strength of noise reduction")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }.padding(15)
             
         }
-        .frame(width: 350)
+        .frame(width: 400)
         .navigationTitle("Preferences")
     }
 }
@@ -298,8 +334,8 @@ struct MyDropDelegate: DropDelegate {
                 let ref_idx = image_urls.count / 2
 
                 // align and merge the burst
-                out_url = try align_and_merge(image_urls: image_urls, progress: progress, ref_idx: ref_idx, search_distance: AppSettings.search_distance, tile_size: AppSettings.tile_size, robustness: AppSettings.robustness)
-
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: AppSettings.merging_algorithm, tile_size: AppSettings.tile_size, search_distance: AppSettings.search_distance, noise_reduction: AppSettings.noise_reduction)
+                
                 // inform the user about the saved image
                 app_state = .image_saved
 
