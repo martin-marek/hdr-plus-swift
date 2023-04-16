@@ -5,31 +5,32 @@ enum AppState {
     case main, processing, image_saved
 }
 
-class AppSettings: ObservableObject {
-    @AppStorage("tile_size") static var tile_size: Int = 32
-    @AppStorage("search_distance") static var search_distance: String = "Medium"
-    @AppStorage("merging_algorithm") static var merging_algorithm: String = "Better speed"
-    @AppStorage("noise_reduction") static var noise_reduction: Double = 13.0
-}
-
 struct MyAlert {
     var show: Bool = false
     var title: String?
     var message: String?
-    var image_url: URL?
+    var dismiss_button: Alert.Button?
+}
+
+// class to store the progress of the align+merge
+class ProcessingProgress: ObservableObject {
+    @Published var int = 0
+    @Published var includes_conversion = false
+    @Published var show_nonbayer_hq_alert = false
 }
 
 
 struct ContentView: View {
-    @State private var app_state = AppState.main // DEBUG
+    @ObservedObject var settings: AppSettings
+    @State private var app_state = AppState.main
     @State private var image_urls: [URL] = []
     @StateObject var progress = ProcessingProgress()
-    @State private var my_alert = MyAlert()
+    @State var my_alert = MyAlert()
     @State private var out_url = URL(fileURLWithPath: "")
     @State var drop_active = false
     
     var body: some View {
-        let drop_delegate = MyDropDelegate(app_state: $app_state, image_urls: $image_urls, progress: progress, active: $drop_active, my_alert: $my_alert, out_url: $out_url)
+        let drop_delegate = MyDropDelegate(settings: settings, app_state: $app_state, image_urls: $image_urls, progress: progress, active: $drop_active, my_alert: $my_alert, out_url: $out_url)
         
         Group {
             switch app_state {
@@ -51,8 +52,17 @@ struct ContentView: View {
             return Alert(
                 title: Text(my_alert.title!),
                 message: Text(my_alert.message!),
-                dismissButton: .cancel()
+                dismissButton: my_alert.dismiss_button!
             )
+        })
+        .onReceive(progress.$show_nonbayer_hq_alert, perform: { val in
+            if val {
+                my_alert.title = "Higher quality not supported"
+                my_alert.message = "You've selected the \"Higher quality\" merging algorithm in Preferences but your camera only supports the \"Fast\" algorithm. Press OK to use the \"Fast\" algorithm."
+                my_alert.dismiss_button = .default(Text("OK"))
+                my_alert.show = true
+                settings.merging_algorithm = "Fast"
+            }
         })
         .frame(width: 350, height: 400)
     }
@@ -196,20 +206,19 @@ struct ProcessingView: View {
 
 
 struct SettingsView: View {
+    @ObservedObject var settings: AppSettings
     let tile_sizes = [16, 32, 64]
     let search_distances = ["Low", "Medium", "High"]
-    let merging_algorithms = ["Better speed", "Better quality"]
-    
+    let merging_algorithms = ["Fast", "Higher quality"]
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
-    @State private var noise_reduction: Double = AppSettings.noise_reduction
      
     var body: some View {
         VStack {
             
             VStack(alignment: .leading) {
                 Text("Tile size").font(.system(size: 14, weight: .medium))
-                Picker(selection: AppSettings.$tile_size, label: EmptyView()) {
+                Picker(selection: settings.$tile_size, label: EmptyView()) {
                     ForEach(tile_sizes, id: \.self) {
                         Text(String($0))
                     }
@@ -218,7 +227,7 @@ struct SettingsView: View {
             
             VStack(alignment: .leading) {
                 Text("Search distance").font(.system(size: 14, weight: .medium))
-                Picker(selection: AppSettings.$search_distance, label: EmptyView()) {
+                Picker(selection: settings.$search_distance, label: EmptyView()) {
                     ForEach(search_distances, id: \.self) {
                         Text(String($0))
                     }
@@ -227,39 +236,35 @@ struct SettingsView: View {
             
             VStack(alignment: .leading) {
                 Text("Merging algorithm").font(.system(size: 14, weight: .medium))
-                Picker(selection: AppSettings.$merging_algorithm, label: EmptyView()) {
+                Picker(selection: settings.$merging_algorithm, label: EmptyView()) {
                     ForEach(merging_algorithms, id: \.self) {
                         Text($0)
                     }
                 }.pickerStyle(SegmentedPickerStyle())
-                Text("Affects only images with Bayer mosaic pattern")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
             }.padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 3)
             
             VStack(alignment: .leading) {
                 
                 (Text("Noise reduction: ") +
-                 (noise_reduction == 23
+                 (settings.noise_reduction == 23
                    ? Text("max. ").foregroundColor(.red) + Text("(simple average w/o alignment)")
-                   : Text("\(Int(noise_reduction))")
+                   : Text("\(Int(settings.noise_reduction))")
                 )).font(.system(size: 14, weight: .medium))
-                .opacity(user_changing_nr ? 0.7 : 1.0)
+                .opacity(user_changing_nr ? 0.75 : 1.0)
                     
                 // the slider/stepper should provide haptic feedback when value changes
                 // but there's one exception: we don't provide feedback on the first click of the stepper,
                 // to avoid providing haptic feedback together with a system click
                 HStack {
-                    Slider(value: $noise_reduction, in: 1...23, step: 1,
+                    Slider(value: settings.$noise_reduction, in: 1...23, step: 1,
                         onEditingChanged: { editing in user_changing_nr = editing }
-                    ).onChange(of: noise_reduction) { _ in
-                        AppSettings.noise_reduction = noise_reduction
+                    ).onChange(of: settings.noise_reduction) { _ in
                         if !skip_haptic_feedback {
                             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
                         }
                         skip_haptic_feedback = false
                     }
-                    Stepper("", value: $noise_reduction, in: 1...23,
+                    Stepper("", value: settings.$noise_reduction, in: 1...23,
                         onEditingChanged: { editing in
                             user_changing_nr = editing
                             skip_haptic_feedback = editing // avoid proving haptic feedback on the first click
@@ -286,6 +291,7 @@ struct SettingsView: View {
 
 
 struct MyDropDelegate: DropDelegate {
+    @ObservedObject var settings: AppSettings
     @Binding var app_state: AppState
     @Binding var image_urls: [URL]
     @ObservedObject var progress: ProcessingProgress
@@ -352,7 +358,7 @@ struct MyDropDelegate: DropDelegate {
                 let ref_idx = image_urls.count / 2
 
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: AppSettings.merging_algorithm, tile_size: AppSettings.tile_size, search_distance: AppSettings.search_distance, noise_reduction: AppSettings.noise_reduction)
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction)
                 
                 // inform the user about the saved image
                 app_state = .image_saved
@@ -360,41 +366,49 @@ struct MyDropDelegate: DropDelegate {
             } catch ImageIOError.load_error {
                 my_alert.title = "Unsupported format"
                 my_alert.message = "Image format not supported. Please only use unprocessed RAW or DNG images. Using RAW images requires Adobe DNG Converter to be installed on your Mac."
+                my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch ImageIOError.save_error {
                 my_alert.title = "Image couldn't be saved"
                 my_alert.message = "The processed image could not be saved for an uknown reason. Sorry."
+                my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.less_than_two_images {
                 my_alert.title = "Burst required"
                 my_alert.message = "Please drag & drop at least 2 images."
+                my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_extensions {
                 my_alert.title = "Inconsistent formats"
                 my_alert.message = "Please make sure that all images have the same format."
+                my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.inconsistent_resolutions {
                 my_alert.title = "Inconsistent resolution"
                 my_alert.message = "Please make sure that all images have the same resolution."
+                my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.missing_dng_converter {
                 my_alert.title = "Missing Adobe DNG Converter"
                 my_alert.message = "Only DNG files are supported natively. If you wish to use other RAW formats, please download and install Adobe DNG Converter. Burst Photo will then be able to process most RAW formats automatically."
+                my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.conversion_failed {
                 my_alert.title = "Conversion Failed"
                 my_alert.message = "Image format not supported. Please only use unprocessed RAW or DNG images."
+                my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch {
                 my_alert.title = "Unknown error"
                 my_alert.message = "Something went wrong. Sorry."
+                my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             }
@@ -450,12 +464,5 @@ struct SettingsButton: View {
             }
         })
         .buttonStyle(PlainButtonStyle())
-    }
-}
-
-
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentView()
     }
 }

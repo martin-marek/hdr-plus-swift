@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import MetalKit
 import MetalPerformanceShaders
 
@@ -22,13 +23,6 @@ struct TileInfo {
     var n_tiles_y: Int
     var n_pos_1d: Int
     var n_pos_2d: Int
-}
-
-
-// class to store the progress of the align+merge
-class ProcessingProgress: ObservableObject {
-    @Published var int = 0
-    @Published var includes_conversion = false
 }
 
 
@@ -84,7 +78,7 @@ let deconvolute_frequency_domain_state = try! device.makeComputePipelineState(fu
 
 
 // main function of the burst photo app
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, merging_algorithm: String = "Better speed", tile_size: Int = 32, search_distance: String = "Medium", kernel_size: Int = 5, noise_reduction: Double = 13.0) throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx: Int = 0, merging_algorithm: String = "Fast", tile_size: Int = 32, search_distance: String = "Medium", kernel_size: Int = 5, noise_reduction: Double = 13.0) throws -> URL {
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -130,21 +124,19 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         }
     }
     
-    // set output location
-    let in_url = dng_urls[ref_idx]
-    let in_filename = in_url.deletingPathExtension().lastPathComponent
-    // the value of the noise reduction strength is written into the filename    
-    let suffix_merging =  merging_algorithm=="Better speed" ? "s" : "q"
-    let out_filename = in_filename + (noise_reduction==23.0 ? "_merged_avg.dng" : "_merged_" + suffix_merging + "\(Int(noise_reduction+0.5)).dng")
-    let out_path = (final_dng_conversion ? tmp_dir : out_dir) + out_filename
-    var out_url = URL(fileURLWithPath: out_path)
-    
     // load images
     t = DispatchTime.now().uptimeNanoseconds
     var (textures, mosaic_pattern_width) = try load_images(dng_urls)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10000000 : 20000000) }
+    
+    // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
+    var merging_algorithm = merging_algorithm
+    if merging_algorithm == "Higher quality" && mosaic_pattern_width != 2 {
+        DispatchQueue.main.async { progress.show_nonbayer_hq_alert = true }
+        merging_algorithm = "Fast"
+    }
     
     // convert images from uint16 to float16
     textures = textures.map{texture_uint16_to_float($0)}
@@ -178,10 +170,9 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
             add_texture(textures[comp_idx], final_texture, image_urls.count)
             DispatchQueue.main.async { progress.int += Int(80000000/Double(image_urls.count)) }
         }
-        
 
-    // sophisticated approach with alignment of tiles and merging of tiles in frequency domain (only 2x2 Bayer pattern)
-    } else if mosaic_pattern_width == 2 && merging_algorithm == "Better quality" {
+    // alignment and merging of tiles in frequency domain (only 2x2 Bayer pattern)
+    } else if merging_algorithm == "Higher quality" {
         print("Merging in the frequency domain...")
         
         // the tile size for merging in frequency domain is set to 8x8 for all tile sizes used for alignment. The smaller tile size leads to a reduction of artifacts at specular highlights at the expense of a slightly reduced suppression of low-frequency noise in the shadows
@@ -217,7 +208,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
         try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, ft_mode: ft_mode, textures: textures, final_texture: final_texture)
    
         
-    // sophisticated approach with alignment of tiles and merging of tiles in the spatial domain (when pattern is not 2x2 Bayer)
+    // alignment and merging of tiles in the spatial domain (supports non-Bayer sensors)
     } else {
         print("Merging in the spatial domain...")
     
@@ -237,6 +228,15 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, ref_idx:
     t = DispatchTime.now().uptimeNanoseconds
     
     DispatchQueue.main.async { progress.int += 10000000 }
+    
+    // set output location
+    let in_url = dng_urls[ref_idx]
+    let in_filename = in_url.deletingPathExtension().lastPathComponent
+    // the value of the noise reduction strength is written into the filename
+    let suffix_merging = merging_algorithm == "Higher quality" ? "q" : "f"
+    let out_filename = in_filename + (noise_reduction==23.0 ? "_merged_avg.dng" : "_merged_" + suffix_merging + "\(Int(noise_reduction+0.5)).dng")
+    let out_path = (final_dng_conversion ? tmp_dir : out_dir) + out_filename
+    var out_url = URL(fileURLWithPath: out_path)
     
     // save the output image
     try texture_to_dng(output_texture_uint16, in_url, out_url)
