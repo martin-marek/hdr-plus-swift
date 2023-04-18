@@ -90,7 +90,7 @@ struct MainView: View {
         VStack{
             Spacer()
             
-            Text("Drag & drop a burst of raw image files")
+            Text("Drag & drop a burst of RAW images")
                 .multilineTextAlignment(.center)
                 .font(.system(size: 20, weight: .medium))
                 .opacity(0.8)
