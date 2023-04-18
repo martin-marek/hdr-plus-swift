@@ -204,7 +204,7 @@ struct SettingsView: View {
                     ForEach(tile_sizes, id: \.self) {
                         Text(String($0))
                     }
-                }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
+                }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
             }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 11)
             
             HStack {
@@ -214,44 +214,36 @@ struct SettingsView: View {
                     ForEach(search_distances, id: \.self) {
                         Text(String($0))
                     }
-                }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
+                }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
             }.padding(.horizontal, 15).padding(.vertical, 11)
             
             VStack {
                 HStack {
-                    Text("Target exposure").font(.system(size: 14, weight: .medium))
+                    Text("Exposure control").font(.system(size: 14, weight: .medium))
                     Spacer()
                     Picker(selection: settings.$target_exposure, label: EmptyView()) {
                         ForEach(target_exposures, id: \.self) {
                             Text(String($0))
                         }
-                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
+                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
                 }
                 HStack {
                     Spacer()
-                    Text("Affects only images with Bayer mosaic pattern ")
+                    Text("'Off' provides best file compatibility                   ")
                         .font(.system(size: 9.5))
                         .foregroundColor(.secondary)
                 }
             }.padding(.horizontal, 15).padding(.top, 11).padding(.bottom, 5)
             
-            VStack {
-                HStack {
-                    Text("Merging algorithm").font(.system(size: 14, weight: .medium))
-                    Spacer()
-                    Picker(selection: settings.$merging_algorithm, label: EmptyView()) {
-                        ForEach(merging_algorithms, id: \.self) {
-                            Text($0)
-                        }
-                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 220)
-                }
-                HStack {
-                    Spacer()
-                    Text("Affects only images with Bayer mosaic pattern ")
-                        .font(.system(size: 9.5))
-                        .foregroundColor(.secondary)
-                }
-            }.padding(.horizontal, 15).padding(.top, 0).padding(.bottom, 2.5)
+            HStack {
+                Text("Merging algorithm").font(.system(size: 14, weight: .medium))
+                Spacer()
+                Picker(selection: settings.$merging_algorithm, label: EmptyView()) {
+                    ForEach(merging_algorithms, id: \.self) {
+                        Text($0)
+                    }
+                }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
+            }.padding(.horizontal, 15).padding(.top, 0).padding(.bottom, 11)
             
             VStack(alignment: .leading) {
                 
@@ -290,7 +282,7 @@ struct SettingsView: View {
                 Text("Large values increase the strength of noise reduction")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
-            }.padding(.horizontal, 15).padding(.top, 4).padding(.bottom, 15)
+            }.padding(.horizontal, 15).padding(.top, 11).padding(.bottom, 15)
             
         }
         .frame(width: 400)
