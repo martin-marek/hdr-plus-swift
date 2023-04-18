@@ -2,10 +2,11 @@ import SwiftUI
 import AppKit
 
 class AppSettings: ObservableObject {
-    @AppStorage("tile_size") var tile_size: Int = 32
+    @AppStorage("tile_size") var tile_size: String = "Medium"
     @AppStorage("search_distance") var search_distance: String = "Medium"
     @AppStorage("merging_algorithm") var merging_algorithm: String = "Fast"
     @AppStorage("noise_reduction") var noise_reduction: Double = 13.0
+    @AppStorage("exposure_control") var exposure_control: String = "Off"
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {

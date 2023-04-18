@@ -189,7 +189,7 @@ struct SettingsView: View {
     let tile_sizes = ["Small", "Medium", "Large"]
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
-    let target_exposures = ["Off", "Balanced", "Brighter"]
+    let exposure_controls = ["Off", "Balanced", "Brighter"]
     
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
@@ -202,7 +202,7 @@ struct SettingsView: View {
                 Spacer()
                 Picker(selection: settings.$tile_size, label: EmptyView()) {
                     ForEach(tile_sizes, id: \.self) {
-                        Text(String($0))
+                        Text($0)
                     }
                 }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
             }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 11)
@@ -212,7 +212,7 @@ struct SettingsView: View {
                 Spacer()
                 Picker(selection: settings.$search_distance, label: EmptyView()) {
                     ForEach(search_distances, id: \.self) {
-                        Text(String($0))
+                        Text($0)
                     }
                 }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
             }.padding(.horizontal, 15).padding(.vertical, 11)
@@ -221,9 +221,9 @@ struct SettingsView: View {
                 HStack {
                     Text("Exposure control").font(.system(size: 14, weight: .medium))
                     Spacer()
-                    Picker(selection: settings.$target_exposure, label: EmptyView()) {
-                        ForEach(target_exposures, id: \.self) {
-                            Text(String($0))
+                    Picker(selection: settings.$exposure_control, label: EmptyView()) {
+                        ForEach(exposure_controls, id: \.self) {
+                            Text($0)
                         }
                     }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
                 }
@@ -356,7 +356,7 @@ struct MyDropDelegate: DropDelegate {
             
             do {               
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, target_exposure: settings.target_exposure)
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, exposure_control: settings.exposure_control)
                    
                 // inform the user about the saved image
                 app_state = .image_saved
