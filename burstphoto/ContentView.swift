@@ -247,7 +247,7 @@ struct SettingsView: View {
                 
                 (Text("Noise reduction: ") +
                  (settings.noise_reduction == 23
-                   ? Text("max. ").foregroundColor(.red) + Text("(simple average w/o alignment)")
+                   ? Text("max. ").foregroundColor(.accentColor) + Text("(simple average w/o alignment)")
                    : Text("\(Int(settings.noise_reduction))")
                 )).font(.system(size: 14, weight: .medium))
                 .opacity(user_changing_nr ? 0.75 : 1.0)
