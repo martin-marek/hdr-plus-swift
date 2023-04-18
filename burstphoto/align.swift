@@ -25,6 +25,12 @@ struct TileInfo {
     var n_pos_2d: Int
 }
 
+// class to store the progress of the align+merge
+class ProcessingProgress: ObservableObject {
+    @Published var int = 0
+    @Published var includes_conversion = false
+    @Published var show_nonbayer_hq_alert = false
+}
 
 // set up Metal device
 let device = MTLCreateSystemDefaultDevice()!

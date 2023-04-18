@@ -12,13 +12,6 @@ struct MyAlert {
     var dismiss_button: Alert.Button?
 }
 
-// class to store the progress of the align+merge
-class ProcessingProgress: ObservableObject {
-    @Published var int = 0
-    @Published var includes_conversion = false
-    @Published var show_nonbayer_hq_alert = false
-}
-
 
 struct ContentView: View {
     @ObservedObject var settings: AppSettings
