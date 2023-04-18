@@ -1582,11 +1582,12 @@ kernel void correct_exposure(texture2d<float, access::read_write> final_texture 
     float const gain1 = pow(2.0f, gain_stops/1.4f);
     
     // subtract black level and rescale intensity to range from 0 to 1
-    pixel_value = (pixel_value-black_level)/(float(white_level)-black_level);
+    float const rescale_factor = float(white_level) - max(black_level[0], max(black_level[1], max(black_level[2], black_level[3])));
+    pixel_value = (pixel_value-black_level)/rescale_factor;
     
-    // use luminance estimated as the maximum pixel value to ensure that the four color channels are treated equally
-    float const luminance_before =  max(pixel_value[0], max(pixel_value[1], max(pixel_value[2], pixel_value[3])));
-  
+    // use luminance estimated as the maximum pixel value to ensure that no color channel is clipped and the four color channels are treated equally
+    float const luminance_before = max(pixel_value[0], max(pixel_value[1], max(pixel_value[2], pixel_value[3])));
+      
     // apply gains
     float luminance_after0 = gain0 * luminance_before;
     float luminance_after1 = gain1 * luminance_before;
@@ -1600,10 +1601,10 @@ kernel void correct_exposure(texture2d<float, access::read_write> final_texture 
     luminance_after1 = luminance_after1 * (0.4f+luminance_after1/(gain1*gain1)) / ((0.4f+luminance_after1)*luminance_max);
     
     // calculate weight for blending the two tone mapping curves dependent on the magnitude of the gain
-    float const weight = max(0.0f, gain_stops*0.20f - 0.05f);
+    float const weight = clamp(0.0f, 1.0f, gain_stops*0.25f);
     
     // apply scaling derived from luminance values and return to original intensity scale
-    pixel_value = pixel_value * ((1.0f-weight)*luminance_after0 + weight*luminance_after1)/luminance_before * (float(white_level)-black_level) + black_level;
+    pixel_value = pixel_value * ((1.0f-weight)*luminance_after0 + weight*luminance_after1)/luminance_before * rescale_factor + black_level;
     pixel_value = clamp(pixel_value, 0.0f, float(UINT16_MAX_VAL));
 
     final_texture.write(pixel_value[0], uint2(x,   y));
