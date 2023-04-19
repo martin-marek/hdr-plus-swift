@@ -340,7 +340,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         // temporal averaging with exposure weighting
         for comp_idx in 0..<textures.count {
         
-            add_texture_exposure(textures[comp_idx], final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], (comp_idx==exp_idx) ? 10*white_level : white_level, black_level, comp_idx)
+            add_texture_exposure(textures[comp_idx], final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], (comp_idx==exp_idx) ? 1000000 : white_level, black_level, comp_idx)
             DispatchQueue.main.async { progress.int += Int(80000000/Double(textures.count)) }
         }
      

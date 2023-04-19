@@ -258,9 +258,9 @@ kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[tex
     
     // calculate average black level, which is sufficient here as an approximation
     float const black_level = 0.25f*(black_level0 + black_level1 + black_level2 + black_level3);
- 
+    
     // calculate weight based on exposure bias
-    float weight = pow(2.0f, float(exposure_bias/100.0f));
+    float const weight_exposure = pow(2.0f, float(exposure_bias/100.0f));
     
     // extract pixel value
     float pixel_value = in_texture.read(gid).r;
@@ -280,20 +280,24 @@ kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[tex
                 }
             }
         }
-    }    
-    
-    pixel_value_max = (pixel_value_max-black_level)*weight + black_level;
-
-    // add pixel values only if none of the pixels in the 5x5 window are clipped (clipping point set approx. 0.5 stops below the white level)
-    if (pixel_value_max < 0.75f*white_level) {
-        
-        // apply optimal weight based on exposure of pixel
-        pixel_value = weight*pixel_value;
-        
-        out_texture.write(out_texture.read(gid).r + pixel_value, gid);
-        
-        norm_texture.write(norm_texture.read(gid).r + weight, gid);
     }
+    
+    pixel_value_max = (pixel_value_max-black_level)*weight_exposure + black_level;
+    
+    float weight_pixel_value = 1.0f;
+    
+    // this ensures that pixels of the image with lowest exposure are always added
+    if (white_level < 1000000) {
+        // ensure smooth blending for pixel values between 0.25 and 0.99 of the white level
+        weight_pixel_value = clamp(0.99f/0.74f-1.0f/0.74f*pixel_value_max/float(white_level), 0.0f, 1.0f);  
+    }
+   
+    // apply optimal weight based on exposure of pixel and take into account weight based on the pixel intensity
+    pixel_value = weight_exposure*weight_pixel_value * pixel_value;
+    
+    out_texture.write(out_texture.read(gid).r + pixel_value, gid);
+    
+    norm_texture.write(norm_texture.read(gid).r + weight_exposure*weight_pixel_value, gid);
 }
 
 
