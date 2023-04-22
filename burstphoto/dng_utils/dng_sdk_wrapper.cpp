@@ -71,29 +71,30 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
             *mosaic_pattern_width = mosaic_pattern_size.h;
         }
         
-        // get black level for exposure correction
-        // - currently only working for 2x2 Bayer mosaic pattern
-        const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
-        if (linearization_info == NULL | *mosaic_pattern_width != 2) {
-            *white_level = -1;
-            *black_level0 = -1;
-            *black_level1 = -1;
-            *black_level2 = -1;
-            *black_level3 = -1;
-            printf("ERROR: LinearizationInfo is null.\n");
-            return 1;
-        } else {        
-            *white_level = int(negative->fLinearizationInfo->fWhiteLevel[0]);
-            *black_level0 = negative->fLinearizationInfo->fBlackLevel[0][0][0];
-            *black_level1 = negative->fLinearizationInfo->fBlackLevel[0][1][0];
-            *black_level2 = negative->fLinearizationInfo->fBlackLevel[1][0][0];
-            *black_level3 = negative->fLinearizationInfo->fBlackLevel[1][1][0];
+        // get black level and white level for exposure correction
+        *white_level = -1;
+        *black_level0 = -1;
+        *black_level1 = -1;
+        *black_level2 = -1;
+        *black_level3 = -1;
+        // currently only working for 2x2 Bayer mosaic pattern
+        if (*mosaic_pattern_width == 2) {
+            const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
+            if (linearization_info == NULL) {
+                printf("ERROR: LinearizationInfo is null.\n");
+                return 1;
+            } else {
+                *white_level = int(negative->fLinearizationInfo->fWhiteLevel[0]);
+                *black_level0 = negative->fLinearizationInfo->fBlackLevel[0][0][0];
+                *black_level1 = negative->fLinearizationInfo->fBlackLevel[0][1][0];
+                *black_level2 = negative->fLinearizationInfo->fBlackLevel[1][0][0];
+                *black_level3 = negative->fLinearizationInfo->fBlackLevel[1][1][0];
+            }
         }
         
         // get exposure bias for exposure correction
-        // - currently only working for 2x2 Bayer mosaic pattern
         const dng_exif* exif = negative->GetExif();
-        if (exif == NULL | *mosaic_pattern_width != 2) {
+        if (exif == NULL) {
             *exposure_bias = -1;
             printf("ERROR: Exif is null.\n");
             return 1;

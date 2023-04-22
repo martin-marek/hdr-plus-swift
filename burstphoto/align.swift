@@ -11,6 +11,7 @@ enum AlignmentError: Error {
     case inconsistent_resolutions
     case conversion_failed
     case missing_dng_converter
+    case non_bayer_exposure_bracketing
 }
 
 
@@ -30,6 +31,8 @@ class ProcessingProgress: ObservableObject {
     @Published var int = 0
     @Published var includes_conversion = false
     @Published var show_nonbayer_hq_alert = false
+    @Published var show_nonbayer_exposure_alert = false
+    @Published var show_bayer_exposure_alert = false
 }
 
 // set up Metal device
@@ -144,17 +147,43 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     
     // if images have a uniform exposure: use central image as reference
     var ref_idx = image_urls.count / 2
-       
-    // if images have different exposures: use image with lowest exposure as reference to protect highlights
-    // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
+    var uniform_exposure = true
+    
     for comp_idx in 0..<image_urls.count {
-     
+        // if images have different exposures: use image with lowest exposure as reference to protect highlights
+        // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
         if exposure_bias[comp_idx] < exposure_bias[ref_idx] {
             ref_idx = comp_idx
         }
+        // check if exposure is uniform or bracketed
+        if (exposure_bias[comp_idx] != exposure_bias[0]) {
+            uniform_exposure = false
+        }
     }
     
-     // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
+    // check for non-Bayer sensors that the exposure of images is uniform
+    if (!uniform_exposure && mosaic_pattern_width != 2) {throw AlignmentError.non_bayer_exposure_bracketing}
+    
+    // if user has selected a value different than "Off" for exposure control but has a non-Bayer sensor, warn them that exposure control = "Off" will be used instead
+    var exposure_control = exposure_control
+    if uniform_exposure && exposure_control != "Off" && mosaic_pattern_width != 2 {
+        DispatchQueue.main.async { progress.show_nonbayer_exposure_alert = true }
+        exposure_control = "Off"
+    }
+    
+    // if user has selected "Off" for exposure control but the burst has exposure bracketing, warn them that exposure control = "Balanced" will be used instead
+    if !uniform_exposure && exposure_control == "Off" && mosaic_pattern_width == 2 {
+        DispatchQueue.main.async { progress.show_bayer_exposure_alert = true }
+        exposure_control = "Balanced"
+    }
+    
+    // if exposure control = "Off", set black level and white level to -1
+    if exposure_control == "Off" {
+        for idx in 0..<white_level.count { white_level[idx] = -1 }
+        for idx in 0..<black_level.count { black_level[idx] = -1 }
+    }
+    
+    // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
     var merging_algorithm = merging_algorithm
     if merging_algorithm == "Higher quality" && mosaic_pattern_width != 2 {
         DispatchQueue.main.async { progress.show_nonbayer_hq_alert = true }
@@ -200,7 +229,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     if noise_reduction == 23.0 {
         print("Special mode: temporal averaging only...")
         
-        try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, textures: textures, final_texture: final_texture)
+        try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, textures: textures, final_texture: final_texture)
   
 
     // alignment and merging of tiles in frequency domain (only 2x2 Bayer pattern)
@@ -261,7 +290,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // apply tone mapping if the reference image is underexposed: by lifting the shadows, more shadow information is available while the tone mapping operator is constructed in such a way that highlights are protected
     // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
     if (mosaic_pattern_width == 2 && exposure_control != "Off") {
-        correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, ref_idx)
+        correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, ref_idx)
     }
     
     // convert final image to 16 bit integer
@@ -313,19 +342,13 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
 
 
 // convenience function for temporal averaging
-func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [Int], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [Int], uniform_exposure: Bool, textures: [MTLTexture], final_texture: MTLTexture) throws {
     
+    // find index of image with shortest exposure
     var exp_idx = 0
-    var uniform_exposure = true
-    
     for comp_idx in 0..<exposure_bias.count {
-         // find index of image with shortest exposure
          if (exposure_bias[comp_idx] < exposure_bias[exp_idx]) {
             exp_idx = comp_idx
-        }
-        // check if exposure is uniform or bracketed
-        if (exposure_bias[comp_idx] != exposure_bias[0]) {
-            uniform_exposure = false
         }
     }
     
@@ -1535,7 +1558,7 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [Int], _ exposur
 }
 
 
-func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ exposure_control: String, _ exposure_bias: [Int], _ ref_idx: Int) {
+func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ exposure_control: String, _ exposure_bias: [Int], _ uniform_exposure: Bool, _ ref_idx: Int) {
       
     // set target exposure
     let target_exposure_dict = [
@@ -1547,18 +1570,12 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         
     // only apply exposure correction if reference image has an exposure, which is lower than the target exposure
     if (exposure_bias[ref_idx] < target_exposure && white_level != -1 && black_level[0] != -1) {
-           
+          
+        // find index of image with longest exposure to use the most robust black level value
         var exp_idx = 0
-        var uniform_exposure = true
-        
-        for comp_idx in 0..<exposure_bias.count {         
-             // find index of image with longest exposure to use the most robust black level value
+        for comp_idx in 0..<exposure_bias.count {
              if (exposure_bias[comp_idx] > exposure_bias[exp_idx]) {
                 exp_idx = comp_idx
-            }
-            // check if exposure is uniform or bracketed
-            if (exposure_bias[comp_idx] != exposure_bias[0]) {
-                uniform_exposure = false
             }
         }
         

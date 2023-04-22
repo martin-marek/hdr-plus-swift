@@ -51,10 +51,28 @@ struct ContentView: View {
         .onReceive(progress.$show_nonbayer_hq_alert, perform: { val in
             if val {
                 my_alert.title = "Higher quality not supported"
-                my_alert.message = "You've selected the \"Higher quality\" merging algorithm in Preferences but your camera only supports the \"Fast\" algorithm. Press OK to use the \"Fast\" algorithm."
+                my_alert.message = "You have selected the \"Higher quality\" merging algorithm in Preferences but your camera only supports the \"Fast\" algorithm. Press OK to use the \"Fast\" algorithm."
                 my_alert.dismiss_button = .default(Text("OK"))
                 my_alert.show = true
                 settings.merging_algorithm = "Fast"
+            }
+        })
+        .onReceive(progress.$show_nonbayer_exposure_alert, perform: { val in
+            if val {
+                my_alert.title = "Exposure control not supported"
+                my_alert.message = "You have selected exposure control other than \"Off\" in the Preferences, which is not supported for your camera. Press OK to use exposure control \"Off\"."
+                my_alert.dismiss_button = .default(Text("OK"))
+                my_alert.show = true
+                settings.exposure_control = "Off"
+            }
+        })
+        .onReceive(progress.$show_bayer_exposure_alert, perform: { val in
+            if val {
+                my_alert.title = "Exposure control will be activated"
+                my_alert.message = "You have selected exposure control \"Off\" in the Preferences but have a burst with exposure bracketing. Press OK to use exposure control \"Balanced\"."
+                my_alert.dismiss_button = .default(Text("OK"))
+                my_alert.show = true
+                settings.exposure_control = "Balanced"
             }
         })
         .frame(width: 350, height: 400)
@@ -368,8 +386,8 @@ struct MyDropDelegate: DropDelegate {
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch ImageIOError.save_error {
-                my_alert.title = "Image couldn't be saved"
-                my_alert.message = "The processed image could not be saved for an uknown reason. Sorry."
+                my_alert.title = "Image could not be saved"
+                my_alert.message = "The processed image could not be saved for an unknown reason. Sorry."
                 my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
@@ -398,8 +416,14 @@ struct MyDropDelegate: DropDelegate {
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.conversion_failed {
-                my_alert.title = "Conversion Failed"
+                my_alert.title = "Conversion failed"
                 my_alert.message = "Image format not supported. Please only use unprocessed RAW or DNG images."
+                my_alert.dismiss_button = .cancel()
+                my_alert.show = true
+                DispatchQueue.main.async { app_state = .main }
+            } catch AlignmentError.non_bayer_exposure_bracketing {
+                my_alert.title = "Unsupported exposure bracketing"
+                my_alert.message = "Exposure bracketing is not supported for your camera. Please only use images with uniform exposure."
                 my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
