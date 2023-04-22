@@ -21,17 +21,18 @@ To process a burst of images, please drag-and-drop them into the app. You can ei
 
 ### Settings
 
-There are three settings in the app: `Tile size`, `Search distance`, and `Robustness`. The default settings should work well in most cases. However, if you want to get the best results possible, please read about [our tech](/tech/) and follow the tips below.
+There are four settings in the app: `Tile size`, `Search distance`, `Merging algorithm` and `Noise reduction`. The default settings should work well in many cases. However, if you want to get the best results possible, please follow the tips below.
 
 Each image is aligned as a grid of tiles. `Tile size` controls the size of these tiles in pixels. For photographs with lots of motion, it is preferable to use small tiles, so that the images can be aligned precisely. On the other hand, if there is little motion and lots of noise, it is preferable to use large tiles.
 
 `Search distance` controls the maximum alignment magnitude between images. It should be set to "Low" if all the images are very similar. Conversely, if there is significant movement between images, it should be set to "High".
 
-`Robustness` is perhaps the most important setting: it controls the tradeoff between noise reduction and motion artifacts. You can read more about it [here](/tech/#merging).
+The parameter `Merging algorithm` selects the approach used for image merging. The option "Fast" applies merging in the spatial domain, which results in quick processing times. The option "Higher quality" performs merging in the frequency domain, which achieves better preservation of details at the cost of longer processing times.
 
+`Noise reduction` is perhaps the most important setting: it controls the tradeoff between the strength of noise reduction and motion artifacts. Its optimal value depends on many factors, such as characteristics of the camera sensor, capture settings, number of images in the burst, scene type (e.g. daylight or night scene), and very importantly, the taste and post-processing workflow of the user. Note: this parameter behaves differently between the "Fast" and "Higher quality" merging algorithms (you might prefer a different value for either algorithm).
 
 ### Tips
-- The default `Tile size` (16) and `Search distance` (Medium) usually work well.
-- If you see any motion artifacts, increase `Robustness`.
-- If you see too much noise, decrease `Robustness`.
+- The default `Tile size` (32) and `Search distance` (Medium) usually work very well.
+- If you see any motion artifacts, decrease `Noise reduction`.
+- If you see too much noise, increase `Noise reduction`.
 - To achieve the highest dynamic range, underexpose your images. Shadows can typically be boosted but if the highlights are clipped, they can’t be recovered.
