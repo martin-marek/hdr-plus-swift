@@ -1103,6 +1103,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
                                    constant float& read_noise [[buffer(1)]],
                                    constant float& max_motion_norm [[buffer(2)]],
                                    constant int& tile_size [[buffer(3)]],
+                                   constant int& uniform_exposure [[buffer(4)]],
                                    uint2 gid [[thread_position_in_grid]]) {
     
     // combine estimated shot noise and read noise
@@ -1215,8 +1216,8 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             // this approach is inspired by equation (3) in [Delbracio 2015]
             magnitude_norm = 1.0f;
             
-            // if we are not at the central frequency bin (zero frequency) and if the mismatch is low
-            if(dm+dn > 0 & mismatch < 0.3f) {
+            // if we are not at the central frequency bin (zero frequency), if the mismatch is low and if the burst has a uniform exposure
+            if(dm+dn > 0 & mismatch < 0.3f & uniform_exposure == 1) {
                 
                 // calculate magnitudes of complex frequency data
                 refMag      = sqrt(refRe*refRe + refIm*refIm);

@@ -265,13 +265,13 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         let max_motion_norm = max(1.0, pow(1.3, (11.0-robustness_rev)));
                 
         // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process. The shift equals the tile size used in the merging process here, which later translates into tile_size_merge/2 when each color channel is processed independently
-        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
         
-        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
          
-        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: 0, shift_bottom: tile_size_merge,ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
             
-        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
+        try align_merge_frequency_domain(progress: progress, shift_left: 0, shift_right: tile_size_merge, shift_top: 0, shift_bottom: tile_size_merge, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
                 
         
     // alignment and merging of tiles in the spatial domain (supports non-Bayer sensors)
@@ -460,7 +460,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
 
 
 // convenience function for the frequency-based merging approach
-func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int, shift_right: Int, shift_top: Int, shift_bottom: Int, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, tile_size_merge: Int, robustness_norm: Double, read_noise: Double, max_motion_norm: Double, exposure_bias: [Int], black_level: [Int], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int, shift_right: Int, shift_top: Int, shift_bottom: Int, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, tile_size_merge: Int, robustness_norm: Double, read_noise: Double, max_motion_norm: Double, uniform_exposure: Bool, exposure_bias: [Int], black_level: [Int], textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // set original texture size
     let texture_width_orig = textures[ref_idx].width
@@ -591,7 +591,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         forward_ft(aligned_texture_rgba, aligned_texture_ft, tmp_texture_ft, tile_info_merge)
         
         // merge aligned comparison texture with reference texture in the frequency domain
-        merge_frequency_domain(ref_texture_ft, aligned_texture_ft, final_texture_ft, rms_texture, mismatch_texture, robustness_norm, read_noise, min(4.0, exposure_factor)*max_motion_norm, tile_info_merge);
+        merge_frequency_domain(ref_texture_ft, aligned_texture_ft, final_texture_ft, rms_texture, mismatch_texture, robustness_norm, read_noise, min(3.0, exposure_factor)*max_motion_norm, uniform_exposure, tile_info_merge);
                
         // stop debug capture
         //capture_manager.stopCapture()
@@ -1375,7 +1375,7 @@ func backward_ft(_ in_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ ti
 }
 
 
-func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ mismatch_texture: MTLTexture, _ robustness_norm: Double, _ read_noise: Double, _ max_motion_norm: Double, _ tile_info: TileInfo) {
+func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ mismatch_texture: MTLTexture, _ robustness_norm: Double, _ read_noise: Double, _ max_motion_norm: Double, _ uniform_exposure: Bool, _ tile_info: TileInfo) {
         
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -1392,6 +1392,7 @@ func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: 
     command_encoder.setBytes([Float32(read_noise)], length: MemoryLayout<Float32>.stride, index: 1)
     command_encoder.setBytes([Float32(max_motion_norm)], length: MemoryLayout<Float32>.stride, index: 2)    
     command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.setBytes([Int32(uniform_exposure ? 1 : 0)], length: MemoryLayout<Int32>.stride, index: 4)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
