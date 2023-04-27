@@ -67,7 +67,6 @@ let compute_tile_differences25_state = try! device.makeComputePipelineState(func
 let compute_tile_differences_exposure25_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences_exposure25")!)
 let compute_tile_alignments_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_alignments")!)
 let correct_upsampling_error_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_upsampling_error")!)
-let correct_upsampling_error_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_upsampling_error_exposure")!)
 let warp_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture")!)
 let add_texture_weighted_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture_weighted")!)
 let color_difference_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "color_difference")!)
@@ -249,22 +248,22 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         for comp_idx in 0..<exposure_bias.count {
             let exposure_factor = pow(2.0, (Double(exposure_bias[comp_idx]-exposure_bias[ref_idx])/100.0))
             exposure_corr1 += (0.5 + 0.5/exposure_factor)
-            exposure_corr2 += min(4.0, exposure_factor);
+            exposure_corr2 += min(4.0, exposure_factor)
         }
         exposure_corr1 /= Double(exposure_bias.count)
         exposure_corr2 /= Double(exposure_bias.count)
                 
         // derive normalized robustness value: two steps in noise_reduction (-2.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the variance of shot noise increases by a factor of two per iso level
         let robustness_rev = 0.5*(26.5-Double(Int(noise_reduction+0.5)))
-        let robustness_norm = exposure_corr1/exposure_corr2*pow(2.0, (-robustness_rev + 7.5));
+        let robustness_norm = exposure_corr1/exposure_corr2*pow(2.0, (-robustness_rev + 7.5))
         
         // derive estimate of read noise with the idea that read noise increases approx. by a factor of three (stronger than increase in shot noise) per iso level to increase noise reduction in darker regions relative to bright regions
-        let read_noise = pow(pow(2.0, (-robustness_rev + 10.0)), 1.6);
+        let read_noise = pow(pow(2.0, (-robustness_rev + 10.0)), 1.6)
         
         // derive a maximum value for the motion norm with the idea that denoising can be stronger in static regions with good alignment compared to regions with motion
         // factors from Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a continuous value derived from the robustness value to cover a similar range as proposed in the paper
         // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-        let max_motion_norm = max(1.0, pow(1.3, (11.0-robustness_rev)));
+        let max_motion_norm = max(1.0, pow(1.3, (11.0-robustness_rev)))
                 
         // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process. The shift equals the tile size used in the merging process here, which later translates into tile_size_merge/2 when each color channel is processed independently
         try align_merge_frequency_domain(progress: progress, shift_left: tile_size_merge, shift_right: 0, shift_top: tile_size_merge, shift_bottom: 0, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, textures: textures, final_texture: final_texture)
@@ -283,8 +282,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
         
         // derive normalized robustness value: four steps in noise_reduction (-4.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the sd of shot noise increases by a factor of sqrt(2) per iso level
-        let robustness_rev = 0.5*(32.0-Double(Int(noise_reduction+0.5)))
-        let robustness_norm = 0.12*pow(1.35, robustness_rev) - 0.1380840
+        let robustness_rev = 0.5*(36.0-Double(Int(noise_reduction+0.5)))
+        let robustness_norm = 0.12*pow(1.3, robustness_rev) - 0.4529822
     
         try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, kernel_size: kernel_size, robustness: robustness_norm, uniform_exposure: uniform_exposure, black_level: black_level, textures: textures, final_texture: final_texture)
     }
@@ -446,7 +445,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
             throw AlignmentError.inconsistent_resolutions
         }
      
-        let black_level_mean = (uniform_exposure ? 0.0 : 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3]))
+        let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
         
         // align comparison texture
         let aligned_texture = crop_texture(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean), pad_align_x, pad_align_x, pad_align_y, pad_align_y)
@@ -569,7 +568,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
             throw AlignmentError.inconsistent_resolutions
         }
         
-        let black_level_mean = (uniform_exposure ? 0.0 : 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3]))
+        let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
          
         // align comparison texture
         let aligned_texture_rgba = convert_rgba(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean), crop_merge_x, crop_merge_y)
@@ -596,8 +595,11 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left: Int,
         // transform aligned comparison texture into the frequency domain
         forward_ft(aligned_texture_rgba, aligned_texture_ft, tmp_texture_ft, tile_info_merge)
         
+        // adapt max motion norm for images with bracketed exposure
+        let max_motion_norm_exposure = (uniform_exposure ? max_motion_norm : min(4.0, exposure_factor)*sqrt(max_motion_norm))
+               
         // merge aligned comparison texture with reference texture in the frequency domain
-        merge_frequency_domain(ref_texture_ft, aligned_texture_ft, final_texture_ft, rms_texture, mismatch_texture, robustness_norm, read_noise, min(4.0, exposure_factor)*max_motion_norm, uniform_exposure, tile_info_merge);
+        merge_frequency_domain(ref_texture_ft, aligned_texture_ft, final_texture_ft, rms_texture, mismatch_texture, robustness_norm, read_noise, max_motion_norm_exposure, uniform_exposure, tile_info_merge)
                
         // stop debug capture
         //capture_manager.stopCapture()
@@ -1122,7 +1124,7 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     command_encoder.setBytes([Int32(tile_info.search_dist)], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([Int32(tile_info.n_tiles_x)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.setBytes([Int32(tile_info.n_tiles_y)], length: MemoryLayout<Int32>.stride, index: 4)
-    command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 5)
+    command_encoder.setBytes([Float32(uniform_exposure ? 0.0 : black_level_mean)], length: MemoryLayout<Float32>.stride, index: 5)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -1159,7 +1161,7 @@ func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture,
         
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = uniform_exposure ? correct_upsampling_error_state : correct_upsampling_error_exposure_state
+    let state = correct_upsampling_error_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
@@ -1171,7 +1173,8 @@ func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture,
     command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.setBytes([Int32(tile_info.n_tiles_x)], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([Int32(tile_info.n_tiles_y)], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 4)
+    command_encoder.setBytes([Float32(uniform_exposure ? 0.0 : black_level_mean)], length: MemoryLayout<Float32>.stride, index: 4)
+    command_encoder.setBytes([Int32(uniform_exposure ? 1 : 0)], length: MemoryLayout<Float32>.stride, index: 5)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()

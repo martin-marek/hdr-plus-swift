@@ -550,7 +550,7 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
     
     float sum_u[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     float sum_v[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    float diff[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    float diff[25]  = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     float ratio[25];
     float tmp_ref, tmp_comp2;
     float tmp_comp[5*68];
@@ -676,7 +676,6 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
             ref_tile_x = x0 + dx;
             ref_tile_y = y0 + dy;
             
-            //tmp_ref = ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r;
             tmp_ref = max(0.0f, ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - black_level);
               
             // loop over 25 test displacements
@@ -749,6 +748,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
                                      constant int& n_tiles_x [[buffer(2)]],
                                      constant int& n_tiles_y [[buffer(3)]],
                                      constant float& black_level [[buffer(4)]],
+                                     constant int& uniform_exposure [[buffer(5)]],
                                      uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -779,128 +779,48 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
     int3 const dy0 = downscale_factor * int3(prev_align0.y, prev_align1.y, prev_align2.y);
      
     // compute tile differences for 3 candidates
-    float diff[3] = {0.0f, 0.0f, 0.0f};
-        
-    // loop over all rows
-    for (int dy = 0; dy < tile_size; dy += 64/tile_size) {
-           
-        // copy 64/tile_size rows into temp vector
-        for (int i = 0; i < 64; i++) {
-            tmp_ref[i] = ref_texture.read(uint2(x0+(i % tile_size), y0+dy+int(i / tile_size))).r;
-        }
-        
-        // loop over three candidates
-        for (int c = 0; c < 3; c++) {
-            
-            // loop over tmp vector: candidate c of alignment vector
-            tmp_tile_x = x0 + dx0[c];
-            tmp_tile_y = y0 + dy0[c] + dy;
-            for (int i = 0; i < 64; i++) {
-                
-                // compute the indices of the pixels to compare
-                comp_tile_x = tmp_tile_x + (i % tile_size);
-                comp_tile_y = tmp_tile_y + int(i / tile_size);
-                
-                if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                    diff[c] += tmp_ref[i] + 2*UINT16_MAX_VAL;
-                } else {
-                    diff[c] += abs(tmp_ref[i] - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
-                }
-            }
-        }
-    }
-     
-    // store corrected (best) alignment
-    if(diff[0] < diff[1] & diff[0] < diff[2]) {
-        prev_alignment_corrected.write(prev_align0, gid);
-        
-    } else if(diff[1] < diff[2]) {
-        prev_alignment_corrected.write(prev_align1, gid);
-        
-    } else {
-        prev_alignment_corrected.write(prev_align2, gid);
-    }
-}
-
-
-// At transitions between moving objects and non-moving background, the alignment vectors from downsampled images may be inaccurate. Therefore, after upsampling to the next resolution level, three candidate alignment vectors are evaluated for each tile. In addition to the vector obtained from upsampling, two vectors from neighboring tiles are checked. As a consequence, alignment at the transition regions described above is more accurate. This function extends the function correct_upsampling_error() with a scaling of pixel intensities by the ratio of mean values of the tiles.
-// see section on "Hierarchical alignment" in https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf and section "Multi-scale Pyramid Alignment" in https://www.ipol.im/pub/art/2021/336/
-kernel void correct_upsampling_error_exposure(texture2d<float, access::read> ref_texture [[texture(0)]],
-                                              texture2d<float, access::read> comp_texture [[texture(1)]],
-                                              texture2d<int, access::read> prev_alignment [[texture(2)]],
-                                              texture2d<int, access::write> prev_alignment_corrected [[texture(3)]],
-                                              constant int& downscale_factor [[buffer(0)]],
-                                              constant int& tile_size [[buffer(1)]],
-                                              constant int& n_tiles_x [[buffer(2)]],
-                                              constant int& n_tiles_y [[buffer(3)]],
-                                              constant float& black_level [[buffer(4)]],
-                                              uint2 gid [[thread_position_in_grid]]) {
-    
-    // load args
-    int texture_width = ref_texture.get_width();
-    int texture_height = ref_texture.get_height();
-     
-    // initialize some variables
-    int comp_tile_x, comp_tile_y, tmp_tile_x, tmp_tile_y;
-    float tmp_ref[64];
-    
-    // compute tile position if previous alignment were 0
-    int const x0 = int(floor( float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
-    int const y0 = int(floor( float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
-
-    // calculate shifts of gid index for 3 candidate alignments to evaluate
-    int3 const x_shift = int3(0, ((gid.x%2 == 0) ? -1 : 1), 0);
-    int3 const y_shift = int3(0, 0, ((gid.y%2 == 0) ? -1 : 1));
-    
-    int3 const x = clamp(int3(gid.x+x_shift), 0, n_tiles_x-1);
-    int3 const y = clamp(int3(gid.y+y_shift), 0, n_tiles_y-1);
-    
-    // factor in previous alignment for 3 candidates
-    int4 const prev_align0 = prev_alignment.read(uint2(x[0], y[0]));
-    int4 const prev_align1 = prev_alignment.read(uint2(x[1], y[1]));
-    int4 const prev_align2 = prev_alignment.read(uint2(x[2], y[2]));
-    
-    int3 const dx0 = downscale_factor * int3(prev_align0.x, prev_align1.x, prev_align2.x);
-    int3 const dy0 = downscale_factor * int3(prev_align0.y, prev_align1.y, prev_align2.y);
-     
-    // compute tile differences for 3 candidates
-    float sum_u[3] = {0.0f, 0.0f, 0.0f};
-    float sum_v[3] = {0.0f, 0.0f, 0.0f};
     float diff[3]  = {0.0f, 0.0f, 0.0f};
-    float ratio[3];
+    float ratio[3] = {1.0f, 1.0f, 1.0f};;
    
-    // loop over all rows
-    for (int dy = 0; dy < tile_size; dy += 64/tile_size) {
-           
-        // copy 64/tile_size rows into temp vector
-        for (int i = 0; i < 64; i++) {
-            tmp_ref[i] = max(0.0f, ref_texture.read(uint2(x0+(i % tile_size), y0+dy+int(i / tile_size))).r - black_level);
-        }
+    // calculate exposure correction factors for slight scaling of pixel intensities
+    if (uniform_exposure != 1) {
         
-        // loop over three candidates
-        for (int c = 0; c < 3; c++) {
-            
-            // loop over tmp vector: candidate c of alignment vector
-            tmp_tile_x = x0 + dx0[c];
-            tmp_tile_y = y0 + dy0[c] + dy;
+        float sum_u[3] = {0.0f, 0.0f, 0.0f};
+        float sum_v[3] = {0.0f, 0.0f, 0.0f};
+        
+        // loop over all rows
+        for (int dy = 0; dy < tile_size; dy += 64/tile_size) {
+               
+            // copy 64/tile_size rows into temp vector
             for (int i = 0; i < 64; i++) {
+                tmp_ref[i] = max(0.0f, ref_texture.read(uint2(x0+(i % tile_size), y0+dy+int(i / tile_size))).r - black_level);
+            }
+            
+            // loop over three candidates
+            for (int c = 0; c < 3; c++) {
                 
-                // compute the indices of the pixels to compare
-                comp_tile_x = tmp_tile_x + (i % tile_size);
-                comp_tile_y = tmp_tile_y + int(i / tile_size);
-                
-                if ((comp_tile_x >= 0) && (comp_tile_y >= 0) && (comp_tile_x < texture_width) && (comp_tile_y < texture_height)) {
-           
-                    sum_u[c] += tmp_ref[i];
-                    sum_v[c] += max(0.0f, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level);;
+                // loop over tmp vector: candidate c of alignment vector
+                tmp_tile_x = x0 + dx0[c];
+                tmp_tile_y = y0 + dy0[c] + dy;
+                for (int i = 0; i < 64; i++) {
+                    
+                    // compute the indices of the pixels to compare
+                    comp_tile_x = tmp_tile_x + (i % tile_size);
+                    comp_tile_y = tmp_tile_y + int(i / tile_size);
+                    
+                    if ((comp_tile_x >= 0) && (comp_tile_y >= 0) && (comp_tile_x < texture_width) && (comp_tile_y < texture_height)) {
+               
+                        sum_u[c] += tmp_ref[i];
+                        sum_v[c] += max(0.0f, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level);;
+                    }
                 }
             }
         }
-    }
-      
-    for (int c = 0; c < 3; c++) {
-        // calculate ratio of mean values of the tiles, which is used for correction of slight differences in exposure
-        ratio[c] = clamp(sum_u[c]/(sum_v[c]+1e-9), 0.9f, 1.1f);
+          
+        for (int c = 0; c < 3; c++) {
+            // calculate ratio of mean values of the tiles, which is used for correction of slight differences in exposure
+            ratio[c] = clamp(sum_u[c]/(sum_v[c]+1e-9), 0.9f, 1.1f);
+        }
     }
     
     // loop over all rows
