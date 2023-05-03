@@ -53,6 +53,7 @@ let blur_mosaic_y_state = try! device.makeComputePipelineState(function: mfl.mak
 let extend_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "extend_texture")!)
 let crop_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "crop_texture")!)
 let add_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture")!)
+let add_texture_highlights_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture_highlights")!)
 let add_texture_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture_exposure")!)
 let normalize_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_texture")!)
 let copy_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "copy_texture")!)
@@ -141,7 +142,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
        
     // load images
     t = DispatchTime.now().uptimeNanoseconds
-    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias) = try load_images(dng_urls)
+    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias, color_factors) = try load_images(dng_urls)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10000000 : 20000000) }
@@ -182,6 +183,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     if exposure_control == "Off" {
         for idx in 0..<white_level.count { white_level[idx] = -1 }
         for idx in 0..<black_level.count { black_level[idx] = -1 }
+        for idx in 0..<color_factors.count { color_factors[idx] = -1.0 }
     }
     
     // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
@@ -230,7 +232,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     if noise_reduction == 23.0 {
         print("Special mode: temporal averaging only...")
         
-        try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, textures: textures, final_texture: final_texture)
+        try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, color_factors: color_factors, textures: textures, final_texture: final_texture)
   
 
     // alignment and merging of tiles in frequency domain (only 2x2 Bayer pattern)
@@ -295,7 +297,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     }
     
     // convert final image to 16 bit integer
-    let output_texture_uint16 = convert_uint16(final_texture)
+    let output_texture_uint16 = convert_uint16(final_texture, (white_level[ref_idx] == -1 ? 1000000 : white_level[ref_idx]))
       
     print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
@@ -343,7 +345,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
 
 
 // convenience function for temporal averaging
-func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [Int], uniform_exposure: Bool, textures: [MTLTexture], final_texture: MTLTexture) throws {
+func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [Int], uniform_exposure: Bool, color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // find index of image with shortest exposure
     var exp_idx = 0
@@ -363,18 +365,25 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         
         // temporal averaging with exposure weighting
         for comp_idx in 0..<textures.count {
-        
-            add_texture_exposure(textures[comp_idx], final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], (comp_idx==exp_idx) ? 1000000 : white_level, black_level, comp_idx)
+            
+            add_texture_exposure(textures[comp_idx], final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], ((comp_idx==exp_idx) ? 1000000 : white_level), black_level, comp_idx)
             DispatchQueue.main.async { progress.int += Int(80000000/Double(textures.count)) }
         }
-     
+        
         // normalization of the final image
         normalize_texture(final_texture, norm_texture)
-    
+        
+    } else if (white_level != -1 && black_level[0] != -1 && color_factors[0] > -0.9 && mosaic_pattern_width == 2) {
+        
+        // temporal averaging with extrapolation of green channels for very bright pixels
+        for comp_idx in 0..<textures.count {
+            add_texture_highlights(textures[comp_idx], final_texture, textures.count, white_level, black_level, color_factors, comp_idx)
+            DispatchQueue.main.async { progress.int += Int(80000000/Double(textures.count)) }
+        }
     } else {
+        
         // simple temporal averaging
         for comp_idx in 0..<textures.count {
-            
             add_texture(textures[comp_idx], final_texture, textures.count)
             DispatchQueue.main.async { progress.int += Int(80000000/Double(textures.count)) }
         }
@@ -681,7 +690,7 @@ func texture_uint16_to_float(_ in_texture: MTLTexture) -> MTLTexture {
 }
 
 
-func convert_uint16(_ in_texture: MTLTexture) -> MTLTexture {
+func convert_uint16(_ in_texture: MTLTexture, _ white_level: Int) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: in_texture.width, height: in_texture.height, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
@@ -695,6 +704,7 @@ func convert_uint16(_ in_texture: MTLTexture) -> MTLTexture {
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(out_texture, index: 1)
+    command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -849,7 +859,30 @@ func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textur
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(out_texture, index: 1)
-    command_encoder.setBytes([Int32(n_textures)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Float32(n_textures)], length: MemoryLayout<Float32>.stride, index: 0)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+}
+
+
+func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textures: Int, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double], _ comp_idx: Int) {
+    
+    let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
+
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = add_texture_highlights_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: in_texture.width/2, height: in_texture.height/2, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(out_texture, index: 1)
+    command_encoder.setBytes([Float32(n_textures)], length: MemoryLayout<Float32>.stride, index: 0)
+    command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 1)
+    command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 2)
+    command_encoder.setBytes([Float32(color_factors[comp_idx*3+0]/color_factors[comp_idx*3+1])], length: MemoryLayout<Float32>.stride, index: 3)
+    command_encoder.setBytes([Float32(color_factors[comp_idx*3+2]/color_factors[comp_idx*3+1])], length: MemoryLayout<Float32>.stride, index: 4)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -857,6 +890,8 @@ func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textur
 
 
 func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ norm_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level: [Int], _ comp_idx: Int) {
+    
+    let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
     
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -868,11 +903,8 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     command_encoder.setTexture(out_texture, index: 1)
     command_encoder.setTexture(norm_texture, index: 2)
     command_encoder.setBytes([Int32(exposure_bias)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.setBytes([Int32(black_level[comp_idx*4+0])], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([Int32(black_level[comp_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.setBytes([Int32(black_level[comp_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 4)
-    command_encoder.setBytes([Int32(black_level[comp_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 5)
+    command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 1)
+    command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 2)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -1635,7 +1667,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         command_encoder.setTexture(final_texture, index: 0)
         command_encoder.setBytes([Int32(exposure_bias[ref_idx])], length: MemoryLayout<Int32>.stride, index: 0)
         command_encoder.setBytes([Int32(target_exposure)], length: MemoryLayout<Int32>.stride, index: 1)
-        command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 2)
+        command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 2)
         command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 3)
         command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 4)
         command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 5)

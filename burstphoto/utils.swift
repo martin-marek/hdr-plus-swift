@@ -18,7 +18,7 @@ func optionally_convert_dir_to_urls(_ urls: [URL]) -> [URL] {
     return urls
 }
 
-func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int, [Int], [Int], [Int]) {
+func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int, [Int], [Int], [Int], [Double]) {
     
     var textures_dict: [Int: MTLTexture] = [:]
     let compute_group = DispatchGroup()
@@ -28,12 +28,13 @@ func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int, [Int], [Int], [Int
     var white_level = Array(repeating: 0, count: urls.count)
     var black_level = Array(repeating: 0, count: 4*urls.count)
     var exposure_bias = Array(repeating: 0, count: urls.count)
+    var color_factors = Array(repeating: 0.0, count: 3*urls.count)
 
     for i in 0..<urls.count {
         compute_queue.async(group: compute_group) {
     
             // asynchronously load texture
-            if let (texture, _mosaic_pattern_width, _white_level, _black_level, _exposure_bias) = try? image_url_to_texture(urls[i], device) {
+            if let (texture, _mosaic_pattern_width, _white_level, _black_level, _exposure_bias, _color_factors) = try? image_url_to_texture(urls[i], device) {
         
                 // thread-safely save the texture
                 access_queue.sync {
@@ -45,6 +46,9 @@ func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int, [Int], [Int], [Int
                     black_level[4*i+2] = _black_level[2]
                     black_level[4*i+3] = _black_level[3]                    
                     exposure_bias[i] = _exposure_bias
+                    color_factors[3*i+0] = _color_factors[0]
+                    color_factors[3*i+1] = _color_factors[1]
+                    color_factors[3*i+2] = _color_factors[2]
                 }
             }
         }
@@ -69,7 +73,7 @@ func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int, [Int], [Int], [Int
         }
     }
     
-    return (textures_list, mosaic_pattern_width!, white_level, black_level, exposure_bias)
+    return (textures_list, mosaic_pattern_width!, white_level, black_level, exposure_bias, color_factors)
 }
 
 // https://stackoverflow.com/questions/26971240/how-do-i-run-a-terminal-command-in-a-swift-script-e-g-xcodebuild

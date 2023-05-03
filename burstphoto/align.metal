@@ -29,13 +29,14 @@ kernel void texture_uint16_to_float(texture2d<uint, access::read> in_texture [[t
 
 kernel void convert_uint16(texture2d<float, access::read> in_texture [[texture(0)]],
                            texture2d<uint, access::write> out_texture [[texture(1)]],
+                           constant int& white_level [[buffer(0)]],
                            uint2 gid [[thread_position_in_grid]]) {
-      
-    float color_value = in_texture.read(gid).r;
-    color_value = clamp(color_value, 0.0f, float(UINT16_MAX_VAL));
     
-    uint out = int(round(color_value));
-    out_texture.write(out, gid);
+    int out_value = int(round(in_texture.read(gid).r));
+    
+    out_value = clamp(out_value, 0, min(white_level, int(UINT16_MAX_VAL)));
+    
+    out_texture.write(uint(out_value), gid);
 }
 
 
@@ -232,12 +233,122 @@ kernel void crop_texture(texture2d<float, access::read> in_texture [[texture(0)]
 
 kernel void add_texture(texture2d<float, access::read> in_texture [[texture(0)]],
                         texture2d<float, access::read_write> out_texture [[texture(1)]],
-                        constant int& n_textures [[buffer(0)]],
+                        constant float& n_textures [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]]) {
     
-    float color_value = out_texture.read(gid).r + in_texture.read(gid).r/float(n_textures);
+    float color_value = out_texture.read(gid).r + in_texture.read(gid).r/n_textures;
     
     out_texture.write(color_value, gid);
+}
+
+
+kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[texture(0)]],
+                                   texture2d<float, access::read_write> out_texture [[texture(1)]],
+                                   constant float& n_textures [[buffer(0)]],
+                                   constant float& white_level [[buffer(1)]],
+                                   constant float& black_level_mean [[buffer(2)]],
+                                   constant float& factor_red [[buffer(3)]],
+                                   constant float& factor_blue [[buffer(4)]],
+                                   uint2 gid [[thread_position_in_grid]]) {
+    
+    // load args
+    int texture_width  = in_texture.get_width();
+    int texture_height = in_texture.get_height();
+    
+    int const x = gid.x*2;
+    int const y = gid.y*2;
+    
+    float pixel_value4, pixel_value5, pixel_ratio4, pixel_ratio5, pixel_count, extrapolated_value, weight;
+    
+    // extract pixel values of 2x2 super pixel
+    float pixel_value0 = in_texture.read(uint2(x  , y)).r;
+    float pixel_value1 = in_texture.read(uint2(x+1, y)).r;
+    float pixel_value2 = in_texture.read(uint2(x,   y+1)).r;
+    float pixel_value3 = in_texture.read(uint2(x+1, y+1)).r;
+    
+    // calculate ratio of pixel value and white level
+    float const pixel_ratio0 = (pixel_value0-black_level_mean)/(white_level-black_level_mean);
+    float const pixel_ratio1 = (pixel_value1-black_level_mean)/(white_level-black_level_mean);
+    float const pixel_ratio2 = (pixel_value2-black_level_mean)/(white_level-black_level_mean);
+    float const pixel_ratio3 = (pixel_value3-black_level_mean)/(white_level-black_level_mean);
+    
+    // process first green channel if a bright pixel is detected
+    if (pixel_ratio1 > 0.8f) {
+                       
+        pixel_value4 = pixel_value5 = black_level_mean;
+        pixel_ratio4 = pixel_ratio5 = 0.0f;
+        pixel_count = 2.0f;
+        
+        // extract additional pixel close to the green pixel
+        if (x+2 < texture_width) {
+            pixel_value4 = in_texture.read(uint2(x+2, y)).r;
+            pixel_ratio4 = (pixel_value4-black_level_mean)/(white_level-black_level_mean);
+            pixel_count += 1.0f;
+        }
+        
+        // extract additional pixel close to the green pixel
+        if (y-1 >= 0) {
+            pixel_value5 = in_texture.read(uint2(x+1, y-1)).r;
+            pixel_ratio5 = (pixel_value5-black_level_mean)/(white_level-black_level_mean);
+            pixel_count += 1.0f;
+        }
+        
+        // if at least one surrounding pixel is above the normalized clipping threshold for the respective color channel
+        if (pixel_ratio0 > 0.99f*factor_red || pixel_ratio3 > 0.99f*factor_blue || pixel_ratio4 > 0.99f*factor_red || pixel_ratio5 > 0.99f*factor_blue) {
+            
+            // extrapolate green pixel from surrounding red and blue pixels
+            extrapolated_value = ((pixel_value0+pixel_value4-2.0f*black_level_mean)/factor_red + (pixel_value3+pixel_value5-2.0f*black_level_mean)/factor_blue)/pixel_count + black_level_mean;
+            
+            // calculate weight for blending the extrapolated value and the original pixel value
+            weight = 0.9f - 4.5f*clamp(1.0f-pixel_ratio1, 0.0f, 0.2f);
+            
+            pixel_value1 = weight*max(extrapolated_value, pixel_value1) + (1.0f-weight)*pixel_value1;
+        }
+    }
+    
+    // process second green channel if a bright pixel is detected
+    if (pixel_ratio2 > 0.8f) {
+           
+        pixel_value4 = pixel_value5 = black_level_mean;
+        pixel_ratio4 = pixel_ratio5 = 0.0f;
+        pixel_count = 2.0f;
+        
+        // extract additional pixel close to the green pixel
+        if (x-1 >= 0) {
+            pixel_value4 = in_texture.read(uint2(x-1, y+1)).r;
+            pixel_ratio4 = (pixel_value4-black_level_mean)/(white_level-black_level_mean);
+            pixel_count += 1.0f;
+        }
+        
+        // extract additional pixel close to the green pixel
+        if (y+2 < texture_height) {
+            pixel_value5 = in_texture.read(uint2(x  , y+2)).r;
+            pixel_ratio5 = (pixel_value5-black_level_mean)/(white_level-black_level_mean);
+            pixel_count += 1.0f;
+        }
+        
+        // if at least one surrounding pixel is above the normalized clipping threshold for the respective color channel
+        if (pixel_ratio0 > 0.99f*factor_red || pixel_ratio3 > 0.99f*factor_blue || pixel_ratio5 > 0.99f*factor_red || pixel_ratio4 > 0.99f*factor_blue) {
+            
+            // extrapolate green pixel from surrounding red and blue pixels
+            extrapolated_value = ((pixel_value0+pixel_value5-2.0f*black_level_mean)/factor_red + (pixel_value3+pixel_value4-2.0f*black_level_mean)/factor_blue)/pixel_count + black_level_mean;
+            
+            // calculate weight for blending the extrapolated value and the original pixel value
+            weight = 0.9f - 4.5f*clamp(1.0f-pixel_ratio2, 0.0f, 0.2f);
+            
+            pixel_value2 = weight*max(extrapolated_value, pixel_value2) + (1.0f-weight)*pixel_value2;
+        }
+    }
+    
+    pixel_value0 = out_texture.read(uint2(x  , y)).r   + pixel_value0/n_textures;
+    pixel_value1 = out_texture.read(uint2(x+1, y)).r   + pixel_value1/n_textures;
+    pixel_value2 = out_texture.read(uint2(x  , y+1)).r + pixel_value2/n_textures;
+    pixel_value3 = out_texture.read(uint2(x+1, y+1)).r + pixel_value3/n_textures;
+    
+    out_texture.write(pixel_value0, uint2(x  , y));
+    out_texture.write(pixel_value1, uint2(x+1, y));
+    out_texture.write(pixel_value2, uint2(x  , y+1));
+    out_texture.write(pixel_value3, uint2(x+1, y+1));
 }
 
 
@@ -245,19 +356,13 @@ kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[tex
                                  texture2d<float, access::read_write> out_texture [[texture(1)]],
                                  texture2d<float, access::read_write> norm_texture [[texture(2)]],
                                  constant int& exposure_bias [[buffer(0)]],
-                                 constant int& white_level [[buffer(1)]],
-                                 constant float& black_level0 [[buffer(2)]],
-                                 constant float& black_level1 [[buffer(3)]],
-                                 constant float& black_level2 [[buffer(4)]],
-                                 constant float& black_level3 [[buffer(5)]],
+                                 constant float& white_level [[buffer(1)]],
+                                 constant float& black_level_mean [[buffer(2)]],
                                  uint2 gid [[thread_position_in_grid]]) {
        
     // load args
     int texture_width  = in_texture.get_width();
     int texture_height = in_texture.get_height();
-    
-    // calculate average black level, which is sufficient here as an approximation
-    float const black_level = 0.25f*(black_level0 + black_level1 + black_level2 + black_level3);
     
     // calculate weight based on exposure bias
     float const weight_exposure = pow(2.0f, float(exposure_bias/100.0f));
@@ -282,14 +387,14 @@ kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[tex
         }
     }
     
-    pixel_value_max = (pixel_value_max-black_level)*weight_exposure + black_level;
+    pixel_value_max = (pixel_value_max-black_level_mean)*weight_exposure + black_level_mean;
     
     float weight_pixel_value = 1.0f;
     
     // this ensures that pixels of the image with lowest exposure are always added
-    if (white_level < 1000000) {
+    if (white_level < 1000000.0f) {
         // ensure smooth blending for pixel values between 0.25 and 0.99 of the white level
-        weight_pixel_value = clamp(0.99f/0.74f-1.0f/0.74f*pixel_value_max/float(white_level), 0.0f, 1.0f);  
+        weight_pixel_value = clamp(0.99f/0.74f-1.0f/0.74f*pixel_value_max/white_level, 0.0f, 1.0f);
     }
    
     // apply optimal weight based on exposure of pixel and take into account weight based on the pixel intensity
@@ -1760,7 +1865,7 @@ kernel void equalize_exposure(texture2d<float, access::read_write> comp_texture 
 kernel void correct_exposure(texture2d<float, access::read_write> final_texture [[texture(0)]],
                              constant int& exposure_bias [[buffer(0)]],
                              constant int& target_exposure [[buffer(1)]],
-                             constant int& white_level [[buffer(2)]],
+                             constant float& white_level [[buffer(2)]],
                              constant float& black_level0 [[buffer(3)]],
                              constant float& black_level1 [[buffer(4)]],
                              constant float& black_level2 [[buffer(5)]],
@@ -1788,8 +1893,8 @@ kernel void correct_exposure(texture2d<float, access::read_write> final_texture 
     float const gain1 = pow(2.0f, gain_stops/1.4f);
     
     // subtract black level and rescale intensity to range from 0 to 1
-    float const rescale_factor = float(white_level) - max(black_level[0], max(black_level[1], max(black_level[2], black_level[3])));
-    pixel_value = (pixel_value-black_level)/rescale_factor;
+    float const rescale_factor = white_level - min(black_level[0], min(black_level[1], min(black_level[2], black_level[3])));
+    pixel_value = clamp((pixel_value-black_level)/rescale_factor, 0.0f, 1.0f);
     
     // use luminance estimated as the maximum pixel value to ensure that no color channel is clipped and the four color channels are treated equally
     float const luminance_before = max(pixel_value[0], max(pixel_value[1], max(pixel_value[2], pixel_value[3])));
@@ -1807,7 +1912,7 @@ kernel void correct_exposure(texture2d<float, access::read_write> final_texture 
     luminance_after1 = luminance_after1 * (0.4f+luminance_after1/(gain1*gain1)) / ((0.4f+luminance_after1)*luminance_max);
     
     // calculate weight for blending the two tone mapping curves dependent on the magnitude of the gain
-    float const weight = clamp(0.0f, 1.0f, gain_stops*0.25f);
+    float const weight = clamp(gain_stops*0.25f, 0.0f, 1.0f);
     
     // apply scaling derived from luminance values and return to original intensity scale
     pixel_value = pixel_value * ((1.0f-weight)*luminance_after0 + weight*luminance_after1)/luminance_before * rescale_factor + black_level;
