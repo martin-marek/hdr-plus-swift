@@ -173,10 +173,10 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         exposure_control = "Off"
     }
     
-    // if user has selected "Off" for exposure control but the burst has exposure bracketing, warn them that exposure control = "Balanced" will be used instead
+    // if user has selected "Off" for exposure control but the burst has exposure bracketing, warn them that exposure control = "Darkest" will be used instead
     if !uniform_exposure && exposure_control == "Off" && mosaic_pattern_width == 2 {
         DispatchQueue.main.async { progress.show_bayer_exposure_alert = true }
-        exposure_control = "Balanced"
+        exposure_control = "Darkest"
     }
     
     // if exposure control = "Off", set black level and white level to -1
@@ -1615,7 +1615,8 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
     // set target exposure
     let target_exposure_dict = [
         "Off": -10000,
-        "Balanced": 0,
+        "Darkest": -10000,
+        "Neutral": 0,
         "Brighter": +100,
     ]
     let target_exposure = target_exposure_dict[exposure_control]!

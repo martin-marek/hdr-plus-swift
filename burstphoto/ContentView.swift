@@ -207,7 +207,7 @@ struct SettingsView: View {
     let tile_sizes = ["Small", "Medium", "Large"]
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
-    let exposure_controls = ["Off", "Balanced", "Brighter"]
+    let exposure_controls = ["  Off (best file compatibility)", "  Exposure as darkest frame", "  Neutral exposure (±0 EV)", "  Brighter exposure (+1 EV)"]
     
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
@@ -234,25 +234,7 @@ struct SettingsView: View {
                     }
                 }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
             }.padding(.horizontal, 15).padding(.vertical, 11)
-            
-            VStack {
-                HStack {
-                    Text("Exposure control").font(.system(size: 14, weight: .medium))
-                    Spacer()
-                    Picker(selection: settings.$exposure_control, label: EmptyView()) {
-                        ForEach(exposure_controls, id: \.self) {
-                            Text($0)
-                        }
-                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
-                }
-                HStack {
-                    Spacer()
-                    Text("'Off' provides best file compatibility                   ")
-                        .font(.system(size: 9.5))
-                        .foregroundColor(.secondary)
-                }
-            }.padding(.horizontal, 15).padding(.top, 11).padding(.bottom, 5)
-            
+                     
             HStack {
                 Text("Merging algorithm").font(.system(size: 14, weight: .medium))
                 Spacer()
@@ -261,8 +243,18 @@ struct SettingsView: View {
                         Text($0)
                     }
                 }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
-            }.padding(.horizontal, 15).padding(.top, 0).padding(.bottom, 11)
+            }.padding(.horizontal, 15).padding(.vertical, 11)
             
+            HStack {
+                Text("Exposure control").font(.system(size: 14, weight: .medium))
+                Spacer()
+                Picker(selection: settings.$exposure_control, label: EmptyView()) {
+                    ForEach(exposure_controls, id: \.self) {
+                        Text($0)
+                    }
+                }.pickerStyle(MenuPickerStyle()).frame(width: 222)
+            }.padding(.horizontal, 15).padding(.vertical, 11)
+          
             VStack(alignment: .leading) {
                 
                 (Text("Noise reduction: ") +
@@ -366,6 +358,15 @@ struct MyDropDelegate: DropDelegate {
             // sort the urls alphabetically
             image_urls.sort(by: {$0.path < $1.path})
             
+            // set simplified value for parameter exposure control
+            let exposure_control_dict = [
+                "  Off (best file compatibility)": "Off",
+                "  Exposure as darkest frame"    : "Darkest",
+                "  Neutral exposure (±0 EV)"     : "Neutral",
+                "  Brighter exposure (+1 EV)"    : "Brighter",
+            ]
+            let exposure_control_short = exposure_control_dict[settings.exposure_control]!
+            
             // sync GUI
             DispatchQueue.main.async {
                 progress.int = 0
@@ -374,7 +375,7 @@ struct MyDropDelegate: DropDelegate {
             
             do {               
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, exposure_control: settings.exposure_control)
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, exposure_control: exposure_control_short)
                    
                 // inform the user about the saved image
                 app_state = .image_saved
