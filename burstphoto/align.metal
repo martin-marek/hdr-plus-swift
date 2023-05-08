@@ -113,6 +113,34 @@ kernel void avg_pool(texture2d<float, access::read> in_texture [[texture(0)]],
 }
 
 
+kernel void avg_pool_normalization(texture2d<float, access::read> in_texture [[texture(0)]],
+                                   texture2d<float, access::write> out_texture [[texture(1)]],
+                                   constant int& scale [[buffer(0)]],
+                                   constant float& factor_red [[buffer(1)]],
+                                   constant float& factor_green [[buffer(2)]],
+                                   constant float& factor_blue [[buffer(3)]],
+                                   uint2 gid [[thread_position_in_grid]]) {
+    
+    float out_pixel = 0;
+    int x0 = gid.x * scale;
+    int y0 = gid.y * scale;
+    
+    float const norm_factors[4] = {factor_red, factor_green, factor_green, factor_blue};
+    float const mean_factor = 0.25f*(norm_factors[0]+norm_factors[1]+norm_factors[2]+norm_factors[3]);
+     
+    for (int dx = 0; dx < scale; dx++) {
+        for (int dy = 0; dy < scale; dy++) {
+            int x = x0 + dx;
+            int y = y0 + dy;
+            out_pixel += (mean_factor/norm_factors[dy*scale+dx]*in_texture.read(uint2(x, y)).r);
+        }
+    }
+
+    out_pixel /= (scale*scale);
+    out_texture.write(out_pixel, gid);
+}
+
+
 kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)]],
                           texture2d<float, access::write> out_texture [[texture(1)]],
                           constant int& kernel_size [[buffer(0)]],
@@ -275,7 +303,7 @@ kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[t
     // process first green channel if a bright pixel is detected
     if (pixel_ratio1 > 0.8f) {
                        
-        pixel_value4 = pixel_value5 = black_level_mean;
+        pixel_value4 = pixel_value5 = 0.0f;
         pixel_ratio4 = pixel_ratio5 = 0.0f;
         pixel_count = 2.0f;
         
@@ -297,7 +325,7 @@ kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[t
         if (pixel_ratio0 > 0.99f*factor_red || pixel_ratio3 > 0.99f*factor_blue || pixel_ratio4 > 0.99f*factor_red || pixel_ratio5 > 0.99f*factor_blue) {
             
             // extrapolate green pixel from surrounding red and blue pixels
-            extrapolated_value = ((pixel_value0+pixel_value4-2.0f*black_level_mean)/factor_red + (pixel_value3+pixel_value5-2.0f*black_level_mean)/factor_blue)/pixel_count + black_level_mean;
+            extrapolated_value = ((pixel_value0+pixel_value4)/factor_red + (pixel_value3+pixel_value5)/factor_blue)/pixel_count;
             
             // calculate weight for blending the extrapolated value and the original pixel value
             weight = 0.9f - 4.5f*clamp(1.0f-pixel_ratio1, 0.0f, 0.2f);
@@ -309,7 +337,7 @@ kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[t
     // process second green channel if a bright pixel is detected
     if (pixel_ratio2 > 0.8f) {
            
-        pixel_value4 = pixel_value5 = black_level_mean;
+        pixel_value4 = pixel_value5 = 0.0f;
         pixel_ratio4 = pixel_ratio5 = 0.0f;
         pixel_count = 2.0f;
         
@@ -331,7 +359,7 @@ kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[t
         if (pixel_ratio0 > 0.99f*factor_red || pixel_ratio3 > 0.99f*factor_blue || pixel_ratio5 > 0.99f*factor_red || pixel_ratio4 > 0.99f*factor_blue) {
             
             // extrapolate green pixel from surrounding red and blue pixels
-            extrapolated_value = ((pixel_value0+pixel_value5-2.0f*black_level_mean)/factor_red + (pixel_value3+pixel_value4-2.0f*black_level_mean)/factor_blue)/pixel_count + black_level_mean;
+            extrapolated_value = ((pixel_value0+pixel_value5)/factor_red + (pixel_value3+pixel_value4)/factor_blue)/pixel_count;
             
             // calculate weight for blending the extrapolated value and the original pixel value
             weight = 0.9f - 4.5f*clamp(1.0f-pixel_ratio2, 0.0f, 0.2f);
@@ -473,6 +501,7 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
                                      constant int& n_tiles_x [[buffer(3)]],
                                      constant int& n_tiles_y [[buffer(4)]],
                                      constant float& black_level [[buffer(5)]],
+                                     constant int& weight_ssd [[buffer(6)]],
                                      uint3 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -480,6 +509,8 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
     int texture_height = ref_texture.get_height();
     int tile_half_size = tile_size / 2;
     int n_pos_1d = 2*search_dist + 1;
+    
+    float diff_abs;
     
     // compute tile position if previous alignment were 0
     int x0 = int(floor( tile_half_size + float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
@@ -506,12 +537,11 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                
-                diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r + 2*UINT16_MAX_VAL);
+                diff_abs = abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r + 2*UINT16_MAX_VAL);
             } else {
-                
-                diff += abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
+                diff_abs = abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
             }
+            diff += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
         }
     }
     
@@ -532,6 +562,7 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
                                        constant int& n_tiles_x [[buffer(3)]],
                                        constant int& n_tiles_y [[buffer(4)]],
                                        constant float& black_level [[buffer(5)]],
+                                       constant int& weight_ssd [[buffer(6)]],
                                        uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -550,7 +581,7 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
     int const dy0 = downscale_factor * prev_align.y;
     
     float diff[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    float tmp_ref;
+    float tmp_ref, diff_abs;
     float tmp_comp[5*68];
     
     // loop over first 4 rows of comp_texture
@@ -611,8 +642,10 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
                 // index of corresponding pixel value in tmp_comp
                 tmp_index = ((dy+dy_i)%5)*(tile_size+4) + dx + dx_i;
                 
+                diff_abs = abs(tmp_ref - tmp_comp[tmp_index]);
+                
                 // add difference to corresponding combination
-                diff[i] += abs(tmp_ref - tmp_comp[tmp_index]);
+                diff[i] += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
             }
         }
     }
@@ -636,6 +669,7 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
                                                 constant int& n_tiles_x [[buffer(3)]],
                                                 constant int& n_tiles_y [[buffer(4)]],
                                                 constant float& black_level [[buffer(5)]],
+                                                constant int& weight_ssd [[buffer(6)]],
                                                 uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -657,7 +691,7 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
     float sum_v[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     float diff[25]  = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     float ratio[25];
-    float tmp_ref, tmp_comp2;
+    float tmp_ref, tmp_comp2, diff_abs;
     float tmp_comp[5*68];
     
     // loop over first 4 rows of comp_texture
@@ -791,9 +825,11 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
                 
                 // index of corresponding pixel value in tmp_comp
                 tmp_index = ((dy+dy_i)%5)*(tile_size+4) + dx + dx_i;
-                            
+                
+                diff_abs = abs(tmp_ref - ratio[i]*tmp_comp[tmp_index]);
+                
                 // add difference to corresponding combination
-                diff[i] += abs(tmp_ref - ratio[i]*tmp_comp[tmp_index]);
+                diff[i] += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
             }
         }
     }
@@ -854,6 +890,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
                                      constant int& n_tiles_y [[buffer(3)]],
                                      constant float& black_level [[buffer(4)]],
                                      constant int& uniform_exposure [[buffer(5)]],
+                                     constant int& weight_ssd [[buffer(6)]],
                                      uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -862,6 +899,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
      
     // initialize some variables
     int comp_tile_x, comp_tile_y, tmp_tile_x, tmp_tile_y;
+    float diff_abs;
     float tmp_ref[64];
     
     // compute tile position if previous alignment were 0
@@ -949,10 +987,13 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
                 comp_tile_y = tmp_tile_y + int(i / tile_size);
                 
                 if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                    diff[c] += tmp_ref[i] + 2*UINT16_MAX_VAL;
+                    diff_abs = tmp_ref[i] + 2*UINT16_MAX_VAL;
                 } else {
-                    diff[c] += abs(tmp_ref[i] - ratio[c]*(comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level));
+                    diff_abs = abs(tmp_ref[i] - ratio[c]*(comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level));
                 }
+                          
+                // add difference to corresponding combination
+                diff[c] += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
             }
         }
     }
@@ -1774,20 +1815,17 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
     float mean_texture = 0.0f;
     float black_level = 0.0f;
     
-    // extract color channel-dependent mean value of the average texture of all images
+    // extract color channel-dependent mean value of the average texture of all images and the black level
     if (x%2 == 0 & y%2 == 0) {
         mean_texture = mean_texture_buffer[0] - black_level0;
         black_level = float(black_level0);
-    }
-    if (x%2 == 1 & y%2 == 0) {
+    } else if (x%2 == 1 & y%2 == 0) {
         mean_texture = mean_texture_buffer[1] - black_level1;
         black_level = float(black_level1);
-    }
-    if (x%2 == 0 & y%2 == 1) {
+    } else if (x%2 == 0 & y%2 == 1) {
         mean_texture = mean_texture_buffer[2] - black_level2;
         black_level = float(black_level2);
-    }
-    if (x%2 == 1 & y%2 == 1) {
+    } else if (x%2 == 1 & y%2 == 1) {
         mean_texture = mean_texture_buffer[3] - black_level3;
         black_level = float(black_level3);
     }
@@ -1858,11 +1896,12 @@ kernel void equalize_exposure(texture2d<float, access::read_write> comp_texture 
     comp_texture.write(pixel_value[2], uint2(x,   y+1));
     comp_texture.write(pixel_value[3], uint2(x+1, y+1));
 }
- 
+
 
 // correction of underexposure with reinhard tone mapping operator
 // inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-kernel void correct_exposure(texture2d<float, access::read_write> final_texture [[texture(0)]],
+kernel void correct_exposure(texture2d<float, access::read> final_texture_blurred [[texture(0)]],
+                             texture2d<float, access::read_write> final_texture [[texture(1)]],
                              constant int& exposure_bias [[buffer(0)]],
                              constant int& target_exposure [[buffer(1)]],
                              constant float& white_level [[buffer(2)]],
@@ -1870,19 +1909,13 @@ kernel void correct_exposure(texture2d<float, access::read_write> final_texture 
                              constant float& black_level1 [[buffer(4)]],
                              constant float& black_level2 [[buffer(5)]],
                              constant float& black_level3 [[buffer(6)]],
+                             constant float& color_factor_mean [[buffer(7)]],
                              uint2 gid [[thread_position_in_grid]]) {
-      
-    int const x = gid.x*2;
-    int const y = gid.y*2;
    
     // load args
-    float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
-   
-    // extract pixel values of 2x2 super pixel
-    float4 pixel_value = float4(final_texture.read(uint2(x,   y)).r,
-                                final_texture.read(uint2(x+1, y)).r,
-                                final_texture.read(uint2(x,   y+1)).r,
-                                final_texture.read(uint2(x+1, y+1)).r);
+    float4 const black_level_channels = float4(black_level0, black_level1, black_level2, black_level3);
+    float const black_level_mean = 0.25f*(black_level0+black_level1+black_level2+black_level3);
+    float const black_level = black_level_channels[2*(gid.y%2) + (gid.x%2)];
     
     // calculate gain for intensity correction
     float const correction_stops = float((target_exposure-exposure_bias)/100.0f);
@@ -1892,13 +1925,18 @@ kernel void correct_exposure(texture2d<float, access::read_write> final_texture 
     float const gain0 = pow(2.0f, gain_stops-0.05f*max(0.0f, gain_stops-1.5f));
     float const gain1 = pow(2.0f, gain_stops/1.4f);
     
-    // subtract black level and rescale intensity to range from 0 to 1
-    float const rescale_factor = white_level - min(black_level[0], min(black_level[1], min(black_level[2], black_level[3])));
-    pixel_value = clamp((pixel_value-black_level)/rescale_factor, 0.0f, 1.0f);
+    // extract pixel value
+    float pixel_value = final_texture.read(gid).r;
     
-    // use luminance estimated as the maximum pixel value to ensure that no color channel is clipped and the four color channels are treated equally
-    float const luminance_before = max(pixel_value[0], max(pixel_value[1], max(pixel_value[2], pixel_value[3])));
-      
+    // subtract black level and rescale intensity to range from 0 to 1
+    float const rescale_factor = white_level - min(black_level0, min(black_level1, min(black_level2, black_level3)));
+    pixel_value = clamp((pixel_value-black_level)/rescale_factor, 0.0f, 1.0f);
+   
+    // use luminance estimated as the binomial weighted mean pixel value in a 3x3 window around the main pixel
+    // apply correction with color factors to reduce clipping of the green color channel
+    float luminance_before = final_texture_blurred.read(gid).r - black_level_mean;
+    luminance_before = clamp(luminance_before/(rescale_factor*color_factor_mean), 0.0f, 1.0f);
+    
     // apply gains
     float luminance_after0 = gain0 * luminance_before;
     float luminance_after1 = gain1 * luminance_before;
@@ -1913,15 +1951,12 @@ kernel void correct_exposure(texture2d<float, access::read_write> final_texture 
     
     // calculate weight for blending the two tone mapping curves dependent on the magnitude of the gain
     float const weight = clamp(gain_stops*0.25f, 0.0f, 1.0f);
-    
+        
     // apply scaling derived from luminance values and return to original intensity scale
     pixel_value = pixel_value * ((1.0f-weight)*luminance_after0 + weight*luminance_after1)/luminance_before * rescale_factor + black_level;
     pixel_value = clamp(pixel_value, 0.0f, float(UINT16_MAX_VAL));
 
-    final_texture.write(pixel_value[0], uint2(x,   y));
-    final_texture.write(pixel_value[1], uint2(x+1, y));
-    final_texture.write(pixel_value[2], uint2(x,   y+1));
-    final_texture.write(pixel_value[3], uint2(x+1, y+1));
+    final_texture.write(pixel_value, gid);
 }
 
 
