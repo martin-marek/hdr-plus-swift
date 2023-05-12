@@ -520,7 +520,7 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
     int dy0 = gid.z / n_pos_1d - search_dist;
     int dx0 = gid.z % n_pos_1d - search_dist;
     
-    // factor in previous alignmnet
+    // factor in previous alignment
     int4 prev_align = prev_alignment.read(uint2(gid.x, gid.y));
     dx0 += downscale_factor * prev_align.x;
     dy0 += downscale_factor * prev_align.y;
@@ -575,7 +575,7 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
     int x0 = int(floor( float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
     int y0 = int(floor( float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
     
-    // factor in previous alignmnet
+    // factor in previous alignment
     int4 const prev_align = prev_alignment.read(uint2(gid.x, gid.y));
     int const dx0 = downscale_factor * prev_align.x;
     int const dy0 = downscale_factor * prev_align.y;
@@ -682,7 +682,7 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
     int x0 = int(floor( float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
     int y0 = int(floor( float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
     
-    // factor in previous alignmnet
+    // factor in previous alignment
     int4 const prev_align = prev_alignment.read(uint2(gid.x, gid.y));
     int const dx0 = downscale_factor * prev_align.x;
     int const dy0 = downscale_factor * prev_align.y;
@@ -898,7 +898,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
     int texture_height = ref_texture.get_height();
      
     // initialize some variables
-    int comp_tile_x, comp_tile_y, tmp_tile_x, tmp_tile_y;
+    int comp_tile_x, comp_tile_y, tmp_tile_x, tmp_tile_y, weight_outside;
     float diff_abs;
     float tmp_ref[64];
     
@@ -923,7 +923,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
      
     // compute tile differences for 3 candidates
     float diff[3]  = {0.0f, 0.0f, 0.0f};
-    float ratio[3] = {1.0f, 1.0f, 1.0f};;
+    float ratio[3] = {1.0f, 1.0f, 1.0f};
    
     // calculate exposure correction factors for slight scaling of pixel intensities
     if (uniform_exposure != 1) {
@@ -954,7 +954,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
                     if ((comp_tile_x >= 0) && (comp_tile_y >= 0) && (comp_tile_x < texture_width) && (comp_tile_y < texture_height)) {
                
                         sum_u[c] += tmp_ref[i];
-                        sum_v[c] += max(0.0f, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level);;
+                        sum_v[c] += max(0.0f, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level);
                     }
                 }
             }
@@ -985,12 +985,12 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
                 // compute the indices of the pixels to compare
                 comp_tile_x = tmp_tile_x + (i % tile_size);
                 comp_tile_y = tmp_tile_y + int(i / tile_size);
+                                               
+                // if (comp_tile_x < 0 || comp_tile_y < 0 || comp_tile_x >= texture_width || comp_tile_y >= texture_height) => set weight_outside = 1, else set weight_outside = 0
+                weight_outside = clamp(texture_width-comp_tile_x-1, -1, 0) + clamp(texture_height-comp_tile_y-1, -1, 0) + clamp(comp_tile_x, -1, 0) + clamp(comp_tile_y, -1, 0);
+                weight_outside = -max(-1, weight_outside);
                 
-                if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                    diff_abs = tmp_ref[i] + 2*UINT16_MAX_VAL;
-                } else {
-                    diff_abs = abs(tmp_ref[i] - ratio[c]*(comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level));
-                }
+                diff_abs = abs(tmp_ref[i] - (1-weight_outside)*ratio[c]*(comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level) + weight_outside*2*UINT16_MAX_VAL);
                           
                 // add difference to corresponding combination
                 diff[c] += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
