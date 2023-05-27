@@ -63,7 +63,7 @@ struct ContentView: View {
                 my_alert.message = "You have selected exposure control other than \"Off\" in the Preferences, which is not supported for your camera. Press OK to use exposure control \"Off\"."
                 my_alert.dismiss_button = .default(Text("OK"))
                 my_alert.show = true
-                settings.exposure_control = " Off (fallback if colors are off)"
+                settings.exposure_control = " Off (works w/o exposure info)"
             }
         })
         .onReceive(progress.$show_bayer_exposure_alert, perform: { val in
@@ -208,7 +208,8 @@ struct SettingsView: View {
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
     //let exposure_controls = ["  Off (best file compatibility)", "  Exposure as darkest frame", "  Neutral exposure (±0 EV)", "  Brighter exposure (+1 EV)"]
-    let exposure_controls = [" Exposure as darkest frame", " Neutral exposure (±0 EV)", " Brighter exposure (+1 EV)", " Off (fallback if colors are off)"]
+    //let exposure_controls = [" Exposure as darkest frame", " Neutral exposure (±0 EV)", " Brighter exposure (+1 EV)", " Off (fallback if colors are off)"]
+    let exposure_controls = [" Exposure as darkest frame", " Neutral exposure (±0 EV)", " Brighter exposure (+1 EV)", " Off (works w/o exposure info)"]
     
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
@@ -361,10 +362,10 @@ struct MyDropDelegate: DropDelegate {
             
             // set simplified value for parameter exposure control
             let exposure_control_dict = [
-                " Exposure as darkest frame"       : "Darkest",
-                " Neutral exposure (±0 EV)"        : "Neutral",
-                " Brighter exposure (+1 EV)"       : "Brighter",
-                " Off (fallback if colors are off)": "Off",
+                " Exposure as darkest frame"     : "Darkest",
+                " Neutral exposure (±0 EV)"      : "Neutral",
+                " Brighter exposure (+1 EV)"     : "Brighter",
+                " Off (works w/o exposure info)" : "Off",
             ]
             let exposure_control_short = exposure_control_dict[settings.exposure_control]!
             
