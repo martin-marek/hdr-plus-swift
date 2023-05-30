@@ -207,9 +207,7 @@ struct SettingsView: View {
     let tile_sizes = ["Small", "Medium", "Large"]
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
-    //let exposure_controls = ["  Off (best file compatibility)", "  Exposure as darkest frame", "  Neutral exposure (±0 EV)", "  Brighter exposure (+1 EV)"]
-    //let exposure_controls = [" Exposure as darkest frame", " Neutral exposure (±0 EV)", " Brighter exposure (+1 EV)", " Off (fallback if colors are off)"]
-    let exposure_controls = [" Exposure as darkest frame", " Neutral exposure (±0 EV)", " Brighter exposure (+1 EV)", " Off (works w/o exposure info)"]
+    let exposure_controls = [" Off (works w/o exposure info)", " Exposure as darkest frame", " Neutral exposure (±0 EV)", " Brighter exposure (+1 EV)"]
     
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
@@ -362,10 +360,10 @@ struct MyDropDelegate: DropDelegate {
             
             // set simplified value for parameter exposure control
             let exposure_control_dict = [
+                " Off (works w/o exposure info)" : "Off",
                 " Exposure as darkest frame"     : "Darkest",
                 " Neutral exposure (±0 EV)"      : "Neutral",
                 " Brighter exposure (+1 EV)"     : "Brighter",
-                " Off (works w/o exposure info)" : "Off",
             ]
             let exposure_control_short = exposure_control_dict[settings.exposure_control]!
             
