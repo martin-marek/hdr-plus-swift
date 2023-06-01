@@ -3,7 +3,11 @@ using namespace metal;
 using namespace simd;
 
 constant uint UINT16_MAX_VAL = 65535;
-constant float PI = 3.14159265358979323846;
+constant float PI = 3.14159265358979323846f;
+constant half FLOAT16_ZERO_VAL = half(0);
+constant half FLOAT16_MIN_VAL = half(-65504);
+constant half FLOAT16_MAX_VAL = half(65504);
+constant half FLOAT16_05_VAL = half(0.5f);
 
 
 // ===========================================================================================================
@@ -22,15 +26,15 @@ kernel void texture_uint16_to_float(texture2d<uint, access::read> in_texture [[t
     
     uint4 val_unint = in_texture.read(gid);
     
-    float4 val_float = float4(val_unint);
+    float4 val_float = clamp(float4(val_unint), 0.0f, FLOAT16_MAX_VAL);
     out_texture.write(val_float, gid); 
 }
 
 
-kernel void convert_uint16(texture2d<float, access::read> in_texture [[texture(0)]],
-                           texture2d<uint, access::write> out_texture [[texture(1)]],
-                           constant int& white_level [[buffer(0)]],
-                           uint2 gid [[thread_position_in_grid]]) {
+kernel void convert_float_to_uint16(texture2d<float, access::read> in_texture [[texture(0)]],
+                                    texture2d<uint, access::write> out_texture [[texture(1)]],
+                                    constant int& white_level [[buffer(0)]],
+                                    uint2 gid [[thread_position_in_grid]]) {
     
     int out_value = int(round(in_texture.read(gid).r));
     
@@ -505,16 +509,15 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
                                      uint3 gid [[thread_position_in_grid]]) {
     
     // load args
-    int texture_width = ref_texture.get_width();
-    int texture_height = ref_texture.get_height();
-    int tile_half_size = tile_size / 2;
+    int const texture_width = ref_texture.get_width();
+    int const texture_height = ref_texture.get_height();
     int n_pos_1d = 2*search_dist + 1;
     
     float diff_abs;
     
     // compute tile position if previous alignment were 0
-    int x0 = int(floor( tile_half_size + float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
-    int y0 = int(floor( tile_half_size + float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
+    int const x0 = gid.x*tile_size/2;
+    int const y0 = gid.y*tile_size/2;
     
     // compute current tile displacement based on thread index
     int dy0 = gid.z / n_pos_1d - search_dist;
@@ -527,8 +530,8 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
     
     // compute tile difference
     float diff = 0;
-    for (int dx1 = -tile_half_size; dx1 < tile_half_size; dx1++){
-        for (int dy1 = -tile_half_size; dy1 < tile_half_size; dy1++){
+    for (int dx1 = 0; dx1 < tile_size; dx1++){
+        for (int dy1 = 0; dy1 < tile_size; dy1++){
             // compute the indices of the pixels to compare
             int ref_tile_x = x0 + dx1;
             int ref_tile_y = y0 + dy1;
@@ -537,7 +540,7 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                diff_abs = abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r + 2*UINT16_MAX_VAL);
+                diff_abs = abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - 2*FLOAT16_MIN_VAL);
             } else {
                 diff_abs = abs(ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r);
             }
@@ -552,8 +555,8 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
 
 // highly-optimized function for computation of tile differences that works only for search distance 2 (in total 25 combinations)
 // The aim of this function is to reduce the number of memory accesses required compared to the more simple function compute_tile_differences() while providing equal results. As the alignment always checks shifts on a 5x5 pixel grid, a simple implementation would read 25 pixels in the comparison texture for each pixel in the reference texture. This optimized function however uses a buffer vector covering 5 complete rows of the texture that slides line by line through the comparison texture and reduces the number of memory reads considerably.
-kernel void compute_tile_differences25(texture2d<float, access::read> ref_texture [[texture(0)]],
-                                       texture2d<float, access::read> comp_texture [[texture(1)]],
+kernel void compute_tile_differences25(texture2d<half, access::read> ref_texture [[texture(0)]],
+                                       texture2d<half, access::read> comp_texture [[texture(1)]],
                                        texture2d<int, access::read> prev_alignment [[texture(2)]],
                                        texture3d<float, access::write> tile_diff [[texture(3)]],
                                        constant int& downscale_factor [[buffer(0)]],
@@ -566,14 +569,14 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
                                        uint2 gid [[thread_position_in_grid]]) {
     
     // load args
-    int texture_width = ref_texture.get_width();
-    int texture_height = ref_texture.get_height();
+    int const texture_width = ref_texture.get_width();
+    int const texture_height = ref_texture.get_height();
      
     int ref_tile_x, ref_tile_y, comp_tile_x, comp_tile_y, tmp_index, dx_i, dy_i;
     
     // compute tile position if previous alignment were 0
-    int x0 = int(floor( float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
-    int y0 = int(floor( float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
+    int const x0 = gid.x*tile_size/2;
+    int const y0 = gid.y*tile_size/2;
     
     // factor in previous alignment
     int4 const prev_align = prev_alignment.read(uint2(gid.x, gid.y));
@@ -581,8 +584,9 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
     int const dy0 = downscale_factor * prev_align.y;
     
     float diff[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    float tmp_ref, diff_abs;
-    float tmp_comp[5*68];
+    float diff_abs;
+    half tmp_ref;
+    half tmp_comp[5*68];
     
     // loop over first 4 rows of comp_texture
     for (int dy = -2; dy < +2; dy++) {
@@ -598,9 +602,9 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                tmp_comp[tmp_index] = (-2*UINT16_MAX_VAL);
+                tmp_comp[tmp_index] = FLOAT16_MIN_VAL;
             } else {
-                tmp_comp[tmp_index] = comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r;
+                tmp_comp[tmp_index] = FLOAT16_05_VAL*comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r;
             }
         }
     }
@@ -619,9 +623,9 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                tmp_comp[tmp_index] = (-2*UINT16_MAX_VAL);
+                tmp_comp[tmp_index] = FLOAT16_MIN_VAL;
             } else {
-                tmp_comp[tmp_index] = comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r;
+                tmp_comp[tmp_index] = FLOAT16_05_VAL*comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r;
             }
         }
         
@@ -642,7 +646,7 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
                 // index of corresponding pixel value in tmp_comp
                 tmp_index = ((dy+dy_i)%5)*(tile_size+4) + dx + dx_i;
                 
-                diff_abs = abs(tmp_ref - tmp_comp[tmp_index]);
+                diff_abs = abs(tmp_ref - 2.0f*tmp_comp[tmp_index]);
                 
                 // add difference to corresponding combination
                 diff[i] += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
@@ -659,8 +663,8 @@ kernel void compute_tile_differences25(texture2d<float, access::read> ref_textur
 
 // highly-optimized function for computation of tile differences that works only for search distance 2 (in total 25 combinations)
 // The aim of this function is to reduce the number of memory accesses required compared to the more simple function compute_tile_differences() while extending it with a scaling of pixel intensities by the ratio of mean values of both tiles.
-kernel void compute_tile_differences_exposure25(texture2d<float, access::read> ref_texture [[texture(0)]],
-                                                texture2d<float, access::read> comp_texture [[texture(1)]],
+kernel void compute_tile_differences_exposure25(texture2d<half, access::read> ref_texture [[texture(0)]],
+                                                texture2d<half, access::read> comp_texture [[texture(1)]],
                                                 texture2d<int, access::read> prev_alignment [[texture(2)]],
                                                 texture3d<float, access::write> tile_diff [[texture(3)]],
                                                 constant int& downscale_factor [[buffer(0)]],
@@ -673,14 +677,16 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
                                                 uint2 gid [[thread_position_in_grid]]) {
     
     // load args
-    int texture_width = ref_texture.get_width();
-    int texture_height = ref_texture.get_height();
+    int const texture_width = ref_texture.get_width();
+    int const texture_height = ref_texture.get_height();
+    
+    half const black_level_float16 = half(black_level);
      
     int ref_tile_x, ref_tile_y, comp_tile_x, comp_tile_y, tmp_index, dx_i, dy_i;
     
     // compute tile position if previous alignment were 0
-    int x0 = int(floor( float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
-    int y0 = int(floor( float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
+    int const x0 = gid.x*tile_size/2;
+    int const y0 = gid.y*tile_size/2;
     
     // factor in previous alignment
     int4 const prev_align = prev_alignment.read(uint2(gid.x, gid.y));
@@ -691,8 +697,9 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
     float sum_v[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     float diff[25]  = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     float ratio[25];
-    float tmp_ref, tmp_comp2, diff_abs;
-    float tmp_comp[5*68];
+    float diff_abs;
+    half tmp_ref, tmp_comp1;
+    half tmp_comp[5*68];
     
     // loop over first 4 rows of comp_texture
     for (int dy = -2; dy < +2; dy++) {
@@ -708,9 +715,9 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                tmp_comp[tmp_index] = (-2*UINT16_MAX_VAL);
+                tmp_comp[tmp_index] = FLOAT16_MAX_VAL;
             } else {
-                tmp_comp[tmp_index] = max(0.0f, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level);
+                tmp_comp[tmp_index] = max(FLOAT16_ZERO_VAL, FLOAT16_05_VAL * (comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level_float16));
             }
         }
     }
@@ -729,9 +736,9 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                tmp_comp[tmp_index] = (-2*UINT16_MAX_VAL);
+                tmp_comp[tmp_index] = FLOAT16_MAX_VAL;
             } else {
-                tmp_comp[tmp_index] = max(0.0f, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level);
+                tmp_comp[tmp_index] = max(FLOAT16_ZERO_VAL, FLOAT16_05_VAL * (comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level_float16));
             }
         }
         
@@ -741,8 +748,7 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
             ref_tile_x = x0 + dx;
             ref_tile_y = y0 + dy;
             
-            //tmp_ref = ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r;
-            tmp_ref = max(0.0f, ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - black_level);
+            tmp_ref = max(FLOAT16_ZERO_VAL, ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - black_level_float16);
               
             // loop over 25 test displacements
             for (int i = 0; i < 25; i++) {
@@ -752,12 +758,12 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
                 
                 // index of corresponding pixel value in tmp_comp
                 tmp_index = ((dy+dy_i)%5)*(tile_size+4) + dx + dx_i;
-                tmp_comp2 = tmp_comp[tmp_index];
+                tmp_comp1 = tmp_comp[tmp_index];
          
-                if (tmp_comp2 > -1)
+                if (tmp_comp1 > -1)
                 {
                     sum_u[i] += tmp_ref;
-                    sum_v[i] += tmp_comp2;
+                    sum_v[i] += 2.0f*tmp_comp1;
                 }
             }
         }
@@ -782,9 +788,9 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                tmp_comp[tmp_index] = (-2*UINT16_MAX_VAL);
+                tmp_comp[tmp_index] = FLOAT16_MIN_VAL;
             } else {
-                tmp_comp[tmp_index] = max(0.0f, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level);
+                tmp_comp[tmp_index] = max(FLOAT16_ZERO_VAL, FLOAT16_05_VAL * (comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level_float16));
             }
         }
     }
@@ -803,9 +809,9 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
             
             // if the comparison pixels are outside of the frame, attach a high loss to them
             if ((comp_tile_x < 0) || (comp_tile_y < 0) || (comp_tile_x >= texture_width) || (comp_tile_y >= texture_height)) {
-                tmp_comp[tmp_index] = (-2*UINT16_MAX_VAL);
+                tmp_comp[tmp_index] = FLOAT16_MIN_VAL;
             } else {
-                tmp_comp[tmp_index] = max(0.0f, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level);
+                tmp_comp[tmp_index] = max(FLOAT16_ZERO_VAL, FLOAT16_05_VAL * (comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level_float16));
             }
         }
         
@@ -815,7 +821,7 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
             ref_tile_x = x0 + dx;
             ref_tile_y = y0 + dy;
             
-            tmp_ref = max(0.0f, ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - black_level);
+            tmp_ref = max(FLOAT16_ZERO_VAL, ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r - black_level_float16);
               
             // loop over 25 test displacements
             for (int i = 0; i < 25; i++) {
@@ -826,7 +832,7 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
                 // index of corresponding pixel value in tmp_comp
                 tmp_index = ((dy+dy_i)%5)*(tile_size+4) + dx + dx_i;
                 
-                diff_abs = abs(tmp_ref - ratio[i]*tmp_comp[tmp_index]);
+                diff_abs = abs(tmp_ref - 2.0f*ratio[i]*tmp_comp[tmp_index]);
                 
                 // add difference to corresponding combination
                 diff[i] += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
@@ -841,20 +847,21 @@ kernel void compute_tile_differences_exposure25(texture2d<float, access::read> r
 }
 
 
-kernel void compute_tile_alignments(texture3d<float, access::read> tile_diff [[texture(0)]],
-                                    texture2d<int, access::read> prev_alignment [[texture(1)]],
-                                    texture2d<int, access::write> current_alignment [[texture(2)]],
-                                    constant int& downscale_factor [[buffer(0)]],
-                                    constant int& search_dist [[buffer(1)]],
-                                    uint2 gid [[thread_position_in_grid]]) {
+kernel void find_best_tile_alignment(texture3d<float, access::read> tile_diff [[texture(0)]],
+                                     texture2d<int, access::read> prev_alignment [[texture(1)]],
+                                     texture2d<int, access::write> current_alignment [[texture(2)]],
+                                     constant int& downscale_factor [[buffer(0)]],
+                                     constant int& search_dist [[buffer(1)]],
+                                     uint2 gid [[thread_position_in_grid]]) {
     // load args
-    int n_pos_1d = 2*search_dist + 1;
-    int n_pos_2d = n_pos_1d * n_pos_1d;
+    int const n_pos_1d = 2*search_dist + 1;
+    int const n_pos_2d = n_pos_1d * n_pos_1d;
     
     // find tile displacement with the lowest pixel difference
     float current_diff;
-    float min_diff_val = tile_diff.read(uint3(gid.x, gid.y, 0)).r;
+    float min_diff_val = 1e20f;
     int min_diff_idx = 0;
+    
     for (int i = 0; i < n_pos_2d; i++) {
         current_diff = tile_diff.read(uint3(gid.x, gid.y, i)).r;
         if (current_diff < min_diff_val) {
@@ -864,24 +871,22 @@ kernel void compute_tile_alignments(texture3d<float, access::read> tile_diff [[t
     }
     
     // compute tile displacement if previous alignment were 0
-    int dy = min_diff_idx / n_pos_1d - search_dist;
-    int dx = min_diff_idx % n_pos_1d - search_dist;
+    int const dx = min_diff_idx % n_pos_1d - search_dist;
+    int const dy = min_diff_idx / n_pos_1d - search_dist;
     
     // factor in previous alignment
-    int4 prev_align = prev_alignment.read(gid);
-    dx += downscale_factor * prev_align.x;
-    dy += downscale_factor * prev_align.y;
+    int4 const prev_align = downscale_factor * prev_alignment.read(gid);
     
     // store alignment
-    int4 out = int4(dx, dy, 0, 0);
+    int4 const out = int4(prev_align.x+dx, prev_align.y+dy, 0, 0);
     current_alignment.write(out, gid);
 }
 
 
 // At transitions between moving objects and non-moving background, the alignment vectors from downsampled images may be inaccurate. Therefore, after upsampling to the next resolution level, three candidate alignment vectors are evaluated for each tile. In addition to the vector obtained from upsampling, two vectors from neighboring tiles are checked. As a consequence, alignment at the transition regions described above is more accurate.
 // see section on "Hierarchical alignment" in https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf and section "Multi-scale Pyramid Alignment" in https://www.ipol.im/pub/art/2021/336/
-kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture [[texture(0)]],
-                                     texture2d<float, access::read> comp_texture [[texture(1)]],
+kernel void correct_upsampling_error(texture2d<half, access::read> ref_texture [[texture(0)]],
+                                     texture2d<half, access::read> comp_texture [[texture(1)]],
                                      texture2d<int, access::read> prev_alignment [[texture(2)]],
                                      texture2d<int, access::write> prev_alignment_corrected [[texture(3)]],
                                      constant int& downscale_factor [[buffer(0)]],
@@ -894,18 +899,20 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
                                      uint2 gid [[thread_position_in_grid]]) {
     
     // load args
-    int texture_width = ref_texture.get_width();
-    int texture_height = ref_texture.get_height();
+    int const texture_width = ref_texture.get_width();
+    int const texture_height = ref_texture.get_height();
      
+    half const black_level_float16 = half(black_level);
+    
     // initialize some variables
     int comp_tile_x, comp_tile_y, tmp_tile_x, tmp_tile_y, weight_outside;
     float diff_abs;
-    float tmp_ref[64];
+    half tmp_ref[64];
     
     // compute tile position if previous alignment were 0
-    int const x0 = int(floor( float(gid.x)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
-    int const y0 = int(floor( float(gid.y)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
-
+    int const x0 = gid.x*tile_size/2;
+    int const y0 = gid.y*tile_size/2;
+    
     // calculate shifts of gid index for 3 candidate alignments to evaluate
     int3 const x_shift = int3(0, ((gid.x%2 == 0) ? -1 : 1), 0);
     int3 const y_shift = int3(0, 0, ((gid.y%2 == 0) ? -1 : 1));
@@ -936,7 +943,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
                
             // copy 64/tile_size rows into temp vector
             for (int i = 0; i < 64; i++) {
-                tmp_ref[i] = max(0.0f, ref_texture.read(uint2(x0+(i % tile_size), y0+dy+int(i / tile_size))).r - black_level);
+                tmp_ref[i] = max(FLOAT16_ZERO_VAL, ref_texture.read(uint2(x0+(i % tile_size), y0+dy+int(i / tile_size))).r - black_level_float16);
             }
             
             // loop over three candidates
@@ -954,7 +961,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
                     if ((comp_tile_x >= 0) && (comp_tile_y >= 0) && (comp_tile_x < texture_width) && (comp_tile_y < texture_height)) {
                
                         sum_u[c] += tmp_ref[i];
-                        sum_v[c] += max(0.0f, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level);
+                        sum_v[c] += max(FLOAT16_ZERO_VAL, comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level_float16);
                     }
                 }
             }
@@ -971,7 +978,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
            
         // copy 64/tile_size rows into temp vector
         for (int i = 0; i < 64; i++) {
-            tmp_ref[i] = ref_texture.read(uint2(x0+(i % tile_size), y0+dy+int(i / tile_size))).r - black_level;
+            tmp_ref[i] = ref_texture.read(uint2(x0+(i % tile_size), y0+dy+int(i / tile_size))).r - black_level_float16;
         }
         
         // loop over three candidates
@@ -990,7 +997,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
                 weight_outside = clamp(texture_width-comp_tile_x-1, -1, 0) + clamp(texture_height-comp_tile_y-1, -1, 0) + clamp(comp_tile_x, -1, 0) + clamp(comp_tile_y, -1, 0);
                 weight_outside = -max(-1, weight_outside);
                 
-                diff_abs = abs(tmp_ref[i] - (1-weight_outside)*ratio[c]*(comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level) + weight_outside*2*UINT16_MAX_VAL);
+                diff_abs = abs(tmp_ref[i] - (1-weight_outside)*ratio[c]*(comp_texture.read(uint2(comp_tile_x, comp_tile_y)).r - black_level_float16) - weight_outside*2*FLOAT16_MIN_VAL);
                           
                 // add difference to corresponding combination
                 diff[c] += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
@@ -1012,7 +1019,7 @@ kernel void correct_upsampling_error(texture2d<float, access::read> ref_texture 
 
 
 kernel void warp_texture(texture2d<float, access::read> in_texture [[texture(0)]],
-                         texture2d<float, access::read_write> out_texture [[texture(1)]],
+                         texture2d<float, access::write> out_texture [[texture(1)]],
                          texture2d<int, access::read> prev_alignment [[texture(2)]],
                          constant int& downscale_factor [[buffer(0)]],
                          constant int& tile_size [[buffer(1)]],
@@ -1021,64 +1028,48 @@ kernel void warp_texture(texture2d<float, access::read> in_texture [[texture(0)]
                          uint2 gid [[thread_position_in_grid]]) {
     
     // load args
-    int texture_width = in_texture.get_width();
-    int texture_height = in_texture.get_height();
-    int tile_half_size = tile_size / 2;
-    
-    // load coordinates of output pixel
-    int x1_pix = gid.x;
-    int y1_pix = gid.y;
+    int const x = gid.x;
+    int const y = gid.y;
     
     // compute the coordinates of output pixel in tile-grid units
-    float x1_grid = float(x1_pix - tile_half_size) / float(texture_width  - tile_size - 1) * (n_tiles_x - 1);
-    float y1_grid = float(y1_pix - tile_half_size) / float(texture_height - tile_size - 1) * (n_tiles_y - 1);
+    float const x_grid = (x+0.5f)/float(tile_size) - 1.0f;
+    float const y_grid = (y+0.5f)/float(tile_size) - 1.0f;
     
-    // compute the two possible tile-grid indices that the given output pixel belongs to
-    int x_grid_list[] = {int(floor(x1_grid)), int(floor(x1_grid)), int(ceil (x1_grid)), int(ceil(x1_grid))};
-    int y_grid_list[] = {int(floor(y1_grid)), int(ceil (y1_grid)), int(floor(y1_grid)), int(ceil(y1_grid))};
+    int const x_grid_floor = int(max(0.0f, floor(x_grid)) + 0.1f);
+    int const y_grid_floor = int(max(0.0f, floor(y_grid)) + 0.1f);
+    int const x_grid_ceil  = int(min(ceil(x_grid), n_tiles_x-1.0f) + 0.1f);
+    int const y_grid_ceil  = int(min(ceil(y_grid), n_tiles_y-1.0f) + 0.1f);
     
-    // loop over the two possible tile-grid indices that the given output pixel belongs to
-    float total_intensity = 0;
-    float total_weight = 0;
-    for (int i = 0; i < 4; i++){
-        
-        // load the index of the tile
-        int x_grid = x_grid_list[i];
-        int y_grid = y_grid_list[i];
-        
-        // compute the pixel coordinates of the center of the reference tile
-        int x0_pix = int(floor( tile_half_size + float(x_grid)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
-        int y0_pix = int(floor( tile_half_size + float(y_grid)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
-        
-        // check that the output pixel falls within the reference tile
-        if ((abs(x1_pix - x0_pix) <= tile_half_size) && (abs(y1_pix - y0_pix) <= tile_half_size)) {
-            
-            // compute tile displacement
-            int4 prev_align = prev_alignment.read(uint2(x_grid, y_grid));
-            int dx = downscale_factor * prev_align.x;
-            int dy = downscale_factor * prev_align.y;
-
-            // load coordinates of the corresponding pixel from the comparison tile
-            int x2_pix = x1_pix + dx;
-            int y2_pix = y1_pix + dy;
-            
-            // compute the weight of the aligned pixel (based on distance from tile center)
-            int dist_x = abs(x1_pix - x0_pix);
-            int dist_y = abs(y1_pix - y0_pix);
-            float weight_x = tile_size - dist_x - dist_y;
-            float weight_y = tile_size - dist_x - dist_y;
-            float curr_weight = weight_x * weight_y;
-            total_weight += curr_weight;
-            
-            // add pixel value to the output
-            total_intensity += curr_weight * in_texture.read(uint2(x2_pix, y2_pix)).r;
-        }
-    }
+    // weights calculated for the bilinear interpolation
+    float const weight_x = ((x % tile_size) + 0.5f)/float(2.0f*tile_size);
+    float const weight_y = ((y % tile_size) + 0.5f)/float(2.0f*tile_size);
+    
+    // factor in alignment
+    int4 const prev_align0 = downscale_factor * prev_alignment.read(uint2(x_grid_floor, y_grid_floor));
+    int4 const prev_align1 = downscale_factor * prev_alignment.read(uint2(x_grid_ceil,  y_grid_floor));
+    int4 const prev_align2 = downscale_factor * prev_alignment.read(uint2(x_grid_floor, y_grid_ceil));
+    int4 const prev_align3 = downscale_factor * prev_alignment.read(uint2(x_grid_ceil,  y_grid_ceil));
+    
+    // alignment vector from tile 0
+    float pixel_value  = (1.0f-weight_x)*(1.0f-weight_y) * in_texture.read(uint2(x+prev_align0.x, y+prev_align0.y)).r;
+    float total_weight = (1.0f-weight_x)*(1.0f-weight_y);
+    
+    // alignment vector from tile 1
+    pixel_value  += weight_x*(1.0f-weight_y) * in_texture.read(uint2(x+prev_align1.x, y+prev_align1.y)).r;
+    total_weight += weight_x*(1.0f-weight_y);
+    
+    // alignment vector from tile 2
+    pixel_value  += (1.0f-weight_x)*weight_y * in_texture.read(uint2(x+prev_align2.x, y+prev_align2.y)).r;
+    total_weight += (1.0f-weight_x)*weight_y;
+    
+    // alignment vector from tile 3
+    pixel_value  += weight_x*weight_y * in_texture.read(uint2(x+prev_align3.x, y+prev_align3.y)).r;
+    total_weight += weight_x*weight_y;
     
     // write output pixel
-    float out_intensity = total_intensity / total_weight;
-    out_texture.write(out_intensity, uint2(x1_pix, y1_pix));
+    out_texture.write(pixel_value/total_weight, gid);
 }
+
 
 
 // ===========================================================================================================
@@ -1229,6 +1220,36 @@ kernel void average_x_rgba(texture1d<float, access::read> in_texture [[texture(0
     out_buffer[2] = avg[2];
     out_buffer[3] = avg[3];
 }
+
+
+kernel void max_y(texture2d<float, access::read> in_texture [[texture(0)]],
+                  texture1d<float, access::write> out_texture [[texture(1)]],
+                  uint gid [[thread_position_in_grid]]) {
+    uint x = gid;
+    int texture_height = in_texture.get_height();
+    float max_value = 0;
+    
+    for (int y = 0; y < texture_height; y++) {
+        max_value = max(max_value, in_texture.read(uint2(x, y)).r);
+    }
+
+    out_texture.write(max_value, x);
+}
+
+
+kernel void max_x(texture1d<float, access::read> in_texture [[texture(0)]],
+                  device float *out_buffer [[buffer(0)]],
+                  constant int& width [[buffer(1)]],
+                  uint gid [[thread_position_in_grid]]) {
+    float max_value = 0;
+    
+    for (int x = 0; x < width; x++) {
+        max_value = max(max_value, in_texture.read(uint(x)).r);
+    }
+
+    out_buffer[0] = max_value;
+}
+
 
 // see section "Noise model and tiled approximation" in https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf or section "Noise Level Estimation" in https://www.ipol.im/pub/art/2021/336/
 kernel void calculate_rms_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
@@ -1462,7 +1483,6 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
     float const mismatch_weight = clamp(1.0f - 10.0f*(mismatch-0.2f), 0.0f, 1.0f);
     
     float const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm);
-    //float const motion_norm = 1.0f
     
     // compute tile positions from gid
     int const m0 = gid.x*tile_size;
@@ -1470,14 +1490,15 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
     
     // pre-calculate factors for sine and cosine calculation
     float const angle = -2*PI/float(tile_size);
-
+    float const shift_step_size = 1.0f/6.0f;
+    
     // pre-initalize some variables
     float weight, min_weight, max_weight, coefRe, coefIm, shift_x, shift_y, ratio_mag, magnitude_norm;
-    float4 refRe, refIm, refMag, alignedRe, alignedIm, alignedRe2, alignedIm2, alignedMag2, mergedRe, mergedIm, weight4, diff4;
-    float total_diff[81];
+    float4 refRe, refIm, refMag, alignedRe, alignedIm, alignedRe2, alignedIm2, alignedMag2, mergedRe, mergedIm, weight4;
+    float total_diff[49];
     
     // fill with zeros
-    for(int i = 0; i < 81; i++) {
+    for(int i = 0; i < 49; i++) {
         total_diff[i] = 0.0f;
     }
     
@@ -1495,25 +1516,25 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             alignedRe = aligned_texture_ft.read(uint2(m+0, n));
             alignedIm = aligned_texture_ft.read(uint2(m+1, n));
             
-            // test 9x9 discrete steps
-            for (int i = 0; i < 81; i++) {
+            // test 7x7 discrete steps
+            for (int i = 0; i < 49; i++) {
                   
                 // potential shift in pixels (specified on the pixel scale of each color channel)
-                shift_x = -0.5f + int(i % 9) * 0.125f;
-                shift_y = -0.5f + int(i / 9) * 0.125f;
+                shift_x = -0.5f + int(i % 7) * shift_step_size;
+                shift_y = -0.5f + int(i / 7) * shift_step_size;
                             
                 // calculate coefficients for Fourier shift
                 coefRe = cos(angle*(dm*shift_x+dn*shift_y));
                 coefIm = sin(angle*(dm*shift_x+dn*shift_y));
                          
                 // calculate complex frequency data of shifted tile
-                alignedRe2 = (coefRe*alignedRe - coefIm*alignedIm);
-                alignedIm2 = (coefIm*alignedRe + coefRe*alignedIm);
+                alignedRe2 = refRe - (coefRe*alignedRe - coefIm*alignedIm);
+                alignedIm2 = refIm - (coefIm*alignedRe + coefRe*alignedIm);
                 
-                diff4 = (refRe-alignedRe2)*(refRe-alignedRe2) + (refIm-alignedIm2)*(refIm-alignedIm2);
+                weight4 = alignedRe2*alignedRe2 + alignedIm2*alignedIm2;
                 
                 // add magnitudes of differences
-                total_diff[i] += (diff4[0]+diff4[1]+diff4[2]+diff4[3]);
+                total_diff[i] += (weight4[0]+weight4[1]+weight4[2]+weight4[3]);
             }
         }
     }
@@ -1522,7 +1543,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
     float best_diff = 1e20f;
     int   best_i    = 0;
     
-    for (int i = 0; i < 81; i++) {
+    for (int i = 0; i < 49; i++) {
         
         if(total_diff[i] < best_diff) {
             
@@ -1532,8 +1553,8 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
     }
     
     // extract best shifts
-    float const best_shift_x = -0.5f + int(best_i % 9) * 0.125f;
-    float const best_shift_y = -0.5f + int(best_i / 9) * 0.125f;
+    float const best_shift_x = -0.5f + int(best_i % 7) * shift_step_size;
+    float const best_shift_y = -0.5f + int(best_i / 7) * shift_step_size;
     
     // perform the merging of the reference tile and the aligned comparison tile
     for (int dn = 0; dn < tile_size; dn++) {
@@ -1562,7 +1583,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             magnitude_norm = 1.0f;
             
             // if we are not at the central frequency bin (zero frequency), if the mismatch is low and if the burst has a uniform exposure
-            if(dm+dn > 0 & mismatch < 0.3f & uniform_exposure == 1) {
+            if (dm+dn > 0 & mismatch < 0.3f & uniform_exposure == 1) {
                 
                 // calculate magnitudes of complex frequency data
                 refMag      = sqrt(refRe*refRe + refIm*refIm);
@@ -1888,7 +1909,7 @@ kernel void equalize_exposure(texture2d<float, access::read_write> comp_texture 
     
     // correct exposure
     pixel_value = (pixel_value - black_level)*corr_factor + black_level;
-    pixel_value = clamp(pixel_value, 0.0f, float(UINT16_MAX_VAL));
+    pixel_value = clamp(pixel_value, 0.0f, float(FLOAT16_MAX_VAL));
 
     // write back into texture
     comp_texture.write(pixel_value[0], uint2(x,   y));
@@ -1910,18 +1931,23 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
                              constant float& black_level2 [[buffer(5)]],
                              constant float& black_level3 [[buffer(6)]],
                              constant float& color_factor_mean [[buffer(7)]],
+                             constant float* max_texture_buffer [[buffer(8)]],
                              uint2 gid [[thread_position_in_grid]]) {
    
     // load args
-    float4 const black_level_channels = float4(black_level0, black_level1, black_level2, black_level3);
+    float4 const black_level4 = float4(black_level0, black_level1, black_level2, black_level3);
+    float const black_level = black_level4[2*(gid.y%2) + (gid.x%2)];    
+    float const black_level_min = min(black_level0, min(black_level1, min(black_level2, black_level3)));
     float const black_level_mean = 0.25f*(black_level0+black_level1+black_level2+black_level3);
-    float const black_level = black_level_channels[2*(gid.y%2) + (gid.x%2)];
-    
+       
     // calculate gain for intensity correction
     float const correction_stops = float((target_exposure-exposure_bias)/100.0f);
     
+    // calculate pre-gain to use full range of intensity values before tone mapping operator is applied
+    float const pre_gain = clamp((white_level-black_level_min-0.5f)/(max_texture_buffer[0]-black_level_min), 1.0f, pow(2.0f, correction_stops));
+    
     // the gain is limited to 4.0 stops and it is slightly damped for values > 2.0 stops
-    float gain_stops = min(correction_stops, 4.0f);
+    float gain_stops = min(correction_stops-log2(pre_gain), 4.0f);
     float const gain0 = pow(2.0f, gain_stops-0.05f*max(0.0f, gain_stops-1.5f));
     float const gain1 = pow(2.0f, gain_stops/1.4f);
     
@@ -1929,7 +1955,7 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
     float pixel_value = final_texture.read(gid).r;
     
     // subtract black level and rescale intensity to range from 0 to 1
-    float const rescale_factor = white_level - min(black_level0, min(black_level1, min(black_level2, black_level3)));
+    float const rescale_factor = white_level - black_level_min;
     pixel_value = clamp((pixel_value-black_level)/rescale_factor, 0.0f, 1.0f);
    
     // use luminance estimated as the binomial weighted mean pixel value in a 3x3 window around the main pixel
@@ -1938,8 +1964,8 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
     luminance_before = clamp(luminance_before/(rescale_factor*color_factor_mean), 0.0f, 1.0f);
     
     // apply gains
-    float luminance_after0 = gain0 * luminance_before;
-    float luminance_after1 = gain1 * luminance_before;
+    float luminance_after0 = pre_gain * gain0 * luminance_before;
+    float luminance_after1 = pre_gain * gain1 * luminance_before;
         
     // apply tone mappting operator specified in equation (4) in https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
     // the operator is linear in the shadows and midtones while protecting the highlights
