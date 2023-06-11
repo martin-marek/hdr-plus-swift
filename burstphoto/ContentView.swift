@@ -65,16 +65,7 @@ struct ContentView: View {
                 my_alert.show = true
                 settings.exposure_control = " Off (works w/o exposure info)"
             }
-        })
-        .onReceive(progress.$show_bayer_exposure_alert, perform: { val in
-            if val {
-                my_alert.title = "Exposure control will be activated"
-                my_alert.message = "You have selected exposure control \"Off\" in the Preferences but have a burst with exposure bracketing. Press OK to use exposure control \"Exposure as darkest frame\"."
-                my_alert.dismiss_button = .default(Text("OK"))
-                my_alert.show = true
-                settings.exposure_control = " Exposure as darkest frame"
-            }
-        })
+        })    
         .frame(width: 350, height: 400)
     }
 }
@@ -207,7 +198,7 @@ struct SettingsView: View {
     let tile_sizes = ["Small", "Medium", "Large"]
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
-    let exposure_controls = [" Off (works w/o exposure info)", " Exposure as darkest frame", " Neutral exposure (±0 EV)", " Brighter exposure (+1 EV)"]
+    let exposure_controls = [" Off", " Linear (default)", " Non-linear (target ±0 EV)", " Non-linear (target +1 EV)"]
     
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
@@ -360,10 +351,10 @@ struct MyDropDelegate: DropDelegate {
             
             // set simplified value for parameter exposure control
             let exposure_control_dict = [
-                " Off (works w/o exposure info)" : "Off",
-                " Exposure as darkest frame"     : "Darkest",
-                " Neutral exposure (±0 EV)"      : "Neutral",
-                " Brighter exposure (+1 EV)"     : "Brighter",
+                " Off"                       : "Off",
+                " Linear (default)"          : "Linear",
+                " Non-linear (target ±0 EV)" : "Curve0",
+                " Non-linear (target +1 EV)" : "Curve1",
             ]
             let exposure_control_short = exposure_control_dict[settings.exposure_control]!
             

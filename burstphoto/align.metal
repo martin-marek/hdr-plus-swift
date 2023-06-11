@@ -1018,11 +1018,11 @@ kernel void correct_upsampling_error(texture2d<half, access::read> ref_texture [
 }
 
 
-kernel void warp_texture(texture2d<float, access::read> in_texture [[texture(0)]],
-                         texture2d<float, access::write> out_texture [[texture(1)]],
+kernel void warp_texture(texture2d<half, access::read> in_texture [[texture(0)]],
+                         texture2d<half, access::write> out_texture [[texture(1)]],
                          texture2d<int, access::read> prev_alignment [[texture(2)]],
                          constant int& downscale_factor [[buffer(0)]],
-                         constant int& tile_size [[buffer(1)]],
+                         constant int& half_tile_size [[buffer(1)]],
                          constant int& n_tiles_x [[buffer(2)]],
                          constant int& n_tiles_y [[buffer(3)]],
                          uint2 gid [[thread_position_in_grid]]) {
@@ -1030,10 +1030,11 @@ kernel void warp_texture(texture2d<float, access::read> in_texture [[texture(0)]
     // load args
     int const x = gid.x;
     int const y = gid.y;
+    float const half_tile_size_float = float(half_tile_size);
     
     // compute the coordinates of output pixel in tile-grid units
-    float const x_grid = (x+0.5f)/float(tile_size) - 1.0f;
-    float const y_grid = (y+0.5f)/float(tile_size) - 1.0f;
+    float const x_grid = (x+0.5f)/half_tile_size_float - 1.0f;
+    float const y_grid = (y+0.5f)/half_tile_size_float - 1.0f;
     
     int const x_grid_floor = int(max(0.0f, floor(x_grid)) + 0.1f);
     int const y_grid_floor = int(max(0.0f, floor(y_grid)) + 0.1f);
@@ -1041,8 +1042,8 @@ kernel void warp_texture(texture2d<float, access::read> in_texture [[texture(0)]
     int const y_grid_ceil  = int(min(ceil(y_grid), n_tiles_y-1.0f) + 0.1f);
     
     // weights calculated for the bilinear interpolation
-    float const weight_x = ((x % tile_size) + 0.5f)/float(2.0f*tile_size);
-    float const weight_y = ((y % tile_size) + 0.5f)/float(2.0f*tile_size);
+    float const weight_x = ((x % half_tile_size) + 0.5f)/(2.0f*half_tile_size_float);
+    float const weight_y = ((y % half_tile_size) + 0.5f)/(2.0f*half_tile_size_float);
     
     // factor in alignment
     int4 const prev_align0 = downscale_factor * prev_alignment.read(uint2(x_grid_floor, y_grid_floor));
@@ -1944,10 +1945,10 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
     float const correction_stops = float((target_exposure-exposure_bias)/100.0f);
     
     // calculate pre-gain to use full range of intensity values before tone mapping operator is applied
-    float const pre_gain = clamp((white_level-black_level_min-0.5f)/(max_texture_buffer[0]-black_level_min), 1.0f, pow(2.0f, correction_stops));
+    float const pre_gain = clamp((white_level-black_level_min-0.5f)/(max_texture_buffer[0]-black_level_min), 1.0f, 16.0f);
     
     // the gain is limited to 4.0 stops and it is slightly damped for values > 2.0 stops
-    float gain_stops = min(correction_stops-log2(pre_gain), 4.0f);
+    float gain_stops = clamp(correction_stops-log2(pre_gain), 0.0f, 4.0f);
     float const gain0 = pow(2.0f, gain_stops-0.05f*max(0.0f, gain_stops-1.5f));
     float const gain1 = pow(2.0f, gain_stops/1.4f);
     
