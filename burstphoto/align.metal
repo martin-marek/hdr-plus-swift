@@ -1944,11 +1944,12 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
     // calculate gain for intensity correction
     float const correction_stops = float((target_exposure-exposure_bias)/100.0f);
     
-    // calculate pre-gain to use full range of intensity values before tone mapping operator is applied
-    float const pre_gain = clamp((white_level-black_level_min-0.5f)/(max_texture_buffer[0]-black_level_min), 1.0f, 16.0f);
+    // calculate linear gain to get close to full range of intensity values before tone mapping operator is applied
+    float linear_gain = color_factor_mean*(white_level-black_level_min)/(max_texture_buffer[0]-black_level_min);
+    linear_gain = clamp(0.9f*(linear_gain-1.0f)+1.0f, 1.0f, 16.0f);
     
     // the gain is limited to 4.0 stops and it is slightly damped for values > 2.0 stops
-    float gain_stops = clamp(correction_stops-log2(pre_gain), 0.0f, 4.0f);
+    float gain_stops = clamp(correction_stops-log2(linear_gain), 0.0f, 4.0f);
     float const gain0 = pow(2.0f, gain_stops-0.05f*max(0.0f, gain_stops-1.5f));
     float const gain1 = pow(2.0f, gain_stops/1.4f);
     
@@ -1961,12 +1962,12 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
    
     // use luminance estimated as the binomial weighted mean pixel value in a 3x3 window around the main pixel
     // apply correction with color factors to reduce clipping of the green color channel
-    float luminance_before = final_texture_blurred.read(gid).r - black_level_mean;
-    luminance_before = clamp(luminance_before/(rescale_factor*color_factor_mean), 0.0f, 1.0f);
+    float luminance_before = final_texture_blurred.read(gid).r;
+    luminance_before = clamp((luminance_before-black_level_mean)/(rescale_factor*color_factor_mean), 0.0f, 1.0f);
     
     // apply gains
-    float luminance_after0 = pre_gain * gain0 * luminance_before;
-    float luminance_after1 = pre_gain * gain1 * luminance_before;
+    float luminance_after0 = linear_gain * gain0 * luminance_before;
+    float luminance_after1 = linear_gain * gain1 * luminance_before;
         
     // apply tone mappting operator specified in equation (4) in https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
     // the operator is linear in the shadows and midtones while protecting the highlights

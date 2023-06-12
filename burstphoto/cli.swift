@@ -1,6 +1,4 @@
 import Foundation
-import CoreImage
-import MetalKit
 import MetalPerformanceShaders
 
 // this is a command-line interface for Burst Photo, and is not part of the GUI application
@@ -41,7 +39,7 @@ struct MyProgram {
             let tile_size = "Medium"
             // options: "Small", "Medium" or "Large"
             let search_distance = "Medium"
-            // options: "Off", "Darkest", "Neutral" or "Brighter"
+            // options: "Off", "Linear", "Curve0" or "Curve1"
             let exposure_control = "Off"
             
             // align+merge
