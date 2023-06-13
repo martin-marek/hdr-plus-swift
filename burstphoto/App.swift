@@ -39,7 +39,11 @@ struct burstphotoApp: App {
         .windowStyle(HiddenTitleBarWindowStyle())
         .commands {
             CommandGroup(replacing: .newItem, addition: {}) // disables creating any new windows
-            CommandGroup(replacing: .help, addition: {}) // disables help menu
+            CommandGroup(replacing: .help) { // open Burst Photo website
+                Button(action: {NSWorkspace.shared.open(URL(string: "https://burst.photo/help/")!)}) {
+                    Text("Burst Photo Help")
+                }
+            }
         }
         Settings {
             SettingsView(settings: settings)

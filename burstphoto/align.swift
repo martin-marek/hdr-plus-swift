@@ -47,8 +47,7 @@ let upsample_nearest_int_state = try! device.makeComputePipelineState(function: 
 let upsample_bilinear_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_bilinear_float")!)
 let avg_pool_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "avg_pool")!)
 let avg_pool_normalization_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "avg_pool_normalization")!)
-let blur_mosaic_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_mosaic_x")!)
-let blur_mosaic_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_mosaic_y")!)
+let blur_mosaic_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_mosaic_texture")!)
 let extend_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "extend_texture")!)
 let crop_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "crop_texture")!)
 let add_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture")!)
@@ -56,8 +55,8 @@ let add_texture_highlights_state = try! device.makeComputePipelineState(function
 let add_texture_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture_exposure")!)
 let normalize_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_texture")!)
 let copy_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "copy_texture")!)
-let convert_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_rgba")!)
-let convert_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_bayer")!)
+let convert_to_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_to_rgba")!)
+let convert_to_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_to_bayer")!)
 let average_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x")!)
 let average_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y")!)
 let average_x_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x_rgba")!)
@@ -552,7 +551,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left_not_r
     let tile_info_merge = TileInfo(tile_size: tile_size, tile_size_merge: tile_size_merge, search_dist: 0, n_tiles_x: (texture_width_orig+tile_size_merge+2*pad_merge_x)/(2*tile_size_merge), n_tiles_y: (texture_height_orig+tile_size_merge+2*pad_merge_y)/(2*tile_size_merge), n_pos_1d: 0, n_pos_2d: 0)
   
     // convert reference texture into RGBA pixel format that SIMD instructions can be applied
-    let ref_texture_rgba = convert_rgba(ref_texture, crop_merge_x, crop_merge_y)
+    let ref_texture_rgba = convert_to_rgba(ref_texture, crop_merge_x, crop_merge_y)
     
     // estimate noise level of tiles
     let rms_texture = calculate_rms_rgba(ref_texture_rgba, tile_info_merge)
@@ -589,7 +588,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left_not_r
         color_factors3 = [color_factors[comp_idx*3+0], color_factors[comp_idx*3+1], color_factors[comp_idx*3+2]]
         
         // align comparison texture
-        let aligned_texture_rgba = convert_rgba(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean, color_factors3), crop_merge_x, crop_merge_y)
+        let aligned_texture_rgba = convert_to_rgba(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean, color_factors3), crop_merge_x, crop_merge_y)
                  
         // calculate exposure factor between reference texture and aligned texture
         let exposure_factor = pow(2.0, (Double(exposure_bias[comp_idx]-exposure_bias[ref_idx])/100.0))
@@ -635,7 +634,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left_not_r
     // reduce potential artifacts at tile borders
     reduce_artifacts_tile_border(output_texture, ref_texture_rgba, tile_info_merge, black_level, ref_idx)
     // convert back to the 2x2 pixel structure and crop to original size
-    output_texture = crop_texture(convert_bayer(output_texture), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
+    output_texture = crop_texture(convert_to_bayer(output_texture), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
     
     // add output texture to the final texture to collect all textures of the four iterations
     add_texture(output_texture, final_texture, 1)
@@ -792,21 +791,23 @@ func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_
     // blur the texture along the x-axis
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = blur_mosaic_x_state
+    let state = blur_mosaic_texture_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(blur_x, index: 1)
     command_encoder.setBytes([Int32(kernel_size_mapped)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 1)    
+    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(0)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-
+    
     // blur the texture along the y-axis
-    let state2 = blur_mosaic_y_state
-    command_encoder.setComputePipelineState(state2)
     command_encoder.setTexture(blur_x, index: 0)
     command_encoder.setTexture(blur_xy, index: 1)
+    command_encoder.setBytes([Int32(in_texture.height)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(1)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     
     command_encoder.endEncoding()
@@ -973,7 +974,7 @@ func copy_texture(_ in_texture: MTLTexture) -> MTLTexture {
 }
 
 
-func convert_rgba(_ in_texture: MTLTexture, _ crop_merge_x: Int, _ crop_merge_y: Int) -> MTLTexture {
+func convert_to_rgba(_ in_texture: MTLTexture, _ crop_merge_x: Int, _ crop_merge_y: Int) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: (in_texture.width-2*crop_merge_x)/2, height: (in_texture.height-2*crop_merge_y)/2, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
@@ -981,7 +982,7 @@ func convert_rgba(_ in_texture: MTLTexture, _ crop_merge_x: Int, _ crop_merge_y:
         
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = convert_rgba_state
+    let state = convert_to_rgba_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
@@ -997,7 +998,7 @@ func convert_rgba(_ in_texture: MTLTexture, _ crop_merge_x: Int, _ crop_merge_y:
 }
 
 
-func convert_bayer(_ in_texture: MTLTexture) -> MTLTexture {
+func convert_to_bayer(_ in_texture: MTLTexture) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: in_texture.pixelFormat, width: in_texture.width*2, height: in_texture.height*2, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
@@ -1005,7 +1006,7 @@ func convert_bayer(_ in_texture: MTLTexture) -> MTLTexture {
         
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = convert_bayer_state
+    let state = convert_to_bayer_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
@@ -1597,7 +1598,7 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int]) {
     }
     
     // calculate mean value specific for each color channel
-    let mean_texture_buffer = texture_mean(convert_rgba(average_texture, 0, 0), "rgba")
+    let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), "rgba")
     
     // standard parameters if black level is not available / available
     let hot_pixel_threshold     = (black_level[0] == -1) ? 1.0 : 2.0
@@ -1673,10 +1674,10 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
     
     // set target exposure
     let target_exposure_dict = [
-        "Off"    : -100000,
-        "Linear" : exposure_bias[ref_idx],
-        "Curve0" : 0,
-        "Curve1" : +100,
+        "Off"      : -100000,
+        "Linear"   : exposure_bias[ref_idx],
+        "Curve0EV" : 0,
+        "Curve1EV" : +100,
     ]
     let target_exposure = target_exposure_dict[exposure_control]!
         

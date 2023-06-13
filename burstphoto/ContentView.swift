@@ -63,7 +63,7 @@ struct ContentView: View {
                 my_alert.message = "You have selected exposure control other than \"Off\" in the Preferences, which is not supported for your camera. Press OK to use exposure control \"Off\"."
                 my_alert.dismiss_button = .default(Text("OK"))
                 my_alert.show = true
-                settings.exposure_control = " Off (works w/o exposure info)"
+                settings.exposure_control = " Off"
             }
         })    
         .frame(width: 350, height: 400)
@@ -353,8 +353,8 @@ struct MyDropDelegate: DropDelegate {
             let exposure_control_dict = [
                 " Off"                       : "Off",
                 " Linear (default)"          : "Linear",
-                " Non-linear (target ±0 EV)" : "Curve0",
-                " Non-linear (target +1 EV)" : "Curve1",
+                " Non-linear (target ±0 EV)" : "Curve0EV",
+                " Non-linear (target +1 EV)" : "Curve1EV",
             ]
             let exposure_control_short = exposure_control_dict[settings.exposure_control]!
             

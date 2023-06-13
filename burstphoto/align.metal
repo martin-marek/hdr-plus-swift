@@ -145,59 +145,13 @@ kernel void avg_pool_normalization(texture2d<float, access::read> in_texture [[t
 }
 
 
-kernel void blur_mosaic_x(texture2d<float, access::read> in_texture [[texture(0)]],
-                          texture2d<float, access::write> out_texture [[texture(1)]],
-                          constant int& kernel_size [[buffer(0)]],
-                          constant int& mosaic_pattern_width [[buffer(1)]],
-                          uint2 gid [[thread_position_in_grid]]) {
-    
-    // load args
-    int texture_width = in_texture.get_width();
-    
-    // set kernel weights of binomial filter for identity operation
-    float bw[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
-    int kernel_size_trunc = kernel_size;
-    
-    // to speed up calculations, kernels are truncated in such a way that the total contribution of removed weights is smaller than 0.25%
-    if (kernel_size== 1)      {bw[0]=    2; bw[1]=    1;}
-    else if (kernel_size== 2) {bw[0]=    6; bw[1]=    4; bw[2]=   1;}
-    else if (kernel_size== 3) {bw[0]=   20; bw[1]=   15; bw[2]=   6; bw[3]=   1;}
-    else if (kernel_size== 4) {bw[0]=   70; bw[1]=   56; bw[2]=  28; bw[3]=   8; bw[4]=   1;}
-    else if (kernel_size== 5) {bw[0]=  252; bw[1]=  210; bw[2]= 120; bw[3]=  45; bw[4]=  10; kernel_size_trunc=4;}
-    else if (kernel_size== 6) {bw[0]=  924; bw[1]=  792; bw[2]= 495; bw[3]= 220; bw[4]=  66; bw[5]= 12; kernel_size_trunc=5;}
-    else if (kernel_size== 7) {bw[0]= 3432; bw[1]= 3003; bw[2]=2002; bw[3]=1001; bw[4]= 364; bw[5]= 91; kernel_size_trunc=5;}
-    else if (kernel_size== 8) {bw[0]=12870; bw[1]=11440; bw[2]=8008; bw[3]=4368; bw[4]=1820; bw[5]=560; bw[6]=120; kernel_size_trunc=6;}
-    else if (kernel_size==16) {bw[0]=601080390; bw[1]=565722720; bw[2]=471435600; bw[3]=347373600; bw[4]=225792840; bw[5]=129024480; bw[6]=64512240; bw[7]=28048800; bw[8]=10518300; kernel_size_trunc=8;}
-    
-    // compute a sigle output pixel
-    float total_intensity = 0;
-    float total_weight = 0;
-    int y = gid.y;
-    
-    for (int dx = -kernel_size_trunc; dx <= kernel_size_trunc; dx++) {
-        int x = gid.x + mosaic_pattern_width*dx;
-        if (0 <= x && x < texture_width) {
-
-            float const weight = bw[abs(dx)];
-            total_intensity += weight * in_texture.read(uint2(x, y)).r;
-            total_weight += weight;
-        }
-    }
-    
-    // write output pixel
-    float out_intensity = total_intensity / total_weight;
-    out_texture.write(out_intensity, gid);
-}
-
-
-kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)]],
-                          texture2d<float, access::write> out_texture [[texture(1)]],
-                          constant int& kernel_size [[buffer(0)]],
-                          constant int& mosaic_pattern_width [[buffer(1)]],
-                          uint2 gid [[thread_position_in_grid]]) {
-    
-    // load args
-    int texture_height = in_texture.get_height();
+kernel void blur_mosaic_texture(texture2d<float, access::read> in_texture [[texture(0)]],
+                                texture2d<float, access::write> out_texture [[texture(1)]],
+                                constant int& kernel_size [[buffer(0)]],
+                                constant int& mosaic_pattern_width [[buffer(1)]],
+                                constant int& texture_size [[buffer(2)]],
+                                constant int& direction [[buffer(3)]],
+                                uint2 gid [[thread_position_in_grid]]) {
     
     // set kernel weights of binomial filter for identity operation
     float bw[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -214,17 +168,23 @@ kernel void blur_mosaic_y(texture2d<float, access::read> in_texture [[texture(0)
     else if (kernel_size== 8) {bw[0]=12870; bw[1]=11440; bw[2]=8008; bw[3]=4368; bw[4]=1820; bw[5]=560; bw[6]=120; kernel_size_trunc=6;}
     else if (kernel_size==16) {bw[0]=601080390; bw[1]=565722720; bw[2]=471435600; bw[3]=347373600; bw[4]=225792840; bw[5]=129024480; bw[6]=64512240; bw[7]=28048800; bw[8]=10518300; kernel_size_trunc=8;}
     
-    // compute a sigle output pixel
-    float total_intensity = 0;
-    float total_weight = 0;
-    int x = gid.x;
+    // compute a single output pixel
+    float total_intensity = 0.0f;
+    float total_weight = 0.0f;
+    float weight;
     
-    for (int dy = -kernel_size_trunc; dy <= kernel_size_trunc; dy++) {
-        int y = gid.y + mosaic_pattern_width*dy;
-        if (0 <= y && y < texture_height) {
+    // direction = 0: blurring in x-direction, direction = 1: blurring in y-direction
+    uint2 xy;    
+    xy[1-direction] = gid[1-direction];
+    int const i0 = gid[direction];
+    
+    for (int di = -kernel_size_trunc; di <= kernel_size_trunc; di++) {
+        int i = i0 + mosaic_pattern_width*di;
+        if (0 <= i && i < texture_size) {
            
-            float const weight = bw[abs(dy)];
-            total_intensity += weight * in_texture.read(uint2(x, y)).r;
+            xy[direction] = i;
+            weight = bw[abs(di)];
+            total_intensity += weight * in_texture.read(xy).r;
             total_weight += weight;
         }
     }
@@ -456,11 +416,11 @@ kernel void copy_texture(texture2d<float, access::read> in_texture [[texture(0)]
 }
 
 
-kernel void convert_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
-                         texture2d<float, access::write> out_texture [[texture(1)]],
-                         constant int& crop_merge_x [[buffer(0)]],
-                         constant int& crop_merge_y [[buffer(1)]],
-                         uint2 gid [[thread_position_in_grid]]) {
+kernel void convert_to_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
+                            texture2d<float, access::write> out_texture [[texture(1)]],
+                            constant int& crop_merge_x [[buffer(0)]],
+                            constant int& crop_merge_y [[buffer(1)]],
+                            uint2 gid [[thread_position_in_grid]]) {
     
     int const m = gid.x*2 + crop_merge_x;
     int const n = gid.y*2 + crop_merge_y;
@@ -472,9 +432,9 @@ kernel void convert_rgba(texture2d<float, access::read> in_texture [[texture(0)]
 }
 
 
-kernel void convert_bayer(texture2d<float, access::read> in_texture [[texture(0)]],
-                          texture2d<float, access::write> out_texture [[texture(1)]],
-                          uint2 gid [[thread_position_in_grid]]) {
+kernel void convert_to_bayer(texture2d<float, access::read> in_texture [[texture(0)]],
+                             texture2d<float, access::write> out_texture [[texture(1)]],
+                             uint2 gid [[thread_position_in_grid]]) {
     
     int const m = gid.x*2;
     int const n = gid.y*2;
