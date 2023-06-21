@@ -1964,14 +1964,12 @@ kernel void correct_exposure_linear(texture2d<float, access::read_write> final_t
     float4 const black_level4 = float4(black_level0, black_level1, black_level2, black_level3);
     float const black_level = black_level4[2*(gid.y%2) + (gid.x%2)];
     float const black_level_min = min(black_level0, min(black_level1, min(black_level2, black_level3)));
-    
-    float corr_factor = linear_gain;
-    
-    if (corr_factor < 0.0f) {
-        // calculate correction factor to get close to full range of intensity values
-        corr_factor = color_factor_mean*(white_level-black_level_min)/(max_texture_buffer[0]-black_level_min);
-        corr_factor = clamp(0.9f*(corr_factor-1.0f)+1.0f, 1.0f, 16.0f);
-    }
+
+    // calculate correction factor to get close to full range of intensity values
+    float corr_factor = color_factor_mean*(white_level-black_level_min)/(max_texture_buffer[0]-black_level_min);
+    corr_factor = clamp(0.9f*(corr_factor-1.0f)+1.0f, 1.0f, 16.0f);
+    // use maximum of specified linear gain and correction factor
+    corr_factor = max(linear_gain, corr_factor);
        
     // extract pixel value
     float pixel_value = final_texture.read(gid).r;
