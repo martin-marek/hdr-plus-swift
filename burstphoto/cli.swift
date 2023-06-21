@@ -39,7 +39,7 @@ struct MyProgram {
             let tile_size = "Medium"
             // options: "Small", "Medium" or "Large"
             let search_distance = "Medium"
-            // options: "Off", "Linear", "Curve0EV" or "Curve1EV"
+            // options: "Off", "LinearDefault", "Linear1EV", "Curve0EV" or "Curve1EV"
             let exposure_control = "Off"
             
             // align+merge

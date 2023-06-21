@@ -83,6 +83,7 @@ let normalize_mismatch_state = try! device.makeComputePipelineState(function: mf
 let correct_hotpixels_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_hotpixels")!)
 let equalize_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure")!)
 let correct_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure")!)
+let correct_exposure_linear_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure_linear")!)
 let deconvolute_frequency_domain_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "deconvolute_frequency_domain")!)
 let reduce_artifacts_tile_border_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "reduce_artifacts_tile_border")!)
 
@@ -1671,15 +1672,6 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
       
     let final_texture_blurred = blur_mosaic_texture(final_texture, 1, 1)
     let max_texture_buffer = texture_max(final_texture_blurred)
-    
-    // set target exposure
-    let target_exposure_dict = [
-        "Off"      : -100000,
-        "Linear"   : exposure_bias[ref_idx],
-        "Curve0EV" : 0,
-        "Curve1EV" : +100,
-    ]
-    let target_exposure = target_exposure_dict[exposure_control]!
         
     // only apply exposure correction if reference image has an exposure, which is lower than the target exposure
     if (exposure_control != "Off" && white_level != -1 && black_level[0] != -1) {
@@ -1723,21 +1715,34 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         
         let command_buffer = command_queue.makeCommandBuffer()!
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
-        let state = correct_exposure_state
+        let state = (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") ? correct_exposure_state : correct_exposure_linear_state
         command_encoder.setComputePipelineState(state)
         let threads_per_grid = MTLSize(width: final_texture.width, height: final_texture.height, depth: 1)
         let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-        command_encoder.setTexture(final_texture_blurred, index: 0)
-        command_encoder.setTexture(final_texture, index: 1)
-        command_encoder.setBytes([Int32(exposure_bias[ref_idx])], length: MemoryLayout<Int32>.stride, index: 0)
-        command_encoder.setBytes([Int32(target_exposure)], length: MemoryLayout<Int32>.stride, index: 1)
-        command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 2)
-        command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 3)
-        command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 4)
-        command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 5)
-        command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 6)
-        command_encoder.setBytes([Float32(color_factor_mean)], length: MemoryLayout<Float32>.stride, index: 7)
-        command_encoder.setBuffer(max_texture_buffer, offset: 0, index: 8)
+        
+        if (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") {
+            command_encoder.setTexture(final_texture_blurred, index: 0)
+            command_encoder.setTexture(final_texture, index: 1)
+            command_encoder.setBytes([Int32(exposure_bias[ref_idx])], length: MemoryLayout<Int32>.stride, index: 0)
+            command_encoder.setBytes([Int32(exposure_control=="Curve0EV" ? 0 : 100)], length: MemoryLayout<Int32>.stride, index: 1)
+            command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 2)
+            command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 3)
+            command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 4)
+            command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 5)
+            command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 6)
+            command_encoder.setBytes([Float32(color_factor_mean)], length: MemoryLayout<Float32>.stride, index: 7)
+            command_encoder.setBuffer(max_texture_buffer, offset: 0, index: 8)
+        } else {
+            command_encoder.setTexture(final_texture, index: 0)
+            command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 0)
+            command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 1)
+            command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 2)
+            command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 3)
+            command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 4)
+            command_encoder.setBytes([Float32(color_factor_mean)], length: MemoryLayout<Float32>.stride, index: 5)
+            command_encoder.setBuffer(max_texture_buffer, offset: 0, index: 6)
+            command_encoder.setBytes([Float32(exposure_control=="LinearDefault" ? -1.0 : 2.0)], length: MemoryLayout<Float32>.stride, index: 7)
+        }
         command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
         command_encoder.endEncoding()
         command_buffer.commit()

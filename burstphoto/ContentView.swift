@@ -198,7 +198,7 @@ struct SettingsView: View {
     let tile_sizes = ["Small", "Medium", "Large"]
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
-    let exposure_controls = [" Off", " Linear (default)", " Non-linear (target ±0 EV)", " Non-linear (target +1 EV)"]
+    let exposure_controls = [" Off", " Linear (default)", " Linear (relative +1 EV)", " Non-linear (target ±0 EV)", " Non-linear (target +1 EV)"]
     
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
@@ -352,7 +352,8 @@ struct MyDropDelegate: DropDelegate {
             // set simplified value for parameter exposure control
             let exposure_control_dict = [
                 " Off"                       : "Off",
-                " Linear (default)"          : "Linear",
+                " Linear (default)"          : "LinearDefault",
+                " Linear (relative +1 EV)"   : "Linear1EV",               
                 " Non-linear (target ±0 EV)" : "Curve0EV",
                 " Non-linear (target +1 EV)" : "Curve1EV",
             ]
