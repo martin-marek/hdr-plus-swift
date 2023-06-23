@@ -236,7 +236,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     } else if merging_algorithm == "Higher quality" {
         print("Merging in the frequency domain...")
         
-        // the tile size for merging in frequency domain is set to 8x8 for all tile sizes used for alignment. The smaller tile size leads to a reduction of artifacts at specular highlights at the expense of a slightly reduced suppression of low-frequency noise in the shadows
+        // The tile size for merging in frequency domain is set to 8x8 for all tile sizes used for alignment. The smaller tile size leads to a reduction of artifacts at specular highlights at the expense of a slightly reduced suppression of low-frequency noise in the shadows. The fixed value of 8 is supported by the highly-optimized fast Fourier transform (works up to value of <= 16). A slow, but easier to understand discrete Fourier transform is also provided for values larger than 16.
         // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
         let tile_size_merge = Int(8)
 
