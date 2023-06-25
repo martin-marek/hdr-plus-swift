@@ -35,6 +35,7 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 - [x] Bayer sensor support (good)
 - [x] non-Bayer sensor support (beta)
 - [x] support for bursts with bracketed exposure
+- [x] optional exposure correction to improve tonality in the shadows
 - [x] preserves lens profiles
 - [x] hot pixel suppression
 - [x] multi-threaded image loading
