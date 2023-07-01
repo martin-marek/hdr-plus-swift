@@ -1905,7 +1905,7 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
     float const correction_stops = float((target_exposure-exposure_bias)/100.0f);
     
     // calculate linear gain to get close to full range of intensity values before tone mapping operator is applied
-    float linear_gain = color_factor_mean*(white_level-black_level_min)/(max_texture_buffer[0]-black_level_min);
+    float linear_gain = (white_level-black_level_min)/(max_texture_buffer[0]-black_level_min);
     linear_gain = clamp(0.9f*(linear_gain-1.0f)+1.0f, 1.0f, 16.0f);
     
     // the gain is limited to 4.0 stops and it is slightly damped for values > 2.0 stops
@@ -1916,14 +1916,14 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
     // extract pixel value
     float pixel_value = final_texture.read(gid).r;
     
-    // subtract black level and rescale intensity to range from 0 to 100
-    float const rescale_factor = 0.01f*(white_level - black_level_min);
-    pixel_value = clamp((pixel_value-black_level)/rescale_factor, 0.0f, 100.0f);
+    // subtract black level and rescale intensity to range from 0 to 1
+    float const rescale_factor = (white_level - black_level_min);
+    pixel_value = clamp((pixel_value-black_level)/rescale_factor, 0.0f, 1.0f);
    
     // use luminance estimated as the binomial weighted mean pixel value in a 3x3 window around the main pixel
     // apply correction with color factors to reduce clipping of the green color channel
     float luminance_before = final_texture_blurred.read(gid).r;
-    luminance_before = clamp((luminance_before-black_level_mean)/(rescale_factor*color_factor_mean), 0.0f, 100.0f);
+    luminance_before = clamp((luminance_before-black_level_mean)/(rescale_factor*color_factor_mean), 0.0f, 1.0f);
     
     // apply gains
     float luminance_after0 = linear_gain * gain0 * luminance_before;
@@ -1955,19 +1955,18 @@ kernel void correct_exposure_linear(texture2d<float, access::read_write> final_t
                                     constant float& black_level1 [[buffer(2)]],
                                     constant float& black_level2 [[buffer(3)]],
                                     constant float& black_level3 [[buffer(4)]],
-                                    constant float& color_factor_mean [[buffer(5)]],
-                                    constant float* max_texture_buffer [[buffer(6)]],
-                                    constant float& linear_gain [[buffer(7)]],
+                                    constant float* max_texture_buffer [[buffer(5)]],
+                                    constant float& linear_gain [[buffer(6)]],
                                     uint2 gid [[thread_position_in_grid]]) {
    
     // load args
     float4 const black_level4 = float4(black_level0, black_level1, black_level2, black_level3);
     float const black_level = black_level4[2*(gid.y%2) + (gid.x%2)];
     float const black_level_min = min(black_level0, min(black_level1, min(black_level2, black_level3)));
-
+    
     // calculate correction factor to get close to full range of intensity values
-    float corr_factor = color_factor_mean*(white_level-black_level_min)/(max_texture_buffer[0]-black_level_min);
-    corr_factor = clamp(0.9f*(corr_factor-1.0f)+1.0f, 1.0f, 16.0f);
+    float corr_factor = (white_level-black_level_min)/(max_texture_buffer[0]-black_level_min);
+    corr_factor = clamp(0.9f*corr_factor, 1.0f, 16.0f);
     // use maximum of specified linear gain and correction factor
     corr_factor = max(linear_gain, corr_factor);
        
