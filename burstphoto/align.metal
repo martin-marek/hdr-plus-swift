@@ -1906,7 +1906,7 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
     
     // calculate linear gain to get close to full range of intensity values before tone mapping operator is applied
     float linear_gain = (white_level-black_level_min)/(max_texture_buffer[0]-black_level_min);
-    linear_gain = clamp(0.9f*(linear_gain-1.0f)+1.0f, 1.0f, 16.0f);
+    linear_gain = clamp(0.9f*linear_gain, 1.0f, 16.0f);
     
     // the gain is limited to 4.0 stops and it is slightly damped for values > 2.0 stops
     float gain_stops = clamp(correction_stops-log2(linear_gain), 0.0f, 4.0f);
