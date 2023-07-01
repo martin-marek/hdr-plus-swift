@@ -11,7 +11,7 @@ Fortunately, Google has published a [paper](http://static.googleusercontent.com/
 
 When you capture a burst of images handheld or if the images contain movement (people, cars, stars, etc), the images need to be aligned to each other before they can be merged. In the case of astrophotography, the alignment is relatively simple since all the stars are moving in the same direction. In the case of portraits, this is a hard problem: a person can tilt their head, squint, and alter their smile, all at the same time. For these reasons, taking a long exposure is not an option to reduce noise. The only option is to capture a burst of shorter images and merge them using a pipeline like this.
 
-In our pipeline, we first pick a "reference" image (the middle image) and try to align all the other "comparison" images to this image.
+In our pipeline, we first pick a "reference" image (typically the middle image) and try to align all the other "comparison" images to this image.
 
 To align one of the comparison images with the reference image, we resize both of the images to a very small resolution. Afterwards, we divide the comparison image into a grid of tiles and try to align each tile to the reference image.
 
