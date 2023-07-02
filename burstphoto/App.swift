@@ -6,7 +6,7 @@ class AppSettings: ObservableObject {
     @AppStorage("search_distance") var search_distance: String = "Medium"
     @AppStorage("merging_algorithm") var merging_algorithm: String = "Fast"
     @AppStorage("noise_reduction") var noise_reduction: Double = 13.0
-    @AppStorage("exposure_control") var exposure_control: String = "Off"
+    @AppStorage("exposure_control") var exposure_control: String = " Linear (full bit range)"
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {

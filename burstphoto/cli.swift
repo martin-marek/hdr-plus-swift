@@ -39,8 +39,8 @@ struct MyProgram {
             let tile_size = "Medium"
             // options: "Small", "Medium" or "Large"
             let search_distance = "Medium"
-            // options: "Off", "LinearDefault", "Linear1EV", "Curve0EV" or "Curve1EV"
-            let exposure_control = "Off"
+            // options: "Off", "LinearFullRange", "Linear1EV", "Curve0EV" or "Curve1EV"
+            let exposure_control = "LinearFullRange"
             
             // align+merge
             let out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: merging_algorithm, tile_size: tile_size, search_distance: search_distance, noise_reduction: noise_reduction, exposure_control: exposure_control)

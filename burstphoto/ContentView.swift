@@ -198,7 +198,7 @@ struct SettingsView: View {
     let tile_sizes = ["Small", "Medium", "Large"]
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
-    let exposure_controls = [" Off", " Linear (default)", " Linear (relative +1 EV)", " Non-linear (target ±0 EV)", " Non-linear (target +1 EV)"]
+    let exposure_controls = [" Off", " Linear (full bit range)", " Linear (relative +1 EV)", " Non-linear (target ±0 EV)", " Non-linear (target +1 EV)"]
     
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
@@ -335,6 +335,41 @@ struct MyDropDelegate: DropDelegate {
                 }
             }
         }
+
+        // check input parameter tile size
+        if settings.tile_size != "Small" && settings.tile_size != "Medium" && settings.tile_size != "Large" {
+           settings.tile_size = "Medium"
+        }
+        
+        // check input parameter search distance
+        if settings.search_distance != "Small" && settings.search_distance != "Medium" && settings.search_distance != "Large" {
+            settings.search_distance = "Medium"
+        }
+        
+        // check input parameter merging algorithm
+        if settings.merging_algorithm != "Fast" && settings.merging_algorithm != "Higher quality" {
+            settings.merging_algorithm = "Fast"
+        }
+        
+        // check input parameter exposure control
+        if settings.exposure_control != " Off" && settings.exposure_control != " Linear (full bit range)" && settings.exposure_control != " Linear (relative +1 EV)" && settings.exposure_control != " Non-linear (target ±0 EV)" && settings.exposure_control != " Non-linear (target +1 EV)" {
+            settings.exposure_control = " Linear (full bit range)"
+        }
+        
+        // check input parameter noise reduction
+        if settings.noise_reduction < 1 || settings.noise_reduction > 23 {
+            settings.noise_reduction = 13
+        }
+        
+        // set simplified value for parameter exposure control
+        let exposure_control_dict = [
+            " Off"                       : "Off",
+            " Linear (full bit range)"   : "LinearFullRange",
+            " Linear (relative +1 EV)"   : "Linear1EV",
+            " Non-linear (target ±0 EV)" : "Curve0EV",
+            " Non-linear (target +1 EV)" : "Curve1EV",
+        ]
+        let exposure_control_short = exposure_control_dict[settings.exposure_control]!
         
         DispatchQueue.global().async {
             // wait until all the urls are loaded
@@ -348,16 +383,6 @@ struct MyDropDelegate: DropDelegate {
             
             // sort the urls alphabetically
             image_urls.sort(by: {$0.path < $1.path})
-            
-            // set simplified value for parameter exposure control
-            let exposure_control_dict = [
-                " Off"                       : "Off",
-                " Linear (default)"          : "LinearDefault",
-                " Linear (relative +1 EV)"   : "Linear1EV",               
-                " Non-linear (target ±0 EV)" : "Curve0EV",
-                " Non-linear (target +1 EV)" : "Curve1EV",
-            ]
-            let exposure_control_short = exposure_control_dict[settings.exposure_control]!
             
             // sync GUI
             DispatchQueue.main.async {

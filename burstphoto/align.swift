@@ -95,7 +95,7 @@ let reduce_artifacts_tile_border_state = try! device.makeComputePipelineState(fu
 
 
 // main function of the burst photo app
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "Off") throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange") throws -> URL {
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -1742,7 +1742,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
             command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 3)
             command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 4)
             command_encoder.setBuffer(max_texture_buffer, offset: 0, index: 5)
-            command_encoder.setBytes([Float32(exposure_control=="LinearDefault" ? -1.0 : 2.0)], length: MemoryLayout<Float32>.stride, index: 6)
+            command_encoder.setBytes([Float32(exposure_control=="LinearFullRange" ? -1.0 : 2.0)], length: MemoryLayout<Float32>.stride, index: 6)
         }
         command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
         command_encoder.endEncoding()

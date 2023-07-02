@@ -384,7 +384,7 @@ kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[tex
     float weight_pixel_value = 1.0f;
     
     // this ensures that pixels of the image with lowest exposure are always added
-    if (white_level < 1000000.0f) {
+    if (white_level < 999999.0f) {
         // ensure smooth blending for pixel values between 0.25 and 0.99 of the white level
         weight_pixel_value = clamp(0.99f/0.74f-1.0f/0.74f*pixel_value_max/white_level, 0.0f, 1.0f);
     }
