@@ -60,7 +60,7 @@ struct ContentView: View {
         .onReceive(progress.$show_nonbayer_exposure_alert, perform: { val in
             if val {
                 my_alert.title = "Exposure control not supported"
-                my_alert.message = "You have selected exposure control other than \"Off\" in the Preferences, which is not supported for your camera. Press OK to use exposure control \"Off\"."
+                my_alert.message = "You have selected exposure control other than \"Off\" in Preferences, which is not supported for your camera. Press OK to disable exposure control."
                 my_alert.dismiss_button = .default(Text("OK"))
                 my_alert.show = true
                 settings.exposure_control = " Off"
