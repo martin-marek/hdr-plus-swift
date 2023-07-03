@@ -24,6 +24,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+extension Scene {
+    // disables window resizability on macos 13
+    // https://developer.apple.com/forums/thread/719389?answerId=735997022#735997022
+    func windowResizabilityContentSize() -> some Scene {
+        if #available(macOS 13.0, *) {
+            return windowResizability(.contentSize)
+        } else {
+            return self
+        }
+    }
+}
+
 @main
 struct burstphotoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -37,6 +49,7 @@ struct burstphotoApp: App {
                 .onDisappear {terminate_xmp_sdk()}
         }
         .windowStyle(HiddenTitleBarWindowStyle())
+        .windowResizabilityContentSize()
         .commands {
             CommandGroup(replacing: .newItem, addition: {}) // disables creating any new windows
             CommandGroup(replacing: .help) { // open Burst Photo website
