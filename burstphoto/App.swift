@@ -2,10 +2,11 @@ import SwiftUI
 import AppKit
 
 class AppSettings: ObservableObject {
-    @AppStorage("tile_size") var tile_size: Int = 32
+    @AppStorage("tile_size") var tile_size: String = "Medium"
     @AppStorage("search_distance") var search_distance: String = "Medium"
     @AppStorage("merging_algorithm") var merging_algorithm: String = "Fast"
     @AppStorage("noise_reduction") var noise_reduction: Double = 13.0
+    @AppStorage("exposure_control") var exposure_control: String = " Linear (full bit range)"
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -23,6 +24,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+extension Scene {
+    // disables window resizability on macos 13
+    // https://developer.apple.com/forums/thread/719389?answerId=735997022#735997022
+    func windowResizabilityContentSize() -> some Scene {
+        if #available(macOS 13.0, *) {
+            return windowResizability(.contentSize)
+        } else {
+            return self
+        }
+    }
+}
+
 @main
 struct burstphotoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -36,9 +49,14 @@ struct burstphotoApp: App {
                 .onDisappear {terminate_xmp_sdk()}
         }
         .windowStyle(HiddenTitleBarWindowStyle())
+        .windowResizabilityContentSize()
         .commands {
             CommandGroup(replacing: .newItem, addition: {}) // disables creating any new windows
-            CommandGroup(replacing: .help, addition: {}) // disables help menu
+            CommandGroup(replacing: .help) { // open Burst Photo website
+                Button(action: {NSWorkspace.shared.open(URL(string: "https://burst.photo/help/")!)}) {
+                    Text("Burst Photo Help")
+                }
+            }
         }
         Settings {
             SettingsView(settings: settings)

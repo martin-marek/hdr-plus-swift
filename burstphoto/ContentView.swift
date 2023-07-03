@@ -51,12 +51,21 @@ struct ContentView: View {
         .onReceive(progress.$show_nonbayer_hq_alert, perform: { val in
             if val {
                 my_alert.title = "Higher quality not supported"
-                my_alert.message = "You've selected the \"Higher quality\" merging algorithm in Preferences but your camera only supports the \"Fast\" algorithm. Press OK to use the \"Fast\" algorithm."
+                my_alert.message = "You have selected the \"Higher quality\" merging algorithm in Preferences but your camera only supports the \"Fast\" algorithm. Press OK to use the \"Fast\" algorithm."
                 my_alert.dismiss_button = .default(Text("OK"))
                 my_alert.show = true
                 settings.merging_algorithm = "Fast"
             }
         })
+        .onReceive(progress.$show_nonbayer_exposure_alert, perform: { val in
+            if val {
+                my_alert.title = "Exposure control not supported"
+                my_alert.message = "You have selected exposure control other than \"Off\" in Preferences, which is not supported for your camera. Press OK to disable exposure control."
+                my_alert.dismiss_button = .default(Text("OK"))
+                my_alert.show = true
+                settings.exposure_control = " Off"
+            }
+        })    
         .frame(width: 350, height: 400)
     }
 }
@@ -96,7 +105,7 @@ struct MainView: View {
             
             Spacer()
             
-            Text("*.DNG, *.ARW, *.NEF…")
+            Text("*.DNG, *.ARW, *.NEF, *.CR2…")
                 .font(.system(size: 14, weight: .light))
                 .italic()
                 .opacity(0.8)
@@ -155,36 +164,22 @@ struct ImageSavedView: View {
 struct ProcessingView: View {
     @Binding var image_urls: [URL]
     @ObservedObject var progress: ProcessingProgress
-        
+
     func progress_int_to_str(_ int: Int) -> String {
-                
-        if progress.includes_conversion {
-            if progress.int < 10000000 {
-                return "Converting images to DNG (this might take a while)..."
-            } else if progress.int < 20000000 {
-                return "Loading images..."
-            } else if progress.int < 100000000 {
-                
-                // use a very high number for the 100% mark to minimize any rounding errors
-                let percent = round(Double(progress.int-20000000)/800000*10)/10.0
-                           
-                return "Processing images (\(percent)%)..."
-                
-            } else {
-                return "Saving processed image..."
-            }
+        
+        if progress.includes_conversion && progress.int < 10000000 {
+            return "Converting images to DNG (this might take a while)..."
+        } else if progress.int < 20000000 {
+            return "Loading images..."
+        } else if progress.int < 100000000 {
+            
+            // use a very high number for the 100% mark to minimize any rounding errors
+            let percent = round(Double(progress.int-20000000)/800000*10)/10.0
+                       
+            return "Processing images (\(percent)%)..."
+            
         } else {
-            if progress.int < 20000000 {
-                return "Loading images..."
-            } else if progress.int < 100000000 {
-                
-                // use a very high number for the 100% mark to minimize any rounding errors
-                let percent = round(Double(progress.int-20000000)/800000*10)/10.0
-           
-                return "Processing images (\(percent)%)..."
-            } else {
-                return "Saving processed image..."
-            }
+            return "Saving processed image..."
         }
     }
     
@@ -200,42 +195,57 @@ struct ProcessingView: View {
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
-    let tile_sizes = [16, 32, 64]
-    let search_distances = ["Low", "Medium", "High"]
+    let tile_sizes = ["Small", "Medium", "Large"]
+    let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
+    let exposure_controls = [" Off", " Linear (full bit range)", " Linear (relative +1 EV)", " Non-linear (target ±0 EV)", " Non-linear (target +1 EV)"]
+    
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
      
     var body: some View {
         VStack {
             
-            VStack(alignment: .leading) {
+            HStack {            
                 Text("Tile size").font(.system(size: 14, weight: .medium))
+                Spacer()
                 Picker(selection: settings.$tile_size, label: EmptyView()) {
                     ForEach(tile_sizes, id: \.self) {
-                        Text(String($0))
+                        Text($0)
                     }
-                }.pickerStyle(SegmentedPickerStyle())
-            }.padding(.horizontal, 15).padding(.top, 15).padding(.bottom, 10)
+                }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
+            }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 11)
             
-            VStack(alignment: .leading) {
+            HStack {
                 Text("Search distance").font(.system(size: 14, weight: .medium))
+                Spacer()
                 Picker(selection: settings.$search_distance, label: EmptyView()) {
                     ForEach(search_distances, id: \.self) {
-                        Text(String($0))
+                        Text($0)
                     }
-                }.pickerStyle(SegmentedPickerStyle())
-            }.padding(.horizontal, 15).padding(.vertical, 10)
-            
-            VStack(alignment: .leading) {
+                }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
+            }.padding(.horizontal, 15).padding(.vertical, 11)
+                     
+            HStack {
                 Text("Merging algorithm").font(.system(size: 14, weight: .medium))
+                Spacer()
                 Picker(selection: settings.$merging_algorithm, label: EmptyView()) {
                     ForEach(merging_algorithms, id: \.self) {
                         Text($0)
                     }
-                }.pickerStyle(SegmentedPickerStyle())
-            }.padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 3)
+                }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
+            }.padding(.horizontal, 15).padding(.vertical, 11)
             
+            HStack {
+                Text("Exposure control").font(.system(size: 14, weight: .medium))
+                Spacer()
+                Picker(selection: settings.$exposure_control, label: EmptyView()) {
+                    ForEach(exposure_controls, id: \.self) {
+                        Text($0)
+                    }
+                }.pickerStyle(MenuPickerStyle()).frame(width: 222)
+            }.padding(.horizontal, 15).padding(.vertical, 11)
+          
             VStack(alignment: .leading) {
                 
                 (Text("Noise reduction: ") +
@@ -263,7 +273,6 @@ struct SettingsView: View {
                             skip_haptic_feedback = editing // avoid proving haptic feedback on the first click
                     })
                 }
-
                 Text("  <      daylight scene      >          ....        <     night scene     >")
                     .font(.system(size: 12))
                     .foregroundColor(.primary)
@@ -274,7 +283,7 @@ struct SettingsView: View {
                 Text("Large values increase the strength of noise reduction")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
-            }.padding(15)
+            }.padding(.horizontal, 15).padding(.top, 11).padding(.bottom, 15)
             
         }
         .frame(width: 400)
@@ -326,6 +335,41 @@ struct MyDropDelegate: DropDelegate {
                 }
             }
         }
+
+        // check input parameter tile size
+        if settings.tile_size != "Small" && settings.tile_size != "Medium" && settings.tile_size != "Large" {
+           settings.tile_size = "Medium"
+        }
+        
+        // check input parameter search distance
+        if settings.search_distance != "Small" && settings.search_distance != "Medium" && settings.search_distance != "Large" {
+            settings.search_distance = "Medium"
+        }
+        
+        // check input parameter merging algorithm
+        if settings.merging_algorithm != "Fast" && settings.merging_algorithm != "Higher quality" {
+            settings.merging_algorithm = "Fast"
+        }
+        
+        // check input parameter exposure control
+        if settings.exposure_control != " Off" && settings.exposure_control != " Linear (full bit range)" && settings.exposure_control != " Linear (relative +1 EV)" && settings.exposure_control != " Non-linear (target ±0 EV)" && settings.exposure_control != " Non-linear (target +1 EV)" {
+            settings.exposure_control = " Linear (full bit range)"
+        }
+        
+        // check input parameter noise reduction
+        if settings.noise_reduction < 1 || settings.noise_reduction > 23 {
+            settings.noise_reduction = 13
+        }
+        
+        // set simplified value for parameter exposure control
+        let exposure_control_dict = [
+            " Off"                       : "Off",
+            " Linear (full bit range)"   : "LinearFullRange",
+            " Linear (relative +1 EV)"   : "Linear1EV",
+            " Non-linear (target ±0 EV)" : "Curve0EV",
+            " Non-linear (target +1 EV)" : "Curve1EV",
+        ]
+        let exposure_control_short = exposure_control_dict[settings.exposure_control]!
         
         DispatchQueue.global().async {
             // wait until all the urls are loaded
@@ -346,13 +390,10 @@ struct MyDropDelegate: DropDelegate {
                 app_state = .processing
             }
             
-            do {
-                // compute reference index (use the middle image)
-                let ref_idx = image_urls.count / 2
-
+            do {               
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction)
-                
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, exposure_control: exposure_control_short)
+                   
                 // inform the user about the saved image
                 app_state = .image_saved
 
@@ -363,8 +404,8 @@ struct MyDropDelegate: DropDelegate {
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch ImageIOError.save_error {
-                my_alert.title = "Image couldn't be saved"
-                my_alert.message = "The processed image could not be saved for an uknown reason. Sorry."
+                my_alert.title = "Image could not be saved"
+                my_alert.message = "The processed image could not be saved for an unknown reason. Sorry."
                 my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
@@ -393,8 +434,14 @@ struct MyDropDelegate: DropDelegate {
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }
             } catch AlignmentError.conversion_failed {
-                my_alert.title = "Conversion Failed"
+                my_alert.title = "Conversion failed"
                 my_alert.message = "Image format not supported. Please only use unprocessed RAW or DNG images."
+                my_alert.dismiss_button = .cancel()
+                my_alert.show = true
+                DispatchQueue.main.async { app_state = .main }
+            } catch AlignmentError.non_bayer_exposure_bracketing {
+                my_alert.title = "Unsupported exposure bracketing"
+                my_alert.message = "Exposure bracketing is not supported for your camera. Please only use images with uniform exposure."
                 my_alert.dismiss_button = .cancel()
                 my_alert.show = true
                 DispatchQueue.main.async { app_state = .main }

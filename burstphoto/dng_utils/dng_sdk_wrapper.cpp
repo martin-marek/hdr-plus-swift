@@ -20,7 +20,7 @@ void terminate_xmp_sdk() {
 }
 
 
-int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width) {
+int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_level0, int* black_level1, int* black_level2, int* black_level3, int* exposure_bias, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
     
     try {
         
@@ -67,8 +67,56 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
             printf("ERROR: MosaicInfo is null.\n");
             return 1;
         } else {
-            dng_point mosaic_pettern_size = negative->fMosaicInfo->fCFAPatternSize;
-            *mosaic_pattern_width = mosaic_pettern_size.h;
+            dng_point mosaic_pattern_size = negative->fMosaicInfo->fCFAPatternSize;
+            *mosaic_pattern_width = mosaic_pattern_size.h;
+        }
+        
+        // get black level, white level and color factors for exposure correction
+        *white_level = -1;
+        *black_level0 = -1;
+        *black_level1 = -1;
+        *black_level2 = -1;
+        *black_level3 = -1;
+        *color_factor_r = -1.0f;
+        *color_factor_g = -1.0f;
+        *color_factor_b = -1.0f;
+        
+        // currently only working for 2x2 Bayer mosaic pattern
+        if (*mosaic_pattern_width == 2) {
+            const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
+            if (linearization_info == NULL) {
+                printf("ERROR: LinearizationInfo is null.\n");
+                return 1;
+            } else {
+                *white_level = int(negative->fLinearizationInfo->fWhiteLevel[0]);
+                *black_level0 = negative->fLinearizationInfo->fBlackLevel[0][0][0];
+                *black_level1 = negative->fLinearizationInfo->fBlackLevel[0][1][0];
+                *black_level2 = negative->fLinearizationInfo->fBlackLevel[1][0][0];
+                *black_level3 = negative->fLinearizationInfo->fBlackLevel[1][1][0];
+            }
+            
+            // get color factors for neutral colors in camera color space
+            const dng_vector camera_neutral = negative->CameraNeutral();           
+            if (camera_neutral.IsEmpty()) {
+                printf("ERROR: CameraNeutral is null.\n");
+                return 1;
+            } else {
+                *color_factor_r = float(camera_neutral[0]);
+                *color_factor_g = float(camera_neutral[1]);
+                *color_factor_b = float(camera_neutral[2]);
+            }
+        }
+        
+        // get exposure bias for exposure correction
+        const dng_exif* exif = negative->GetExif();
+        if (exif == NULL) {
+            *exposure_bias = -1;
+            printf("ERROR: Exif is null.\n");
+            return 1;
+        } else {
+            dng_srational exposure_bias_value = exif->fExposureBiasValue;
+            // scale exposure bias value that it is EV * 100
+            *exposure_bias = exposure_bias_value.n * 100/exposure_bias_value.d;            
         }
         
     }

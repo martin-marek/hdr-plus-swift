@@ -1,6 +1,4 @@
 import Foundation
-import CoreImage
-import MetalKit
 import MetalPerformanceShaders
 
 // this is a command-line interface for Burst Photo, and is not part of the GUI application
@@ -33,20 +31,20 @@ struct MyProgram {
             // ProcessingProgress is only useful for a GUI, but we have to instantiate one anyway
             let progress = ProcessingProgress()
             
-            // set index of reference texture
-            let ref_idx = image_urls.count / 2
             // options: value range from 1.0 to 23.0
             let noise_reduction = 13.0
-            // options: "Better speed" or "Better quality"
-            let merging_algorithm = "Better speed"
-            // options: 16, 32, 64
-            let tile_size = 32
-            // options: "Low", "Medium", "High"
+            // options: "Fast" or "Higher quality"
+            let merging_algorithm = "Fast"
+            // options: "Small", "Medium" or "Large"
+            let tile_size = "Medium"
+            // options: "Small", "Medium" or "Large"
             let search_distance = "Medium"
+            // options: "Off", "LinearFullRange", "Linear1EV", "Curve0EV" or "Curve1EV"
+            let exposure_control = "LinearFullRange"
             
             // align+merge
-            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, ref_idx: ref_idx, merging_algorithm: merging_algorithm, tile_size: tile_size, search_distance: search_distance, noise_reduction: noise_reduction)
-            
+            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: merging_algorithm, tile_size: tile_size, search_distance: search_distance, noise_reduction: noise_reduction, exposure_control: exposure_control)
+           
             print("Image saved in:", out_url.relativePath)            
         }
         
