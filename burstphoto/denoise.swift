@@ -313,7 +313,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     }
     
     // delete the temporary dng directory
-    try FileManager.default.removeItem(atPath: tmp_dir)
+//    try FileManager.default.removeItem(atPath: tmp_dir)
     
     print("Time to save final image: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     print("")

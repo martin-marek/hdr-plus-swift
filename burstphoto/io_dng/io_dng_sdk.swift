@@ -38,12 +38,18 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
     // changed args to convert raw files to compressed DNGs
     let args = "--args -c -p0 -d \"\(tmp_dir)\""
     var command = "\"\(executable_path)\" \(args)"
+    var need_to_convert = false
     for url in in_urls {
-        command += " \"\(url.relativePath)\""
+        if !FileManager.default.fileExists(atPath: tmp_dir + url.deletingPathExtension().lastPathComponent + ".dng") {
+            command += " \"\(url.relativePath)\""
+            need_to_convert = true
+        }
     }
 
     // call adobe dng converter
-    let output = try safeShell(command)
+    if need_to_convert {
+        let output = try safeShell(command)
+    }
 
     // return urls of the newly created dngs
     var out_urls: [URL] = []
