@@ -1,13 +1,35 @@
 import Foundation
 import MetalKit
 
+/**
+ Must create a class to pass into NSCache.
+ */
+class ImageCacheWrapper : NSObject {
+    let texture : MTLTexture
+    let mosaic_pattern_width: Int
+    let white_level: Int
+    let black_levels: [Int]
+    let exposure_bias: Int
+    let ISO_exposure_time: Double
+    let color_factors: [Double]
+    
+    init(texture: MTLTexture, mosaic_pattern_width: Int, white_level: Int, black_levels: [Int], exposure_bias: Int, ISO_exposure_time: Double, color_factors: [Double]) {
+        self.texture = texture
+        self.mosaic_pattern_width = mosaic_pattern_width
+        self.white_level = white_level
+        self.black_levels = black_levels
+        self.exposure_bias = exposure_bias
+        self.ISO_exposure_time = ISO_exposure_time
+        self.color_factors = color_factors
+    }
+}
+
 // possible error types
 enum ImageIOError: Error {
     case load_error
     case metal_error
     case save_error
 }
-
 
 func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String) throws -> [URL] {
 
@@ -89,7 +111,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
 }
 
 
-func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int, [Int], [Int], [Int], [Double], [Double]) {
+func load_images(_ urls: [URL], cache: NSCache<NSString, ImageCacheWrapper>) throws -> ([MTLTexture], Int, [Int], [Int], [Int], [Double], [Double]) {
     
     var textures_dict: [Int: MTLTexture] = [:]
     let compute_group = DispatchGroup()
@@ -103,25 +125,49 @@ func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int, [Int], [Int], [Int
     var color_factors = Array(repeating: 0.0, count: 3*urls.count)
 
     for i in 0..<urls.count {
-        compute_queue.async(group: compute_group) {
-    
-            // asynchronously load texture
-            if let (texture, _mosaic_pattern_width, _white_level, _black_level, _exposure_bias, _ISO_exposure_time, _color_factors) = try? image_url_to_texture(urls[i], device) {
-        
-                // thread-safely save the texture
-                access_queue.sync {
-                    textures_dict[i] = texture
-                    mosaic_pattern_width = _mosaic_pattern_width
-                    white_level[i] = _white_level
-                    black_level[4*i+0] = _black_level[0]
-                    black_level[4*i+1] = _black_level[1]
-                    black_level[4*i+2] = _black_level[2]
-                    black_level[4*i+3] = _black_level[3]
-                    exposure_bias[i] = _exposure_bias
-                    ISO_exposure_time[i] = _ISO_exposure_time
-                    color_factors[3*i+0] = _color_factors[0]
-                    color_factors[3*i+1] = _color_factors[1]
-                    color_factors[3*i+2] = _color_factors[2]
+        if let cachedValue = cache.object(forKey: NSString(string: urls[i].absoluteString)) {
+            access_queue.sync {
+                textures_dict[i] = cachedValue.texture
+                mosaic_pattern_width = cachedValue.mosaic_pattern_width
+                white_level[i] = cachedValue.white_level
+                black_level[4*i+0] = cachedValue.black_levels[0]
+                black_level[4*i+1] = cachedValue.black_levels[1]
+                black_level[4*i+2] = cachedValue.black_levels[2]
+                black_level[4*i+3] = cachedValue.black_levels[3]
+                exposure_bias[i] = cachedValue.exposure_bias
+                ISO_exposure_time[i] = cachedValue.ISO_exposure_time
+                color_factors[3*i+0] = cachedValue.color_factors[0]
+                color_factors[3*i+1] = cachedValue.color_factors[1]
+                color_factors[3*i+2] = cachedValue.color_factors[2]
+            }
+        } else {
+            compute_queue.async(group: compute_group) {
+                
+                // asynchronously load texture
+                if let (texture, _mosaic_pattern_width, _white_level, _black_level, _exposure_bias, _ISO_exposure_time, _color_factors) = try? image_url_to_texture(urls[i], device) {
+                    
+                    // thread-safely save the texture
+                    access_queue.sync {
+                        cache.setObject(ImageCacheWrapper(texture: texture,
+                                                          mosaic_pattern_width: _mosaic_pattern_width,
+                                                          white_level: _white_level,
+                                                          black_levels: _black_level,
+                                                          exposure_bias: _exposure_bias,
+                                                          color_factors: _color_factors),
+                                        forKey: NSString(string: urls[i].absoluteString))
+                        textures_dict[i] = texture
+                        mosaic_pattern_width = _mosaic_pattern_width
+                        white_level[i] = _white_level
+                        black_level[4*i+0] = _black_level[0]
+                        black_level[4*i+1] = _black_level[1]
+                        black_level[4*i+2] = _black_level[2]
+                        black_level[4*i+3] = _black_level[3]
+                        exposure_bias[i] = _exposure_bias
+                        ISO_exposure_time = _ISO_exposure_time
+                        color_factors[3*i+0] = _color_factors[0]
+                        color_factors[3*i+1] = _color_factors[1]
+                        color_factors[3*i+2] = _color_factors[2]
+                    }
                 }
             }
         }
