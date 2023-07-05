@@ -1,10 +1,3 @@
-//
-//  constants.metal
-//  burstphoto
-//
-//  Created by Alex on 2023-07-03.
-//
-
 #include <metal_stdlib>
 using namespace metal;
 
