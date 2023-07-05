@@ -306,7 +306,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         }
         
         // the dng converter is installed -> convert output DNG saved before with Adobe DNG Converter, which increases compatibility of the resulting DNG
-        let final_url = try convert_raws_to_dngs([out_url], dng_converter_path, out_dir)
+        let final_url = try convert_raws_to_dngs([out_url], dng_converter_path, out_dir, override_cache: true)
                    
         // update out URL to new file
         out_url = final_url[0]

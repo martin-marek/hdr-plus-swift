@@ -31,7 +31,11 @@ enum ImageIOError: Error {
     case save_error
 }
 
-func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String) throws -> [URL] {
+/// Take a list of urls representing non-DNG raw files and converts them using the Adobe DNG Converter.
+/// If the output image already exists, it will not convert it again, unless `override_cache` is set to `true`.
+///
+/// - Parameter override_cache: Default of `false`. This value should always be set to `true` when outputting the final image.
+func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String, override_cache: Bool = false) throws -> [URL] {
 
     // create command string
     let executable_path = dng_converter_path + "/Contents/MacOS/Adobe DNG Converter"
