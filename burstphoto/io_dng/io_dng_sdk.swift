@@ -41,19 +41,24 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
     let executable_path = dng_converter_path + "/Contents/MacOS/Adobe DNG Converter"
     // changed args to convert raw files to compressed DNGs
     let args = "--args -c -p0 -d \"\(tmp_dir)\""
-    var command = "\"\(executable_path)\" \(args)"
+    let command = "\"\(executable_path)\" \(args)"
+    
+    let compute_group = DispatchGroup()
+    let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
+    
     var need_to_convert = false
     for url in in_urls {
-        if !FileManager.default.fileExists(atPath: tmp_dir + url.deletingPathExtension().lastPathComponent + ".dng") {
-            command += " \"\(url.relativePath)\""
-            need_to_convert = true
+        if override_cache || !FileManager.default.fileExists(atPath: tmp_dir + url.deletingPathExtension().lastPathComponent + ".dng") {
+            compute_queue.async(group: compute_group) {
+                do {
+                    try safeShell(command + " \"\(url.relativePath)\"")
+                } catch {}
+            }
         }
     }
-
-    // call adobe dng converter
-    if need_to_convert {
-        let output = try safeShell(command)
-    }
+    
+    // Wait until all images have been converted
+    compute_group.wait()
 
     // return urls of the newly created dngs
     var out_urls: [URL] = []
