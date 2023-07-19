@@ -59,7 +59,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
 }
 
 
-func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) throws {
+func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL, _ white_level: Int32) throws {
     // synchronize GPU and CPU memory
     let command_buffer = command_queue.makeCommandBuffer()!
     let blit_encoder = command_buffer.makeBlitCommandEncoder()!
@@ -78,7 +78,7 @@ func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) throws
     texture.getBytes(bytes_pointer!, bytesPerRow: bytes_per_row, from: mtl_region, mipmapLevel: 0)
 
     // save image
-    let error_code = write_image(in_url.path, out_url.path, &bytes_pointer)
+    let error_code = write_image(in_url.path, out_url.path, &bytes_pointer, white_level)
     if (error_code != 0) {throw ImageIOError.save_error}
     
     // free memory

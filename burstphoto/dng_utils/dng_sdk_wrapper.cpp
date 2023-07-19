@@ -126,7 +126,7 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
     return 0;
 }
 
-int write_image(const char *in_path, const char *out_path, void** pixel_bytes_pointer) {
+int write_image(const char *in_path, const char *out_path, void** pixel_bytes_pointer, const int white_level) {
     
     try {
         
@@ -175,7 +175,11 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
         //   a difference for other files
         // - this is used in the dng_validate script
         negative->SynchronizeMetadata();
-                   
+            
+        if (white_level > 0) {
+            negative->SetWhiteLevel(white_level);
+        }
+        
         // write dng
         host.SetSaveLinearDNG(false);
         host.SetKeepOriginalFile(false);

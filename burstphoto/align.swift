@@ -293,8 +293,12 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, ref_idx)
     }
     
+    // apply scaling to 16 bit?
+    let scale_to_16bit = (true && mosaic_pattern_width == 2 && exposure_control != "Off")
+    let factor_16bit = (scale_to_16bit ? Int(pow(2.0, 16.0-ceil(log2(Double(white_level[ref_idx]))))+0.5) : 1)
+      
     // convert final image to 16 bit integer
-    let output_texture_uint16 = convert_float_to_uint16(final_texture, (white_level[ref_idx] == -1 ? 1000000 : white_level[ref_idx]))
+    let output_texture_uint16 = convert_float_to_uint16(final_texture, (white_level[ref_idx] == -1 ? 1000000 : factor_16bit*white_level[ref_idx]), black_level, ref_idx, factor_16bit, color_factors)
       
     print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
@@ -311,7 +315,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     var out_url = URL(fileURLWithPath: out_path)
     
     // save the output image
-    try texture_to_dng(output_texture_uint16, in_url, out_url)
+    try texture_to_dng(output_texture_uint16, in_url, out_url, (scale_to_16bit ? Int32(factor_16bit*white_level[ref_idx]) : -1))
     
     // check if dng converter is installed
     if dng_converter_present {
@@ -699,7 +703,7 @@ func texture_uint16_to_float(_ in_texture: MTLTexture) -> MTLTexture {
 }
 
 
-func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int) -> MTLTexture {
+func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ ref_idx: Int, _ factor_16bit: Int, _ color_factors: [Double]) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: in_texture.width, height: in_texture.height, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
@@ -709,11 +713,19 @@ func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int) -> MT
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_float_to_uint16_state
     command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
+    let threads_per_grid = MTLSize(width: out_texture.width/2, height: out_texture.height/2, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(out_texture, index: 1)
     command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(black_level[ref_idx*4+0])], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(black_level[ref_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(black_level[ref_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.setBytes([Int32(black_level[ref_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 4)
+    command_encoder.setBytes([Float32(color_factors[0])], length: MemoryLayout<Float32>.stride, index: 5)
+    command_encoder.setBytes([Float32(color_factors[1])], length: MemoryLayout<Float32>.stride, index: 6)
+    command_encoder.setBytes([Float32(color_factors[2])], length: MemoryLayout<Float32>.stride, index: 7)    
+    command_encoder.setBytes([Int32(factor_16bit)], length: MemoryLayout<Int32>.stride, index: 8)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
