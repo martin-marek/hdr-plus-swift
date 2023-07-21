@@ -31,6 +31,8 @@ class ProcessingProgress: ObservableObject {
     @Published var includes_conversion = false
     @Published var show_nonbayer_hq_alert = false
     @Published var show_nonbayer_exposure_alert = false
+    @Published var show_nonbayer_bit_depth_alert = false
+    @Published var show_exposure_bit_depth_alert = false
 }
 
 // set up Metal device
@@ -95,7 +97,7 @@ let reduce_artifacts_tile_border_state = try! device.makeComputePipelineState(fu
 
 
 // main function of the burst photo app
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange") throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native") throws -> URL {
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -190,6 +192,19 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         merging_algorithm = "Fast"
     }
        
+    // if user has selected the "16Bit" output bit depth but has a non-Bayer sensor, warn them the "Native" output bit depth will be used instead
+    var output_bit_depth = output_bit_depth
+    if output_bit_depth == "16Bit" && mosaic_pattern_width != 2 {
+        DispatchQueue.main.async { progress.show_nonbayer_bit_depth_alert = true }
+        output_bit_depth = "Native"
+    }
+    
+    // if user has selected the "16Bit" output bit depth but has a non-Bayer sensor, warn them the "Native" output bit depth will be used instead
+    if output_bit_depth == "16Bit" && exposure_control == "Off" {
+        DispatchQueue.main.async { progress.show_exposure_bit_depth_alert = true }
+        output_bit_depth = "Native"
+    }
+    
     // convert images from uint16 to float16
     textures = textures.map{texture_uint16_to_float($0)}
      
@@ -293,8 +308,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, ref_idx)
     }
     
-    // apply scaling to 16 bit?
-    let scale_to_16bit = (true && mosaic_pattern_width == 2 && exposure_control != "Off")
+    // apply scaling to 16 bit
+    let scale_to_16bit = (output_bit_depth=="16Bit" && mosaic_pattern_width == 2 && exposure_control != "Off")
     let factor_16bit = (scale_to_16bit ? Int(pow(2.0, 16.0-ceil(log2(Double(white_level[ref_idx]))))+0.5) : 1)
       
     // convert final image to 16 bit integer

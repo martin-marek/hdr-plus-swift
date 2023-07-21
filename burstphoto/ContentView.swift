@@ -65,8 +65,26 @@ struct ContentView: View {
                 my_alert.show = true
                 settings.exposure_control = " Off"
             }
-        })    
-        .frame(width: 350, height: 400)
+        })
+        .onReceive(progress.$show_nonbayer_bit_depth_alert, perform: { val in
+            if val {
+                my_alert.title = "16 bit output bit depth not supported"
+                my_alert.message = "You have selected \"Scale to 16 bit\" as output bit depth in Preferences but your camera only supports the \"Native\" output bit depth. Press OK to use the \"Native\" output bit depth."
+                my_alert.dismiss_button = .default(Text("OK"))
+                my_alert.show = true
+                settings.output_bit_depth = "Native"
+            }
+        })
+        .onReceive(progress.$show_exposure_bit_depth_alert, perform: { val in
+            if val {
+                my_alert.title = "16 bit output bit depth not supported"
+                my_alert.message = "You have selected the combination \"Scale to 16 bit\" as output bit depth and exposure control \"Off\" in Preferences, which is not supported. Press OK to use the \"Native\" output bit depth."
+                my_alert.dismiss_button = .default(Text("OK"))
+                my_alert.show = true
+                settings.output_bit_depth = "Native"
+            }
+        })
+        .frame(width: 360, height: 400)
     }
 }
 
@@ -79,8 +97,8 @@ struct DropIcon: View {
             .resizable()
             .renderingMode(.template)
             .foregroundColor(.primary)
-            .opacity(drop_active ? 0.5 : 0.4)
-            .frame(width: 160, height: 160)
+            .opacity(drop_active ? 0.55 : 0.4)
+            .frame(width: 164, height: 164)
     }
 }
 
@@ -112,9 +130,9 @@ struct MainView: View {
                 .frame(width: 200, height: 50)
             
             HStack {
-                SettingsButton().padding(10)
+                SettingsButton().padding(15)
                 Spacer()
-                HelpButton().padding(10)
+                HelpButton().padding(15)
             }
         }
     }
@@ -152,9 +170,9 @@ struct ImageSavedView: View {
             Spacer()
             
             HStack {
-                SettingsButton().padding(10)
+                SettingsButton().padding(15)
                 Spacer()
-                HelpButton().padding(10)
+                HelpButton().padding(15)
             }
         }
     }
@@ -199,98 +217,115 @@ struct SettingsView: View {
     let search_distances = ["Small", "Medium", "Large"]
     let merging_algorithms = ["Fast", "Higher quality"]
     let exposure_controls = [" Off", " Linear (full bit range)", " Linear (relative +1 EV)", " Non-linear (target ±0 EV)", " Non-linear (target +1 EV)"]
+    let output_bit_depths = ["Native", "Scale to 16 bit"]
     
     @State private var user_changing_nr = false
     @State private var skip_haptic_feedback = false
      
     var body: some View {
-        VStack {
-            
-            HStack {            
-                Text("Tile size").font(.system(size: 14, weight: .medium))
-                Spacer()
-                Picker(selection: settings.$tile_size, label: EmptyView()) {
-                    ForEach(tile_sizes, id: \.self) {
-                        Text($0)
-                    }
-                }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
-            }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 11)
-            
-            HStack {
-                Text("Search distance").font(.system(size: 14, weight: .medium))
-                Spacer()
-                Picker(selection: settings.$search_distance, label: EmptyView()) {
-                    ForEach(search_distances, id: \.self) {
-                        Text($0)
-                    }
-                }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
-            }.padding(.horizontal, 15).padding(.vertical, 11)
-                     
-            HStack {
-                Text("Merging algorithm").font(.system(size: 14, weight: .medium))
-                Spacer()
-                Picker(selection: settings.$merging_algorithm, label: EmptyView()) {
-                    ForEach(merging_algorithms, id: \.self) {
-                        Text($0)
-                    }
-                }.pickerStyle(SegmentedPickerStyle()).frame(width: 222)
-            }.padding(.horizontal, 15).padding(.vertical, 11)
-            
-            HStack {
-                Text("Exposure control").font(.system(size: 14, weight: .medium))
-                Spacer()
-                Picker(selection: settings.$exposure_control, label: EmptyView()) {
-                    ForEach(exposure_controls, id: \.self) {
-                        Text($0)
-                    }
-                }.pickerStyle(MenuPickerStyle()).frame(width: 222)
-            }.padding(.horizontal, 15).padding(.vertical, 11)
-          
+        TabView {
             VStack(alignment: .leading) {
                 
-                (Text("Noise reduction: ") +
-                 (settings.noise_reduction == 23
-                   ? Text("max. ").foregroundColor(.accentColor) + Text("(simple average w/o alignment)")
-                   : Text("\(Int(settings.noise_reduction))")
-                )).font(.system(size: 14, weight: .medium))
-                .opacity(user_changing_nr ? 0.75 : 1.0)
-                    
-                // the slider/stepper should provide haptic feedback when value changes
-                // but there's one exception: we don't provide feedback on the first click of the stepper,
-                // to avoid providing haptic feedback together with a system click
                 HStack {
-                    Slider(value: settings.$noise_reduction, in: 1...23, step: 1,
-                        onEditingChanged: { editing in user_changing_nr = editing }
-                    ).onChange(of: settings.noise_reduction) { _ in
-                        if !skip_haptic_feedback {
-                            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    Text("Exposure control").font(.system(size: 14, weight: .medium))
+                    Spacer()
+                    Picker(selection: settings.$exposure_control, label: EmptyView()) {
+                        ForEach(exposure_controls, id: \.self) {
+                            Text($0)
                         }
-                        skip_haptic_feedback = false
-                    }
-                    Stepper("", value: settings.$noise_reduction, in: 1...23,
-                        onEditingChanged: { editing in
+                    }.pickerStyle(MenuPickerStyle()).frame(width: 216)
+                }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 12)
+                
+                VStack(alignment: .leading) {
+                    
+                    (Text("Noise reduction: ") +
+                     (settings.noise_reduction == 23
+                      ? Text("max. ").foregroundColor(.accentColor) + Text("(simple average w/o alignment)")
+                      : Text("\(Int(settings.noise_reduction))")
+                     )).font(.system(size: 14, weight: .medium))
+                        .opacity(user_changing_nr ? 0.75 : 1.0).padding(.top, 12)
+                    
+                    // the slider/stepper should provide haptic feedback when value changes
+                    // but there's one exception: we don't provide feedback on the first click of the stepper,
+                    // to avoid providing haptic feedback together with a system click
+                    HStack {
+                        Slider(value: settings.$noise_reduction, in: 1...23, step: 1,
+                               onEditingChanged: { editing in user_changing_nr = editing }
+                        ).onChange(of: settings.noise_reduction) { _ in
+                            if !skip_haptic_feedback {
+                                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                            }
+                            skip_haptic_feedback = false
+                        }
+                        Stepper("", value: settings.$noise_reduction, in: 1...23,
+                                onEditingChanged: { editing in
                             user_changing_nr = editing
                             skip_haptic_feedback = editing // avoid proving haptic feedback on the first click
-                    })
-                }
-                Text("  <      daylight scene      >          ....        <     night scene     >")
-                    .font(.system(size: 12))
-                    .foregroundColor(.primary)
-                Text("")
-                Text("Small values increase motion robustness and image sharpness")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                Text("Large values increase the strength of noise reduction")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-            }.padding(.horizontal, 15).padding(.top, 11).padding(.bottom, 15)
+                        })
+                    }
+                    Text("  <      daylight scene      >         ...       <     night scene     >")
+                        .font(.system(size: 12))
+                        .foregroundColor(.primary)
+                    Text("")
+                    Text("Small values increase motion robustness and image sharpness")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Text("Large values increase the strength of noise reduction")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }.padding(.horizontal, 15)
+                Spacer()
+                    .navigationTitle("Preferences")
+            }.tabItem {Label("Exposure & Noise   ", systemImage: "camera")}
             
+            VStack(alignment: .leading) {
+                
+                HStack {
+                    Text("Tile size").font(.system(size: 14, weight: .medium))
+                    Spacer()
+                    Picker(selection: settings.$tile_size, label: EmptyView()) {
+                        ForEach(tile_sizes, id: \.self) {
+                            Text($0)
+                        }
+                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 216)
+                }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 11)
+                
+                HStack {
+                    Text("Search distance").font(.system(size: 14, weight: .medium))
+                    Spacer()
+                    Picker(selection: settings.$search_distance, label: EmptyView()) {
+                        ForEach(search_distances, id: \.self) {
+                            Text($0)
+                        }
+                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 216)
+                }.padding(.horizontal, 15).padding(.vertical, 11)
+                
+                HStack {
+                    Text("Merging algorithm").font(.system(size: 14, weight: .medium))
+                    Spacer()
+                    Picker(selection: settings.$merging_algorithm, label: EmptyView()) {
+                        ForEach(merging_algorithms, id: \.self) {
+                            Text($0)
+                        }
+                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 216)
+                }.padding(.horizontal, 15).padding(.vertical, 11)
+                
+                HStack {
+                    Text("Output bit depth").font(.system(size: 14, weight: .medium))
+                    Spacer()
+                    Picker(selection: settings.$output_bit_depth, label: EmptyView()) {
+                        ForEach(output_bit_depths, id: \.self) {
+                            Text($0)
+                        }
+                    }.pickerStyle(SegmentedPickerStyle()).frame(width: 216)
+                }.padding(.horizontal, 15).padding(.vertical, 11)
+                Spacer()
+                    .navigationTitle("Preferences")
+            }.tabItem {Label("Stacking & Output  ", systemImage: "square.3.layers.3d")}
         }
-        .frame(width: 400)
-        .navigationTitle("Preferences")
+        .frame(width: 390, height: 225)
     }
 }
-
 
 struct MyDropDelegate: DropDelegate {
     @ObservedObject var settings: AppSettings
@@ -356,6 +391,11 @@ struct MyDropDelegate: DropDelegate {
             settings.exposure_control = " Linear (full bit range)"
         }
         
+        // check input parameter output bit depth
+        if settings.output_bit_depth != "Native" && settings.output_bit_depth != "Scale to 16 bit" {
+            settings.output_bit_depth = "Native"
+        }
+        
         // check input parameter noise reduction
         if settings.noise_reduction < 1 || settings.noise_reduction > 23 {
             settings.noise_reduction = 13
@@ -370,6 +410,13 @@ struct MyDropDelegate: DropDelegate {
             " Non-linear (target +1 EV)" : "Curve1EV",
         ]
         let exposure_control_short = exposure_control_dict[settings.exposure_control]!
+        
+        // set simplified value for output bit depth
+        let output_bit_depth_dict = [
+            "Native"                       : "Native",
+            "Scale to 16 bit"              : "16Bit",
+        ]
+        let output_bit_depth_short = output_bit_depth_dict[settings.output_bit_depth]!
         
         DispatchQueue.global().async {
             // wait until all the urls are loaded
@@ -392,7 +439,7 @@ struct MyDropDelegate: DropDelegate {
             
             do {               
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, exposure_control: exposure_control_short)
+                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, exposure_control: exposure_control_short, output_bit_depth: output_bit_depth_short)
                    
                 // inform the user about the saved image
                 app_state = .image_saved
