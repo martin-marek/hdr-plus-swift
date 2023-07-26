@@ -518,3 +518,9 @@ func upsample(_ input_texture: MTLTexture, to_width width: Int, to_height height
     
     return output_texture
 }
+
+/// Calculate the sum of each subpixel in the mosaic pattern within the specified region
+func calculate_subpixel_sum(for texture: MTLTexture, top: Int32, left: Int32, bottom: Int32, right: Int32) -> [Int] {
+    // TODO
+    return [256, 256, 256, 256]
+}

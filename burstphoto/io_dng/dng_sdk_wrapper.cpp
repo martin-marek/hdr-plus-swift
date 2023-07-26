@@ -20,7 +20,7 @@ void terminate_xmp_sdk() {
 }
 
 
-int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_level0, int* black_level1, int* black_level2, int* black_level3, int* exposure_bias, float* ISO_exposure_time, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
+int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_level, int* masked_areas, int* exposure_bias, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
     
     try {
         
@@ -73,10 +73,6 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
         
         // get black level, white level and color factors for exposure correction
         *white_level = -1;
-        *black_level0 = -1;
-        *black_level1 = -1;
-        *black_level2 = -1;
-        *black_level3 = -1;
         *color_factor_r = -1.0f;
         *color_factor_g = -1.0f;
         *color_factor_b = -1.0f;
@@ -89,14 +85,25 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
                 return 1;
             } else {
                 *white_level = int(negative->fLinearizationInfo->fWhiteLevel[0]);
-                *black_level0 = negative->fLinearizationInfo->fBlackLevel[0][0][0];
-                *black_level1 = negative->fLinearizationInfo->fBlackLevel[0][1][0];
-                *black_level2 = negative->fLinearizationInfo->fBlackLevel[1][0][0];
-                *black_level3 = negative->fLinearizationInfo->fBlackLevel[1][1][0];
+                *black_level     = negative->fLinearizationInfo->fBlackLevel[0][0][0];
+                *(black_level+1) = negative->fLinearizationInfo->fBlackLevel[0][1][0];
+                *(black_level+2) = negative->fLinearizationInfo->fBlackLevel[1][0][0];
+                *(black_level+3) = negative->fLinearizationInfo->fBlackLevel[1][1][0];
+                
+                // Getting a black level of 0 is suspicious, assume that it was no read correctly.
+                if ((*black_level == 0 && *(black_level+1) == 0 && *(black_level+2) == 0 & *(black_level+3) == 0) && rawIFD.fMaskedAreaCount > 0){
+                    for (int i = 0; i < rawIFD.fMaskedAreaCount; i++) {
+                        // Add masked areas to the array
+                        *(masked_areas + i + 0) = rawIFD.fMaskedArea[i].t;
+                        *(masked_areas + i + 1) = rawIFD.fMaskedArea[i].l;
+                        *(masked_areas + i + 2) = rawIFD.fMaskedArea[i].b;
+                        *(masked_areas + i + 3) = rawIFD.fMaskedArea[i].r;
+                    }
+                }
             }
             
             // get color factors for neutral colors in camera color space
-            const dng_vector camera_neutral = negative->CameraNeutral();           
+            const dng_vector camera_neutral = negative->CameraNeutral();
             if (camera_neutral.IsEmpty()) {
                 printf("ERROR: CameraNeutral is null.\n");
                 return 1;
