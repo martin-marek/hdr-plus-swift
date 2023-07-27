@@ -52,9 +52,9 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     for i in 0..<Int(masked_areas.count/4) {
         if masked_areas[4*i] == -1 { break }
         
-        let black_level_from_this_mask = calculate_subpixel_sum(for: texture, top: masked_areas[4*i + 0], left: masked_areas[4*i + 1], bottom: masked_areas[4*i + 2], right: masked_areas[4*i + 3])
-        for i in 0..<black_level_from_this_mask.count {
-            black_level_from_masked_area[i] = black_level_from_this_mask[i]
+        let black_level_from_this_mask = calculate_subpixel_sum(for: texture, masked_area: &masked_areas[4*i], mosaic_pattern_width: mosaic_pattern_width)
+        for i in 0..<black_level_from_masked_area.count {
+            black_level_from_masked_area[i] = black_level_from_this_mask
         }
     }
     

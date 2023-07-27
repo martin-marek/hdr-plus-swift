@@ -13,6 +13,34 @@ kernel void add_texture(texture2d<float, access::read> in_texture [[texture(0)]]
     out_texture.write(color_value, gid);
 }
 
+kernel void sum_rect_columns(texture2d<uint, access::read> in_texture [[texture(0)]],
+                             texture1d<uint, access::write> out_texture [[texture(1)]],
+                             constant int& top    [[buffer(1)]],
+                             constant int& left   [[buffer(2)]],
+                             constant int& bottom [[buffer(3)]],
+                             uint gid [[thread_position_in_grid]]) {
+    uint x = left + gid;
+    
+    uint total = 0;
+    for (int y = top; y < bottom; y++) {
+        total += in_texture.read(uint2(x, y)).r;
+    }
+
+    out_texture.write(total, gid);
+}
+
+kernel void sum_row(texture1d<uint, access::read> in_texture [[texture(0)]],
+                    device uint *out_buffer [[buffer(0)]],
+                    constant int& width [[buffer(1)]],
+                    uint gid [[thread_position_in_grid]]) {
+    uint total = 0;
+    
+    for (int x = 0; x < width; x++) {
+        total += in_texture.read(uint(x)).r;
+    }
+    
+    out_buffer[0] = total;
+}
 
 kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[texture(0)]],
                                  texture2d<float, access::read_write> out_texture [[texture(1)]],

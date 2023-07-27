@@ -21,6 +21,8 @@ let crop_texture_state = try! device.makeComputePipelineState(function: mfl.make
 let extend_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "extend_texture")!)
 let fill_with_zeros_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros")!)
 let normalize_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_texture")!)
+let sum_row_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_row")!)
+let sum_rect_columns_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_rect_columns")!)
 let upsample_bilinear_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_bilinear_float")!)
 let upsample_nearest_int_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_nearest_int")!)
 
@@ -519,8 +521,50 @@ func upsample(_ input_texture: MTLTexture, to_width width: Int, to_height height
     return output_texture
 }
 
+// TODO: Remove all the extra checks for black_level == -1 since we will not always have a black level.
+// TODO: Currently returns the same value for all subpixels, need to change it to be per-subpixel
 /// Calculate the sum of each subpixel in the mosaic pattern within the specified region
-func calculate_subpixel_sum(for texture: MTLTexture, top: Int32, left: Int32, bottom: Int32, right: Int32) -> [Int] {
-    // TODO
-    return [256, 256, 256, 256]
+func calculate_subpixel_sum(for texture: MTLTexture, masked_area: UnsafeMutablePointer<Int32>, mosaic_pattern_width: Int32) -> Int {
+    let top     = masked_area[0]
+    let left    = masked_area[1]
+    let bottom  = masked_area[2]
+    let right   = masked_area[3]
+    // Create output texture from the y-axis blurring
+    let texture_descriptor = MTLTextureDescriptor()
+    texture_descriptor.textureType = .type1D
+    texture_descriptor.pixelFormat = texture.pixelFormat
+    texture_descriptor.width = Int(right - left)
+    texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let summed_y = device.makeTexture(descriptor: texture_descriptor)!
+    
+    // Sum along columns
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.setComputePipelineState(sum_rect_columns_state)
+    let threads_per_grid = MTLSize(width: summed_y.width, height: 1, depth: 1)
+    let max_threads_per_thread_group = sum_rect_columns_state.maxTotalThreadsPerThreadgroup
+    let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
+    
+    command_encoder.setTexture(texture, index: 0)
+    command_encoder.setTexture(summed_y, index: 1)
+    command_encoder.setBytes([top], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([left], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([bottom], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    
+    // Sum along the row
+    let sum_buffer = device.makeBuffer(length: 1*MemoryLayout<UInt32>.size, options: .storageModeShared)!
+    command_encoder.setComputePipelineState(sum_row_state)
+    command_encoder.setTexture(summed_y, index: 0)
+    command_encoder.setBuffer(sum_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(summed_y.width)], length: MemoryLayout<Int32>.stride, index: 1)
+    // TODO: Should this have the same number of threads? I think it should only be 1 thread.
+    let threads_per_grid_x = MTLSize(width: 1, height: 1, depth: 1)
+    command_encoder.dispatchThreads(threads_per_grid_x, threadsPerThreadgroup: threads_per_thread_group)
+    
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    return Int(sum_buffer.contents().bindMemory(to: UInt32.self, capacity: 1)[0])
+//    / Int((bottom - top) * (right - left))
 }
