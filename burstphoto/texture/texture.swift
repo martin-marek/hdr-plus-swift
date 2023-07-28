@@ -532,7 +532,7 @@ func calculate_subpixel_sum(for texture: MTLTexture, masked_area: UnsafeMutableP
     // Create output texture from the y-axis blurring
     let texture_descriptor = MTLTextureDescriptor()
     texture_descriptor.textureType = .type1D
-    texture_descriptor.pixelFormat = texture.pixelFormat
+    texture_descriptor.pixelFormat = .r32Float
     texture_descriptor.width = Int(right - left)
     texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let summed_y = device.makeTexture(descriptor: texture_descriptor)!
@@ -551,9 +551,10 @@ func calculate_subpixel_sum(for texture: MTLTexture, masked_area: UnsafeMutableP
     command_encoder.setBytes([left], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([bottom], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.popDebugGroup()
     
     // Sum along the row
-    let sum_buffer = device.makeBuffer(length: 1*MemoryLayout<UInt32>.size, options: .storageModeShared)!
+    let sum_buffer = device.makeBuffer(length: 1*MemoryLayout<Float32>.size, options: .storageModeShared)!
     command_encoder.setComputePipelineState(sum_row_state)
     command_encoder.setTexture(summed_y, index: 0)
     command_encoder.setBuffer(sum_buffer, offset: 0, index: 0)
@@ -561,10 +562,10 @@ func calculate_subpixel_sum(for texture: MTLTexture, masked_area: UnsafeMutableP
     // TODO: Should this have the same number of threads? I think it should only be 1 thread.
     let threads_per_grid_x = MTLSize(width: 1, height: 1, depth: 1)
     command_encoder.dispatchThreads(threads_per_grid_x, threadsPerThreadgroup: threads_per_thread_group)
-    
     command_encoder.endEncoding()
     command_buffer.commit()
     
-    return Int(sum_buffer.contents().bindMemory(to: UInt32.self, capacity: 1)[0])
-//    / Int((bottom - top) * (right - left))
+    // TODO: I don't want to have to wait here, I want to commit them all and then wait for the whole queue to finish. How can I come back and read them later?
+    command_buffer.waitUntilCompleted()
+    return Int(sum_buffer.contents().bindMemory(to: Float32.self, capacity: 1)[0] / Float32((bottom - top) * (right - left)))
 }
