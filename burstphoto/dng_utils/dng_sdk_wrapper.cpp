@@ -177,7 +177,7 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
         negative->SynchronizeMetadata();
             
         if (white_level > 0) {
-            negative->SetWhiteLevel(white_level);
+            negative->SetWhiteLevel(white_level, 0);
         }
         
         // write dng

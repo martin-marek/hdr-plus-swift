@@ -413,8 +413,8 @@ struct MyDropDelegate: DropDelegate {
         
         // set simplified value for output bit depth
         let output_bit_depth_dict = [
-            "Native"                       : "Native",
-            "Scale to 16 bit"              : "16Bit",
+            "Native"          : "Native",
+            "Scale to 16 bit" : "16Bit",
         ]
         let output_bit_depth_short = output_bit_depth_dict[settings.output_bit_depth]!
         

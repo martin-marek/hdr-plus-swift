@@ -41,9 +41,11 @@ struct MyProgram {
             let search_distance = "Medium"
             // options: "Off", "LinearFullRange", "Linear1EV", "Curve0EV" or "Curve1EV"
             let exposure_control = "LinearFullRange"
+            // options: "Native" or "16Bit"
+            let output_bit_depth = "Native"
             
             // align+merge
-            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: merging_algorithm, tile_size: tile_size, search_distance: search_distance, noise_reduction: noise_reduction, exposure_control: exposure_control)
+            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: merging_algorithm, tile_size: tile_size, search_distance: search_distance, noise_reduction: noise_reduction, exposure_control: exposure_control, output_bit_depth: output_bit_depth)
            
             print("Image saved in:", out_url.relativePath)            
         }

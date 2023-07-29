@@ -208,6 +208,13 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // convert images from uint16 to float16
     textures = textures.map{texture_uint16_to_float($0)}
      
+    // check that the comparison image has the same resolution as the reference image
+    for comp_idx in 0..<textures.count {
+        if (textures[ref_idx].width != textures[comp_idx].width) || (textures[ref_idx].height != textures[comp_idx].height) {
+            throw AlignmentError.inconsistent_resolutions
+        }
+    }
+    
     // set the tile size for the alignment
     let tile_size_dict = [
         "Small": 16,
@@ -466,11 +473,6 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
             
         // set comparison texture
         let comp_texture = extend_texture(textures[comp_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
-        
-        // check that the comparison image has the same resolution as the reference image
-        if (ref_texture.width != comp_texture.width) || (ref_texture.height != comp_texture.height) {
-            throw AlignmentError.inconsistent_resolutions
-        }
      
         let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
         color_factors3 = [color_factors[comp_idx*3+0], color_factors[comp_idx*3+1], color_factors[comp_idx*3+2]]
@@ -598,11 +600,6 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left_not_r
          
         // set and extend comparison texture
         let comp_texture = extend_texture(textures[comp_idx], pad_left, pad_right, pad_top, pad_bottom)
-        
-        // check that the comparison image has the same resolution as the reference image
-        if (ref_texture.width != comp_texture.width) || (ref_texture.height != comp_texture.height) {
-            throw AlignmentError.inconsistent_resolutions
-        }
         
         let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
         color_factors3 = [color_factors[comp_idx*3+0], color_factors[comp_idx*3+1], color_factors[comp_idx*3+2]]
