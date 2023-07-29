@@ -82,7 +82,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         } else {
             // the dng converter is installed -> use it
             print("Converting images...")
-            dng_urls = try convert_images_to_dng(image_urls, dng_converter_path, tmp_dir)
+            dng_urls = try convert_raws_to_dngs(image_urls, dng_converter_path, tmp_dir)
             print("Time to convert images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
             DispatchQueue.main.async { progress.int += 10_000_000 }
             t = DispatchTime.now().uptimeNanoseconds
@@ -263,7 +263,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         }
         
         // the dng converter is installed -> convert output DNG saved before with Adobe DNG Converter, which increases compatibility of the resulting DNG
-        let final_url = try convert_images_to_dng([out_url], dng_converter_path, out_dir)
+        let final_url = try convert_raws_to_dngs([out_url], dng_converter_path, out_dir)
                    
         // update out URL to new file
         out_url = final_url[0]

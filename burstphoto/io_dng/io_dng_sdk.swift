@@ -9,7 +9,7 @@ enum ImageIOError: Error {
 }
 
 
-func convert_images_to_dng(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String) throws -> [URL] {
+func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String) throws -> [URL] {
 
     // create command string
     let executable_path = dng_converter_path + "/Contents/MacOS/Adobe DNG Converter"
@@ -59,7 +59,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     var color_factor_b: Float32 = 0.0;
     var color_factors: [Double] = [0.0, 0.0, 0.0, 0.0];
     
-    error_code = read_image(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width, &white_level, &black_level0, &black_level1, &black_level2, &black_level3, &exposure_bias, &color_factor_r, &color_factor_g, &color_factor_b)
+    error_code = read_dng_from_disk(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width, &white_level, &black_level0, &black_level1, &black_level2, &black_level3, &exposure_bias, &color_factor_r, &color_factor_g, &color_factor_b)
     if (error_code != 0) {throw ImageIOError.load_error}
     
     // convert image bitmap to MTLTexture
@@ -204,7 +204,7 @@ func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) throws
     texture.getBytes(bytes_pointer!, bytesPerRow: bytes_per_row, from: mtl_region, mipmapLevel: 0)
 
     // save image
-    let error_code = write_image(in_url.path, out_url.path, &bytes_pointer)
+    let error_code = write_dng_to_disk(in_url.path, out_url.path, &bytes_pointer)
     if (error_code != 0) {throw ImageIOError.save_error}
     
     // free memory
