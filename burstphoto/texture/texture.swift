@@ -525,48 +525,74 @@ func upsample(_ input_texture: MTLTexture, to_width width: Int, to_height height
 //       Can we actually remove those checks? What if both black level and masked areas are not provided? (Default to 0?)
 // TODO: Currently returns the same value for all subpixels, need to change it to be per-subpixel
 /// Calculate the sum of each subpixel in the mosaic pattern within the specified region
-/// This returns the MTLBuffer that will contain the summed values as well as the MTLCommandBuffer used to calculate it.
-/// This is done so that all of the different masked areas sums can be queued up before calling the wait command.
-func calculate_subpixel_sum(for texture: MTLTexture, masked_area: UnsafeMutablePointer<Int32>, mosaic_pattern_width: Int32) -> (MTLBuffer, MTLCommandBuffer) {
-    let top     = masked_area[0]
-    let left    = masked_area[1]
-    let bottom  = masked_area[2]
-    let right   = masked_area[3]
-    // Create output texture from the y-axis blurring
-    let texture_descriptor = MTLTextureDescriptor()
-    texture_descriptor.textureType = .type1D
-    texture_descriptor.pixelFormat = .r32Float
-    texture_descriptor.width = Int(right - left)
-    texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let summed_y = device.makeTexture(descriptor: texture_descriptor)!
+func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_areas: UnsafeMutablePointer<Int32>, mosaic_pattern_width: Int32) -> [Int] {
+    var num_pixels: Float = 0.0
+    var command_buffers: [MTLCommandBuffer] = []
+    var black_level_buffers: [MTLBuffer] = []
+    var black_level_from_masked_area = [Float](repeating: 0.0, count: Int(mosaic_pattern_width*mosaic_pattern_width))
     
-    // Sum along columns
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    command_encoder.setComputePipelineState(sum_rect_columns_state)
-    let threads_per_grid = MTLSize(width: summed_y.width, height: 1, depth: 1)
-    let max_threads_per_thread_group = sum_rect_columns_state.maxTotalThreadsPerThreadgroup
-    let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
+    for i in 0..<4 {
+        // Up to 4 masked areas exist, as soon as we reach -1 we know there are no more masked areas after.
+        if masked_areas[4*i] == -1 { break }
+        let top     = masked_areas[4*i + 0]
+        let left    = masked_areas[4*i + 1]
+        let bottom  = masked_areas[4*i + 2]
+        let right   = masked_areas[4*i + 3]
+        
+        num_pixels += Float((bottom - top) * (right - left))
+        
+        // Create output texture from the y-axis blurring
+        let texture_descriptor = MTLTextureDescriptor()
+        texture_descriptor.textureType = .type1D
+        texture_descriptor.pixelFormat = .r32Float
+        texture_descriptor.width = Int(right - left)
+        texture_descriptor.usage = [.shaderRead, .shaderWrite]
+        let summed_y = device.makeTexture(descriptor: texture_descriptor)!
+        
+        // Sum along columns
+        let command_buffer = command_queue.makeCommandBuffer()!
+        let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        command_encoder.setComputePipelineState(sum_rect_columns_state)
+        let threads_per_grid = MTLSize(width: summed_y.width, height: 1, depth: 1)
+        let max_threads_per_thread_group = sum_rect_columns_state.maxTotalThreadsPerThreadgroup
+        let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
+        
+        command_encoder.setTexture(texture, index: 0)
+        command_encoder.setTexture(summed_y, index: 1)
+        command_encoder.setBytes([top], length: MemoryLayout<Int32>.stride, index: 1)
+        command_encoder.setBytes([left], length: MemoryLayout<Int32>.stride, index: 2)
+        command_encoder.setBytes([bottom], length: MemoryLayout<Int32>.stride, index: 3)
+        command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+        command_encoder.popDebugGroup()
+        
+        // Sum along the row
+        let sum_buffer = device.makeBuffer(length: 1*MemoryLayout<Float32>.size, options: .storageModeShared)!
+        command_encoder.setComputePipelineState(sum_row_state)
+        command_encoder.setTexture(summed_y, index: 0)
+        command_encoder.setBuffer(sum_buffer, offset: 0, index: 0)
+        command_encoder.setBytes([Int32(summed_y.width)], length: MemoryLayout<Int32>.stride, index: 1)
+        // TODO: Should this have the same number of threads? I think it should only be 1 thread.
+        let threads_per_grid_x = MTLSize(width: 1, height: 1, depth: 1)
+        command_encoder.dispatchThreads(threads_per_grid_x, threadsPerThreadgroup: threads_per_thread_group)
+        command_encoder.endEncoding()
+        command_buffer.commit()
+        
+        command_buffers.append(command_buffer)
+        black_level_buffers.append(sum_buffer)
+    }
     
-    command_encoder.setTexture(texture, index: 0)
-    command_encoder.setTexture(summed_y, index: 1)
-    command_encoder.setBytes([top], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.setBytes([left], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([bottom], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.popDebugGroup()
+    if num_pixels > 0 {
+        // TODO: Enable once we have per-subpixels black level.
+        // E.g. if a masked area is 2x2 and we're using a bayer image (2x2 RGGB mosaic pattern), while there are 4 pixels in the masked area, each subpixel (R, G, G, or B) actually only has 1/4 (1 / mosaic_width^2) that number of pixels.
+        // num_pixels /= Int(mosaic_pattern_width*mosaic_pattern_width)
+        
+        for i in 0..<command_buffers.count {
+            command_buffers[i].waitUntilCompleted()
+            for j in 0..<black_level_from_masked_area.count {
+                black_level_from_masked_area[j] += black_level_buffers[i].contents().bindMemory(to: Float32.self, capacity: 1)[0] / num_pixels
+            }
+        }
+    }
     
-    // Sum along the row
-    let sum_buffer = device.makeBuffer(length: 1*MemoryLayout<Float32>.size, options: .storageModeShared)!
-    command_encoder.setComputePipelineState(sum_row_state)
-    command_encoder.setTexture(summed_y, index: 0)
-    command_encoder.setBuffer(sum_buffer, offset: 0, index: 0)
-    command_encoder.setBytes([Int32(summed_y.width)], length: MemoryLayout<Int32>.stride, index: 1)
-    // TODO: Should this have the same number of threads? I think it should only be 1 thread.
-    let threads_per_grid_x = MTLSize(width: 1, height: 1, depth: 1)
-    command_encoder.dispatchThreads(threads_per_grid_x, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-    
-    return (sum_buffer, command_buffer)
+    return black_level_from_masked_area.map { Int($0) }
 }

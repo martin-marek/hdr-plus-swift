@@ -21,7 +21,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     var white_level: Int32 = -1
     // Hardcoding 9, I don't think anything has a mosaic width above 3
     var black_level_from_dng: [Int32]       = [Int32](repeating: -1, count: 3*3)
-    var black_level_from_masked_area: [Float]
+    let black_level_from_masked_area: [Int]
     // TODO: How to deal with unknown length here? Hardcode 9 and only use the ones we need?
     var black_level: [Int]
     var exposure_bias: Int32 = -1
@@ -51,40 +51,16 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     free(pixel_bytes!)
 
     // If any masked areas exist, calculate the black levels from it
-    black_level_from_masked_area = [Float](repeating: 0.0, count: Int(mosaic_pattern_width*mosaic_pattern_width))
-    var command_buffers: [MTLCommandBuffer] = []
-    var black_level_buffers: [MTLBuffer] = []
-    var num_pixels: Int = 0
-    for i in 0..<Int(masked_areas.count/4) {
-        // Up to 4 masked areas exist, as soon as we reach -1 we know there are no more masked areas after.
-        if masked_areas[4*i] == -1 { break }
-        
-        let (black_level_buffer, command_buffer) = calculate_subpixel_sum(for: texture, masked_area: &masked_areas[4*i], mosaic_pattern_width: mosaic_pattern_width)
-        command_buffers.append(command_buffer)
-        black_level_buffers.append(black_level_buffer)
-        num_pixels += Int((masked_areas[4*i+2] - masked_areas[4*i]) * (masked_areas[4*i+3] - masked_areas[4*i+1]))
-    }
-    // TODO: Enable once we have per-subpixels black level.
-    // E.g. if a masked area is 2x2 and we're using a bayer image (GRBG mosaic pattern), while there are 4 pixels in the masked area, each subpixel actually only has 1/4 (1 / mosaic_width^2) number of pixels.
-    // num_pixels /= Int(mosaic_pattern_width*mosaic_pattern_width)
-    
-    
-    for i in 0..<command_buffers.count {
-        command_buffers[i].waitUntilCompleted()
-        for j in 0..<black_level_from_masked_area.count {
-            black_level_from_masked_area[j] += black_level_buffers[i].contents().bindMemory(to: Float32.self, capacity: 1)[0]
-        }
-    }
+    black_level_from_masked_area = calculate_black_levels(for: texture, from_masked_areas: &masked_areas, mosaic_pattern_width: mosaic_pattern_width)
     
     // Load black levels either from the values the DNG reported or from the masked area
     black_level = [Int](repeating: 0, count: Int(mosaic_pattern_width*mosaic_pattern_width))
     for i in 0..<black_level.count {
         // 0 is hardcoded as a suspicious black level value.
-        // Have to use dng black level if masked areas are not provided.
-        if black_level_from_dng[i] > 0 || num_pixels == 0 {
+        if black_level_from_dng[i] > 0 {
             black_level[i] = Int(black_level_from_dng[i])
         } else {
-            black_level[i] = Int(black_level_from_masked_area[i]) / num_pixels
+            black_level[i] = black_level_from_masked_area[i]
         }
     }
     
