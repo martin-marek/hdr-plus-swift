@@ -8,7 +8,8 @@ let add_texture_weighted_state = try! device.makeComputePipelineState(function: 
 let color_difference_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "color_difference")!)
 let compute_merge_weight_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_merge_weight")!)
 
-// convenience function for the spatial merging approach
+
+/// Convenience function for the spatial merging approach
 func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, kernel_size: Int, robustness: Double, uniform_exposure: Bool, black_level: [Int], color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // set original texture size
@@ -89,6 +90,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         DispatchQueue.main.async { progress.int += Int(80000000/Double(textures.count)) }
     }
 }
+
 
 func add_texture_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ weight_texture: MTLTexture) -> MTLTexture {
     
