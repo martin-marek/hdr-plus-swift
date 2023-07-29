@@ -522,9 +522,12 @@ func upsample(_ input_texture: MTLTexture, to_width width: Int, to_height height
 }
 
 // TODO: Remove all the extra checks for black_level == -1 since we will not always have a black level.
+//       Can we actually remove those checks? What if both black level and masked areas are not provided? (Default to 0?)
 // TODO: Currently returns the same value for all subpixels, need to change it to be per-subpixel
 /// Calculate the sum of each subpixel in the mosaic pattern within the specified region
-func calculate_subpixel_sum(for texture: MTLTexture, masked_area: UnsafeMutablePointer<Int32>, mosaic_pattern_width: Int32) -> Int {
+/// This returns the MTLBuffer that will contain the summed values as well as the MTLCommandBuffer used to calculate it.
+/// This is done so that all of the different masked areas sums can be queued up before calling the wait command.
+func calculate_subpixel_sum(for texture: MTLTexture, masked_area: UnsafeMutablePointer<Int32>, mosaic_pattern_width: Int32) -> (MTLBuffer, MTLCommandBuffer) {
     let top     = masked_area[0]
     let left    = masked_area[1]
     let bottom  = masked_area[2]
@@ -565,7 +568,5 @@ func calculate_subpixel_sum(for texture: MTLTexture, masked_area: UnsafeMutableP
     command_encoder.endEncoding()
     command_buffer.commit()
     
-    // TODO: I don't want to have to wait here, I want to commit them all and then wait for the whole queue to finish. How can I come back and read them later?
-    command_buffer.waitUntilCompleted()
-    return Int(sum_buffer.contents().bindMemory(to: Float32.self, capacity: 1)[0] / Float32((bottom - top) * (right - left)))
+    return (sum_buffer, command_buffer)
 }
