@@ -523,9 +523,9 @@ func upsample(_ input_texture: MTLTexture, to_width width: Int, to_height height
 
 // TODO: Remove all the extra checks for black_level == -1 since we will not always have a black level.
 //       Can we actually remove those checks? What if both black level and masked areas are not provided? (Default to 0?)
-// TODO: Currently returns the same value for all subpixels, need to change it to be per-subpixel
-/// Calculate the sum of each subpixel in the mosaic pattern within the specified region
-func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_areas: UnsafeMutablePointer<Int32>, mosaic_pattern_width: Int32) -> [Int] {
+/// Calculate the sum of each subpixel in the mosaic pattern within the specified region.
+/// Returns and array of length mosaic\_pattern\_width^2 which is to be treated as a flattened 2D array: 2D(x, y) == 1D(x + width\*y)
+func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_areas: UnsafeMutablePointer<Int32>, mosaic_pattern_width: Int) -> [Int] {
     var num_pixels: Float = 0.0
     var command_buffers: [MTLCommandBuffer] = []
     var black_level_buffers: [MTLBuffer] = []
@@ -543,9 +543,10 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
         
         // Create output texture from the y-axis blurring
         let texture_descriptor = MTLTextureDescriptor()
-        texture_descriptor.textureType = .type1D
+        texture_descriptor.textureType = .type2D
         texture_descriptor.pixelFormat = .r32Float
         texture_descriptor.width = Int(right - left)
+        texture_descriptor.height = mosaic_pattern_width
         texture_descriptor.usage = [.shaderRead, .shaderWrite]
         let summed_y = device.makeTexture(descriptor: texture_descriptor)!
         
@@ -553,7 +554,7 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
         let command_buffer = command_queue.makeCommandBuffer()!
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
         command_encoder.setComputePipelineState(sum_rect_columns_state)
-        let threads_per_grid = MTLSize(width: summed_y.width, height: 1, depth: 1)
+        let thread_groups_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
         let max_threads_per_thread_group = sum_rect_columns_state.maxTotalThreadsPerThreadgroup
         let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
         
@@ -562,17 +563,20 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
         command_encoder.setBytes([top], length: MemoryLayout<Int32>.stride, index: 1)
         command_encoder.setBytes([left], length: MemoryLayout<Int32>.stride, index: 2)
         command_encoder.setBytes([bottom], length: MemoryLayout<Int32>.stride, index: 3)
-        command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+        command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 4)
+        command_encoder.dispatchThreads(thread_groups_per_grid, threadsPerThreadgroup: threads_per_thread_group)
         command_encoder.popDebugGroup()
         
         // Sum along the row
-        let sum_buffer = device.makeBuffer(length: 1*MemoryLayout<Float32>.size, options: .storageModeShared)!
+        let sum_buffer = device.makeBuffer(length: (mosaic_pattern_width*mosaic_pattern_width)*MemoryLayout<Float32>.size,
+                                           options: .storageModeShared)!
         command_encoder.setComputePipelineState(sum_row_state)
         command_encoder.setTexture(summed_y, index: 0)
         command_encoder.setBuffer(sum_buffer, offset: 0, index: 0)
         command_encoder.setBytes([Int32(summed_y.width)], length: MemoryLayout<Int32>.stride, index: 1)
+        command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 2)
         // TODO: Should this have the same number of threads? I think it should only be 1 thread.
-        let threads_per_grid_x = MTLSize(width: 1, height: 1, depth: 1)
+        let threads_per_grid_x = MTLSize(width: mosaic_pattern_width, height: mosaic_pattern_width, depth: 1)
         command_encoder.dispatchThreads(threads_per_grid_x, threadsPerThreadgroup: threads_per_thread_group)
         command_encoder.endEncoding()
         command_buffer.commit()
@@ -582,17 +586,17 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
     }
     
     if num_pixels > 0 {
-        // TODO: Enable once we have per-subpixels black level.
         // E.g. if a masked area is 2x2 and we're using a bayer image (2x2 RGGB mosaic pattern), while there are 4 pixels in the masked area, each subpixel (R, G, G, or B) actually only has 1/4 (1 / mosaic_width^2) that number of pixels.
-        // num_pixels /= Int(mosaic_pattern_width*mosaic_pattern_width)
+         num_pixels /= Float(mosaic_pattern_width*mosaic_pattern_width)
         
         for i in 0..<command_buffers.count {
             command_buffers[i].waitUntilCompleted()
+            let _this_black_levels = black_level_buffers[i].contents().bindMemory(to: Float32.self, capacity: 1)
             for j in 0..<black_level_from_masked_area.count {
-                black_level_from_masked_area[j] += black_level_buffers[i].contents().bindMemory(to: Float32.self, capacity: 1)[0] / num_pixels
+                black_level_from_masked_area[j] += _this_black_levels[j] / num_pixels
             }
         }
     }
     
-    return black_level_from_masked_area.map { Int($0) }
+    return black_level_from_masked_area.map { Int(round($0)) }
 }

@@ -17,7 +17,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     var pixel_bytes: UnsafeMutableRawPointer?
     var width: Int32 = 0
     var height: Int32 = 0
-    var mosaic_pattern_width: Int32 = 0
+    var _mosaic_pattern_width: Int32 = 0
     var white_level: Int32 = -1
     // Hardcoding 9, I don't think anything has a mosaic width above 3
     var black_level_from_dng: [Int32]       = [Int32](repeating: -1, count: 3*3)
@@ -36,8 +36,10 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
         -1, -1, -1, -1,
         -1, -1, -1, -1]
     
-    error_code = read_image(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width, &white_level, &black_level_from_dng, &masked_areas, &exposure_bias, &color_factor_r, &color_factor_g, &color_factor_b)
+    error_code = read_image(url.path, &pixel_bytes, &width, &height, &_mosaic_pattern_width, &white_level, &black_level_from_dng, &masked_areas, &exposure_bias, &color_factor_r, &color_factor_g, &color_factor_b)
     if (error_code != 0) {throw ImageIOError.load_error}
+    
+    let mosaic_pattern_width = Int(_mosaic_pattern_width)
     
     // convert image bitmap to MTLTexture
     let bytes_per_pixel = 2
@@ -54,7 +56,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     black_level_from_masked_area = calculate_black_levels(for: texture, from_masked_areas: &masked_areas, mosaic_pattern_width: mosaic_pattern_width)
     
     // Load black levels either from the values the DNG reported or from the masked area
-    black_level = [Int](repeating: 0, count: Int(mosaic_pattern_width*mosaic_pattern_width))
+    black_level = [Int](repeating: 0, count: mosaic_pattern_width*mosaic_pattern_width)
     for i in 0..<black_level.count {
         // 0 is hardcoded as a suspicious black level value.
         if black_level_from_dng[i] > 0 {
@@ -68,7 +70,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     color_factors[1] = Double(color_factor_g)
     color_factors[2] = Double(color_factor_b)
     
-    return (texture, Int(mosaic_pattern_width), Int(white_level), black_level, Int(exposure_bias), color_factors)
+    return (texture, mosaic_pattern_width, Int(white_level), black_level, Int(exposure_bias), color_factors)
 }
 
 
