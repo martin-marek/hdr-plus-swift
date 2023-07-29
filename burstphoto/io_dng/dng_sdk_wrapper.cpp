@@ -90,11 +90,11 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
                 printf("ERROR: LinearizationInfo is null.\n");
                 return 1;
             } else {
-                *white_level = int(negative->fLinearizationInfo->fWhiteLevel[0]);
-                *black_level     = negative->fLinearizationInfo->fBlackLevel[0][0][0];
-                *(black_level+1) = negative->fLinearizationInfo->fBlackLevel[0][1][0];
-                *(black_level+2) = negative->fLinearizationInfo->fBlackLevel[1][0][0];
-                *(black_level+3) = negative->fLinearizationInfo->fBlackLevel[1][1][0];
+                *white_level = int(linearization_info->fWhiteLevel[0]);
+                *black_level     = linearization_info->fBlackLevel[0][0][0];
+                *(black_level+1) = linearization_info->fBlackLevel[0][1][0];
+                *(black_level+2) = linearization_info->fBlackLevel[1][0][0];
+                *(black_level+3) = linearization_info->fBlackLevel[1][1][0];
             }
             
             // get color factors for neutral colors in camera color space
