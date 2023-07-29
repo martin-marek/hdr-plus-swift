@@ -19,242 +19,9 @@ let crop_texture_state = try! device.makeComputePipelineState(function: mfl.make
 let extend_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "extend_texture")!)
 let fill_with_zeros_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros")!)
 let normalize_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_texture")!)
-let texture_uint16_to_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "texture_uint16_to_float")!)
+let convert_uint16_to_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_uint16_to_float")!)
 let upsample_bilinear_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_bilinear_float")!)
 let upsample_nearest_int_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_nearest_int")!)
-
-/**
- Function to calculate the average pixel value over the whole of a texture. If `pixelformat` is `rgba` then each channel will have an independent average calculated. Otherwise, a single value will be returned for the whole texture.
- */
-func texture_mean(_ in_texture: MTLTexture, _ pixelformat: String) -> MTLBuffer {
-    // create a 1d texture that will contain the averages of the input texture along the x-axis
-    let texture_descriptor = MTLTextureDescriptor()
-    texture_descriptor.textureType = .type1D
-    texture_descriptor.pixelFormat = in_texture.pixelFormat
-    texture_descriptor.width = in_texture.width
-    texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let avg_y = device.makeTexture(descriptor: texture_descriptor)!
-    
-    // average the input texture along the y-axis
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = (pixelformat == "rgba" ? average_y_rgba_state : average_y_state)
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
-    let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
-    let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
-    command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(avg_y, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    
-    // average the generated 1d texture along the x-axis
-    let state2 = (pixelformat == "rgba" ? average_x_rgba_state : average_x_state)
-    command_encoder.setComputePipelineState(state2)
-    let avg_buffer = device.makeBuffer(length: (pixelformat=="rgba" ? 4 : 1)*MemoryLayout<Float32>.size, options: .storageModeShared)!
-    command_encoder.setTexture(avg_y, index: 0)
-    command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
-    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-    
-    return avg_buffer
-}
-
-func get_threads_per_thread_group(_ state: MTLComputePipelineState, _ threads_per_grid: MTLSize) -> MTLSize {
-    var available_threads = state.maxTotalThreadsPerThreadgroup
-    if threads_per_grid.depth > available_threads {
-        return MTLSize(width: 1, height: 1, depth: available_threads)
-    } else {
-        available_threads /= threads_per_grid.depth
-        if threads_per_grid.height > available_threads {
-            return MTLSize(width: 1, height: available_threads, depth: threads_per_grid.depth)
-        } else {
-            available_threads /= threads_per_grid.height
-            return MTLSize(width: available_threads, height: threads_per_grid.height, depth: threads_per_grid.depth)
-        }
-    }
-}
-
-/**
- Initialize the passed in texture with zeros.
- */
-func fill_with_zeros(_ texture: MTLTexture) {
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = fill_with_zeros_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: texture.width, height: texture.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(texture, index: 0)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-}
-
-/**
- Convert a texture of 16-bit uints, from DNG, into 16 bit floats to avoid the quantazation errors that would come with doing the pipeline with integers.
- */
-func texture_uint16_to_float(_ in_texture: MTLTexture) -> MTLTexture {
-
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: in_texture.width, height: in_texture.height, mipmapped: false)
-    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = texture_uint16_to_float_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(out_texture, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-    
-    return out_texture
-}
-
-/**
- Convert a texture of 16-bit floats into 16 bit uints for storing in a DNG file.
- */
-func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int) -> MTLTexture {
-    
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: in_texture.width, height: in_texture.height, mipmapped: false)
-    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = convert_float_to_uint16_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(out_texture, index: 1)
-    command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-
-    return out_texture
-}
-
-/**
- 
- */
-func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String) -> MTLTexture {
-    let scale_x = Double(width) / Double(input_texture.width)
-    let scale_y = Double(height) / Double(input_texture.height)
-    
-    // create output texture
-    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: width, height: height, mipmapped: false)
-    output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
-    
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = (mode == "bilinear" ? upsample_bilinear_float_state : upsample_nearest_int_state)
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(input_texture, index: 0)
-    command_encoder.setTexture(output_texture, index: 1)
-    command_encoder.setBytes([Float32(scale_x)], length: MemoryLayout<Float32>.stride, index: 0)
-    command_encoder.setBytes([Float32(scale_y)], length: MemoryLayout<Float32>.stride, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-    
-    return output_texture
-}
-
-
-func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_pattern_width: Int) -> MTLTexture {
-    
-    // create a temp texture blurred along x-axis only and the output texture, blurred along both x- and y-axis
-    let blur_x = texture_like(in_texture)
-    let blur_xy = texture_like(in_texture)
-    
-    let kernel_size_mapped = (kernel_size == 16) ? 16 : max(0, min(8, kernel_size))
-    
-    // blur the texture along the x-axis
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = blur_mosaic_texture_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(blur_x, index: 1)
-    command_encoder.setBytes([Int32(kernel_size_mapped)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([Int32(0)], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    
-    // blur the texture along the y-axis
-    command_encoder.setTexture(blur_x, index: 0)
-    command_encoder.setTexture(blur_xy, index: 1)
-    command_encoder.setBytes([Int32(in_texture.height)], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([Int32(1)], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    
-    command_encoder.endEncoding()
-    command_buffer.commit()
-    
-    return blur_xy
-}
-
-
-func extend_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _ pad_top: Int, _ pad_bottom: Int) -> MTLTexture {
-    
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: in_texture.width+pad_left+pad_right, height: in_texture.height+pad_top+pad_bottom, mipmapped: false)
-    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    fill_with_zeros(out_texture)
-        
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = extend_texture_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(out_texture, index: 1)
-    command_encoder.setBytes([Int32(pad_left)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(pad_top)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-
-    return out_texture
-}
-
-
-func crop_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _ pad_top: Int, _ pad_bottom: Int) -> MTLTexture {
-    
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: in_texture.pixelFormat, width: in_texture.width-pad_left-pad_right, height: in_texture.height-pad_top-pad_bottom, mipmapped: false)
-    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = crop_texture_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(out_texture, index: 1)
-    command_encoder.setBytes([Int32(pad_left)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(pad_top)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-
-    return out_texture
-}
 
 
 func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textures: Int) {
@@ -319,43 +86,77 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
 }
 
 
-func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture) {
+func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_pattern_width: Int) -> MTLTexture {
     
+    // create a temp texture blurred along x-axis only and the output texture, blurred along both x- and y-axis
+    let blur_x = texture_like(in_texture)
+    let blur_xy = texture_like(in_texture)
+    
+    let kernel_size_mapped = (kernel_size == 16) ? 16 : max(0, min(8, kernel_size))
+    
+    // blur the texture along the x-axis
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = normalize_texture_state
+    let state = blur_mosaic_texture_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(norm_texture, index: 1)
+    command_encoder.setTexture(blur_x, index: 1)
+    command_encoder.setBytes([Int32(kernel_size_mapped)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(0)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    
+    // blur the texture along the y-axis
+    command_encoder.setTexture(blur_x, index: 0)
+    command_encoder.setTexture(blur_xy, index: 1)
+    command_encoder.setBytes([Int32(in_texture.height)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(1)], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    
     command_encoder.endEncoding()
     command_buffer.commit()
-}
-
-/**
- Create and return a new texture that has the same properties as the one passed in.
- */
-func texture_like(_ input_texture: MTLTexture) -> MTLTexture {
-    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: input_texture.width, height: input_texture.height, mipmapped: false)
-    output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
-    return output_texture
-}
-
-/**
- Create a deep copy of the passed in texture.
- */
-func copy_texture(_ in_texture: MTLTexture) -> MTLTexture {
     
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: in_texture.pixelFormat, width: in_texture.width, height: in_texture.height, mipmapped: false)
+    return blur_xy
+}
+
+
+/// Convert a texture of floats into 16 bit uints for storing in a DNG file.
+func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int) -> MTLTexture {
+    
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: in_texture.width, height: in_texture.height, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = copy_texture_state
+    let state = convert_float_to_uint16_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(out_texture, index: 1)
+    command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+
+    return out_texture
+}
+
+
+/// Convert a texture of 16-bit uints, from DNG, into 16 bit floats to avoid the quantazation errors that would come with doing the pipeline with integers.
+func convert_uint16_to_float(_ in_texture: MTLTexture) -> MTLTexture {
+
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: in_texture.width, height: in_texture.height, mipmapped: false)
+    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = convert_uint16_to_float_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
@@ -367,6 +168,7 @@ func copy_texture(_ in_texture: MTLTexture) -> MTLTexture {
     
     return out_texture
 }
+
 
 func convert_to_rgba(_ in_texture: MTLTexture, _ crop_merge_x: Int, _ crop_merge_y: Int) -> MTLTexture {
     
@@ -412,6 +214,30 @@ func convert_to_bayer(_ in_texture: MTLTexture) -> MTLTexture {
     
     return out_texture
 }
+
+
+/// Create a deep copy of the passed in texture.
+func copy_texture(_ in_texture: MTLTexture) -> MTLTexture {
+    
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: in_texture.pixelFormat, width: in_texture.width, height: in_texture.height, mipmapped: false)
+    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = copy_texture_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(out_texture, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    return out_texture
+}
+
 
 func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int]) {
     // generate simple average of all textures
@@ -463,4 +289,172 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int]) {
         command_encoder.endEncoding()
         command_buffer.commit()
     }
+}
+
+
+func crop_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _ pad_top: Int, _ pad_bottom: Int) -> MTLTexture {
+    
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: in_texture.pixelFormat, width: in_texture.width-pad_left-pad_right, height: in_texture.height-pad_top-pad_bottom, mipmapped: false)
+    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = crop_texture_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(out_texture, index: 1)
+    command_encoder.setBytes([Int32(pad_left)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(pad_top)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+
+    return out_texture
+}
+
+
+func extend_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _ pad_top: Int, _ pad_bottom: Int) -> MTLTexture {
+    
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: in_texture.width+pad_left+pad_right, height: in_texture.height+pad_top+pad_bottom, mipmapped: false)
+    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    fill_with_zeros(out_texture)
+        
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = extend_texture_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(out_texture, index: 1)
+    command_encoder.setBytes([Int32(pad_left)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(pad_top)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+
+    return out_texture
+}
+
+/// Initialize the passed in texture with zeros.
+func fill_with_zeros(_ texture: MTLTexture) {
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = fill_with_zeros_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: texture.width, height: texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(texture, index: 0)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+}
+
+
+func get_threads_per_thread_group(_ state: MTLComputePipelineState, _ threads_per_grid: MTLSize) -> MTLSize {
+    var available_threads = state.maxTotalThreadsPerThreadgroup
+    if threads_per_grid.depth > available_threads {
+        return MTLSize(width: 1, height: 1, depth: available_threads)
+    } else {
+        available_threads /= threads_per_grid.depth
+        if threads_per_grid.height > available_threads {
+            return MTLSize(width: 1, height: available_threads, depth: threads_per_grid.depth)
+        } else {
+            available_threads /= threads_per_grid.height
+            return MTLSize(width: available_threads, height: threads_per_grid.height, depth: threads_per_grid.depth)
+        }
+    }
+}
+
+
+func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture) {
+    
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = normalize_texture_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(norm_texture, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+}
+
+
+/// Create and return a new texture that has the same properties as the one passed in.
+func texture_like(_ input_texture: MTLTexture) -> MTLTexture {
+    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: input_texture.width, height: input_texture.height, mipmapped: false)
+    output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
+    return output_texture
+}
+
+
+/// Function to calculate the average pixel value over the whole of a texture. If `pixelformat` is `rgba` then each channel will have an independent average calculated. Otherwise, a single value will be returned for the whole texture.
+func texture_mean(_ in_texture: MTLTexture, _ pixelformat: String) -> MTLBuffer {
+    // create a 1d texture that will contain the averages of the input texture along the x-axis
+    let texture_descriptor = MTLTextureDescriptor()
+    texture_descriptor.textureType = .type1D
+    texture_descriptor.pixelFormat = in_texture.pixelFormat
+    texture_descriptor.width = in_texture.width
+    texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let avg_y = device.makeTexture(descriptor: texture_descriptor)!
+    
+    // average the input texture along the y-axis
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = (pixelformat == "rgba" ? average_y_rgba_state : average_y_state)
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
+    let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
+    let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(avg_y, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    
+    // average the generated 1d texture along the x-axis
+    let state2 = (pixelformat == "rgba" ? average_x_rgba_state : average_x_state)
+    command_encoder.setComputePipelineState(state2)
+    let avg_buffer = device.makeBuffer(length: (pixelformat=="rgba" ? 4 : 1)*MemoryLayout<Float32>.size, options: .storageModeShared)!
+    command_encoder.setTexture(avg_y, index: 0)
+    command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    return avg_buffer
+}
+
+
+func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String) -> MTLTexture {
+    let scale_x = Double(width) / Double(input_texture.width)
+    let scale_y = Double(height) / Double(input_texture.height)
+    
+    // create output texture
+    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: width, height: height, mipmapped: false)
+    output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
+    
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = (mode == "bilinear" ? upsample_bilinear_float_state : upsample_nearest_int_state)
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(input_texture, index: 0)
+    command_encoder.setTexture(output_texture, index: 1)
+    command_encoder.setBytes([Float32(scale_x)], length: MemoryLayout<Float32>.stride, index: 0)
+    command_encoder.setBytes([Float32(scale_y)], length: MemoryLayout<Float32>.stride, index: 1)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    return output_texture
 }

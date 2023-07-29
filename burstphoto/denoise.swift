@@ -138,7 +138,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     }
        
     // convert images from uint16 to float16
-    textures = textures.map{texture_uint16_to_float($0)}
+    textures = textures.map{convert_uint16_to_float($0)}
      
     // set the tile size for the alignment
     let tile_size_dict = [
