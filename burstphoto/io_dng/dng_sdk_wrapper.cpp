@@ -90,6 +90,11 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
                 printf("ERROR: LinearizationInfo is null.\n");
                 return 1;
             } else {
+                // TODO: Hardcoded for rawIFD.fSamplesPerPixel == 1
+                // TODO: This ignores fBlackDeltaV and fBlackDeltaH (this is especially older Canon Cameras)
+                //       Get their size from fBlackDeltaV->LogicalSize()>>3 (idk why >>3)
+                //       The size from this (for e.g. a Canon EOS 350D) is smaller than image.Height()/image.Width*())
+                // TODO: Add basic support for fBlackDeltaV and fBlackDeltaH by simply averaging the values and adding them to the black levels.
                 *white_level = int(linearization_info->fWhiteLevel[0]);
                 *black_level     = linearization_info->fBlackLevel[0][0][0];
                 *(black_level+1) = linearization_info->fBlackLevel[0][1][0];
