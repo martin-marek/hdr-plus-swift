@@ -71,6 +71,7 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
     return aligned_texture
 }
 
+
 func avg_pool(_ input_texture: MTLTexture, _ scale: Int, _ normalization: Bool, _ color_factors3: Array<Double>) -> MTLTexture {
 
     let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: input_texture.width/scale, height: input_texture.height/scale, mipmapped: false)
@@ -156,6 +157,7 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     return tile_diff
 }
 
+
 func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev_alignment: MTLTexture, _ downscale_factor: Int, _ uniform_exposure: Bool, _ black_level_mean: Double, _ use_ssd: Bool, _ tile_info: TileInfo) -> MTLTexture {
     
     // create texture for corrected alignment
@@ -186,6 +188,7 @@ func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture,
     
     return prev_alignment_corrected
 }
+
 
 func find_best_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLTexture, _ current_alignment: MTLTexture, _ downscale_factor: Int, _ tile_info: TileInfo) {
     
