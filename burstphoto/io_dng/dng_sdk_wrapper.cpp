@@ -70,13 +70,19 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
             dng_point mosaic_pattern_size = negative->fMosaicInfo->fCFAPatternSize;
             *mosaic_pattern_width = mosaic_pattern_size.h;
         }
+               
+        // Get masked area
+        if (rawIFD.fMaskedAreaCount > 0) {
+            for (int i = 0; i < rawIFD.fMaskedAreaCount; i++) {
+                // Add masked areas to the array
+                *(masked_areas + i + 0) = rawIFD.fMaskedArea[i].t;
+                *(masked_areas + i + 1) = rawIFD.fMaskedArea[i].l;
+                *(masked_areas + i + 2) = rawIFD.fMaskedArea[i].b;
+                *(masked_areas + i + 3) = rawIFD.fMaskedArea[i].r;
+            }
+        }
         
         // get black level, white level and color factors for exposure correction
-        *white_level = -1;
-        *color_factor_r = -1.0f;
-        *color_factor_g = -1.0f;
-        *color_factor_b = -1.0f;
-        
         // currently only working for 2x2 Bayer mosaic pattern
         if (*mosaic_pattern_width == 2) {
             const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
@@ -89,17 +95,6 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
                 *(black_level+1) = negative->fLinearizationInfo->fBlackLevel[0][1][0];
                 *(black_level+2) = negative->fLinearizationInfo->fBlackLevel[1][0][0];
                 *(black_level+3) = negative->fLinearizationInfo->fBlackLevel[1][1][0];
-                
-                // Getting a black level of 0 is suspicious, assume that it was no read correctly.
-                if ((*black_level == 0 && *(black_level+1) == 0 && *(black_level+2) == 0 & *(black_level+3) == 0) && rawIFD.fMaskedAreaCount > 0){
-                    for (int i = 0; i < rawIFD.fMaskedAreaCount; i++) {
-                        // Add masked areas to the array
-                        *(masked_areas + i + 0) = rawIFD.fMaskedArea[i].t;
-                        *(masked_areas + i + 1) = rawIFD.fMaskedArea[i].l;
-                        *(masked_areas + i + 2) = rawIFD.fMaskedArea[i].b;
-                        *(masked_areas + i + 3) = rawIFD.fMaskedArea[i].r;
-                    }
-                }
             }
             
             // get color factors for neutral colors in camera color space
@@ -117,7 +112,6 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
         // get exposure bias for exposure correction and product of ISO value and exposure time for control of hot pixel correction
         const dng_exif* exif = negative->GetExif();
         if (exif == NULL) {
-            *exposure_bias = -1;
             printf("ERROR: Exif is null.\n");
             return 1;
         } else {
@@ -130,12 +124,10 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
             // calculate product of ISO value and exposure time
             *ISO_exposure_time = ISO_speed_value*exposure_time_value.n/float(exposure_time_value.d);
         }
-        
-    }
-    catch(...) {
+        return 0;
+    } catch(...) {
         return 1;
     }
-    return 0;
 }
 
 int write_dng_to_disk(const char *in_path, const char *out_path, void** pixel_bytes_pointer, const int white_level) {

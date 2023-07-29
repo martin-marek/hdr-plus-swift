@@ -15,18 +15,19 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     // read image
     var error_code: Int32
     var pixel_bytes: UnsafeMutableRawPointer?
-    var width: Int32 = 0;
-    var height: Int32 = 0;
-    var mosaic_pattern_width: Int32 = 0;
-    var white_level: Int32 = 0;
+    var width: Int32 = 0
+    var height: Int32 = 0
+    var mosaic_pattern_width: Int32 = 0
+    var white_level: Int32 = -1
     var black_level_from_dng: [Int32]       = [0, 0, 0, 0]
-    var black_level_from_masked_area: [Int] = [0, 0, 0, 0]
-    var black_level: [Int] = [0, 0, 0, 0];
-    var exposure_bias: Int32 = 0;
-    var color_factor_r: Float32 = 0.0;
-    var color_factor_g: Float32 = 0.0;
-    var color_factor_b: Float32 = 0.0;
-    var color_factors: [Double] = [0.0, 0.0, 0.0, 0.0];
+    var black_level_from_masked_area: [Int]
+    // TODO: How to deal with unknown length here? Hardcode 9 and only use the ones we need?
+    var black_level: [Int]
+    var exposure_bias: Int32 = -1
+    var color_factor_r: Float32 = -1.0
+    var color_factor_g: Float32 = -1.0
+    var color_factor_b: Float32 = -1.0
+    var color_factors: [Double] = [0.0, 0.0, 0.0, 0.0]
     // There are at most 4 masked areas. Each one has, in order, the: top, left, bottom, and right edge of the masked area.
     var masked_areas: [Int32] = [
         -1, -1, -1, -1,
@@ -46,24 +47,27 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     let mtl_region = MTLRegionMake2D(0, 0, Int(width), Int(height))
     texture.replace(region: mtl_region, mipmapLevel: 0, withBytes: pixel_bytes!, bytesPerRow: bytes_per_row)
     
-    // free memory
     free(pixel_bytes!)
 
+    // If any masked areas exist, calculate the black levels from it
+    black_level_from_masked_area = [Int](repeating: 0, count: Int(mosaic_pattern_width*mosaic_pattern_width))
     for i in 0..<Int(masked_areas.count/4) {
+        // Up to 4 masked areas exist, as soon as we reach -1 we know there are no more masked areas after.
         if masked_areas[4*i] == -1 { break }
         
         let black_level_from_this_mask = calculate_subpixel_sum(for: texture, masked_area: &masked_areas[4*i], mosaic_pattern_width: mosaic_pattern_width)
-        for i in 0..<black_level_from_masked_area.count {
-            black_level_from_masked_area[i] = black_level_from_this_mask
+        for j in 0..<black_level_from_masked_area.count {
+            black_level_from_masked_area[j] = black_level_from_this_mask
         }
     }
     
-    // convert four black levels to int16
+    // Load black levels either from the values the DNG reported or from the masked area
+    black_level = [Int](repeating: 0, count: Int(mosaic_pattern_width*mosaic_pattern_width))
     for i in 0..<black_level.count {
-        if black_level_from_dng[i] == 0 {  // A value of 0 is suspicious
-            black_level[i] = black_level_from_masked_area[i]
-        } else {
+        if black_level_from_dng[i] > 0 {  // TODO: Currently hardcoding 0 as a suspicious value.
             black_level[i] = Int(black_level_from_dng[i])
+        } else {
+            black_level[i] = black_level_from_masked_area[i]
         }
     }
     
