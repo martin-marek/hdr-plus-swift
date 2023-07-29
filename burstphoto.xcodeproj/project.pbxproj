@@ -132,9 +132,8 @@
 		E133ADF728FEF8780058B799 /* jdpostct.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD4528FEF8770058B799 /* jdpostct.c */; };
 		E133ADFB28FEFB400058B799 /* dng_image_writer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACEC28FEF8770058B799 /* dng_image_writer.cpp */; };
 		E141516926CBFB2C006806D3 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E141516826CBFB2C006806D3 /* Carbon.framework */; };
-		E14152AA26CBFF49006806D3 /* dng_sdk_wrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E14152A926CBFF49006806D3 /* dng_sdk_wrapper.swift */; };
+		E14152AA26CBFF49006806D3 /* io_dng_sdk.swift in Sources */ = {isa = PBXBuildFile; fileRef = E14152A926CBFF49006806D3 /* io_dng_sdk.swift */; };
 		E15DBBDC26B5CAD200186172 /* denoise.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBDB26B5CAD200186172 /* denoise.swift */; };
-		E15DBBE026B6145200186172 /* io.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBDF26B6145200186172 /* io.swift */; };
 		E18CD6282703612000F4E1FB /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = E18CD6272703612000F4E1FB /* Credits.rtf */; };
 		E1ACED6A26A490A1009B14EB /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1ACED6926A490A1009B14EB /* App.swift */; };
 		E1ACED6C26A490A1009B14EB /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1ACED6B26A490A1009B14EB /* ContentView.swift */; };
@@ -171,7 +170,7 @@
 		E1F0A21D2909D80D00AB127E /* jdcoefct.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD4228FEF8770058B799 /* jdcoefct.c */; };
 		E1F0A21E2909D80D00AB127E /* dng_matrix.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC7928FEF8770058B799 /* dng_matrix.cpp */; };
 		E1F0A21F2909D80D00AB127E /* dng_pixel_buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACD828FEF8770058B799 /* dng_pixel_buffer.cpp */; };
-		E1F0A2202909D80D00AB127E /* dng_sdk_wrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E14152A926CBFF49006806D3 /* dng_sdk_wrapper.swift */; };
+		E1F0A2202909D80D00AB127E /* io_dng_sdk.swift in Sources */ = {isa = PBXBuildFile; fileRef = E14152A926CBFF49006806D3 /* io_dng_sdk.swift */; };
 		E1F0A2212909D80D00AB127E /* dng_area_task.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACB828FEF8770058B799 /* dng_area_task.cpp */; };
 		E1F0A2222909D80D00AB127E /* dng_string.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACF428FEF8770058B799 /* dng_string.cpp */; };
 		E1F0A2232909D80D00AB127E /* dng_safe_arithmetic.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACC528FEF8770058B799 /* dng_safe_arithmetic.cpp */; };
@@ -240,7 +239,6 @@
 		E1F0A2632909D80D00AB127E /* dng_exceptions.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACCD28FEF8770058B799 /* dng_exceptions.cpp */; };
 		E1F0A2642909D80D00AB127E /* dng_shared.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133ACC028FEF8770058B799 /* dng_shared.cpp */; };
 		E1F0A2652909D80D00AB127E /* jdcolor.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD1B28FEF8770058B799 /* jdcolor.c */; };
-		E1F0A2662909D80D00AB127E /* io.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DBBDF26B6145200186172 /* io.swift */; };
 		E1F0A2672909D80D00AB127E /* dng_xmp_sdk.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AD0628FEF8770058B799 /* dng_xmp_sdk.cpp */; };
 		E1F0A2682909D80D00AB127E /* jchuff.c in Sources */ = {isa = PBXBuildFile; fileRef = E133AD2228FEF8770058B799 /* jchuff.c */; };
 		E1F0A2692909D80D00AB127E /* dng_preview.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E133AC8428FEF8770058B799 /* dng_preview.cpp */; };
@@ -660,10 +658,9 @@
 		E133AD4428FEF8770058B799 /* jpegint.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = jpegint.h; sourceTree = "<group>"; };
 		E133AD4528FEF8770058B799 /* jdpostct.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = jdpostct.c; sourceTree = "<group>"; };
 		E141516826CBFB2C006806D3 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
-		E14152A926CBFF49006806D3 /* dng_sdk_wrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = dng_sdk_wrapper.swift; sourceTree = "<group>"; };
+		E14152A926CBFF49006806D3 /* io_dng_sdk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = io_dng_sdk.swift; sourceTree = "<group>"; };
 		E15DBBD826B5CAA800186172 /* bridging_header.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bridging_header.h; sourceTree = "<group>"; };
 		E15DBBDB26B5CAD200186172 /* denoise.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = denoise.swift; sourceTree = "<group>"; };
-		E15DBBDF26B6145200186172 /* io.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = io.swift; sourceTree = "<group>"; };
 		E18CD6272703612000F4E1FB /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; path = Credits.rtf; sourceTree = "<group>"; };
 		E1ACED6626A490A1009B14EB /* Burst Photo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Burst Photo.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1ACED6926A490A1009B14EB /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
@@ -1302,12 +1299,12 @@
 				FAED70E62A539CD000BF63BD /* align */,
 				FAED70E72A539CE000BF63BD /* merge */,
 				FAED70FA2A53A2F100BF63BD /* exposure */,
-				FA6660342A54F11200BF72DA /* helpers */,
+				FA6660342A54F11200BF72DA /* texture */,
 				E1ACED6B26A490A1009B14EB /* ContentView.swift */,
 				E1F0A1FC2909A39700AB127E /* cli.swift */,
 				E15DBBDB26B5CAD200186172 /* denoise.swift */,
 				FAED70EE2A539F9A00BF63BD /* constants.h */,
-				E1DDA10C29054173003EDF1A /* dng_utils */,
+				E1DDA10C29054173003EDF1A /* io_dng */,
 				E18CD6272703612000F4E1FB /* Credits.rtf */,
 				E1ACED6D26A490A2009B14EB /* Assets.xcassets */,
 				E1ACED7226A490A2009B14EB /* Info.plist */,
@@ -1325,25 +1322,24 @@
 			path = "Preview Content";
 			sourceTree = "<group>";
 		};
-		E1DDA10C29054173003EDF1A /* dng_utils */ = {
+		E1DDA10C29054173003EDF1A /* io_dng */ = {
 			isa = PBXGroup;
 			children = (
 				E133AC8C28FEF8770058B799 /* dng_sdk_wrapper.h */,
 				E133AD0028FEF8770058B799 /* dng_sdk_wrapper.cpp */,
-				E14152A926CBFF49006806D3 /* dng_sdk_wrapper.swift */,
+				E14152A926CBFF49006806D3 /* io_dng_sdk.swift */,
 				E15DBBD826B5CAA800186172 /* bridging_header.h */,
 			);
-			path = dng_utils;
+			path = io_dng;
 			sourceTree = "<group>";
 		};
-		FA6660342A54F11200BF72DA /* helpers */ = {
+		FA6660342A54F11200BF72DA /* texture */ = {
 			isa = PBXGroup;
 			children = (
-				E15DBBDF26B6145200186172 /* io.swift */,
 				FACC3BE82A54E12A002659D6 /* texture.swift */,
 				FACC3BEB2A54E1FF002659D6 /* texture.metal */,
 			);
-			path = helpers;
+			path = texture;
 			sourceTree = "<group>";
 		};
 		FAED70E62A539CD000BF63BD /* align */ = {
@@ -1525,7 +1521,7 @@
 				FAED70F22A53A12700BF63BD /* exposure.swift in Sources */,
 				E133ADB228FEF8770058B799 /* dng_pixel_buffer.cpp in Sources */,
 				FAED70F82A53A2BA00BF63BD /* frequency.metal in Sources */,
-				E14152AA26CBFF49006806D3 /* dng_sdk_wrapper.swift in Sources */,
+				E14152AA26CBFF49006806D3 /* io_dng_sdk.swift in Sources */,
 				E133ADA228FEF8770058B799 /* dng_area_task.cpp in Sources */,
 				FAED70EC2A539ED200BF63BD /* align.metal in Sources */,
 				E133ADBE28FEF8770058B799 /* dng_string.cpp in Sources */,
@@ -1600,7 +1596,6 @@
 				E133ADAF28FEF8770058B799 /* dng_exceptions.cpp in Sources */,
 				E133ADA728FEF8770058B799 /* dng_shared.cpp in Sources */,
 				E133ADD428FEF8780058B799 /* jdcolor.c in Sources */,
-				E15DBBE026B6145200186172 /* io.swift in Sources */,
 				E133ADC628FEF8770058B799 /* dng_xmp_sdk.cpp in Sources */,
 				FACC3BEC2A54E1FF002659D6 /* texture.metal in Sources */,
 				E133ADDB28FEF8780058B799 /* jchuff.c in Sources */,
@@ -1662,7 +1657,7 @@
 				E1F0A21D2909D80D00AB127E /* jdcoefct.c in Sources */,
 				E1F0A21E2909D80D00AB127E /* dng_matrix.cpp in Sources */,
 				E1F0A21F2909D80D00AB127E /* dng_pixel_buffer.cpp in Sources */,
-				E1F0A2202909D80D00AB127E /* dng_sdk_wrapper.swift in Sources */,
+				E1F0A2202909D80D00AB127E /* io_dng_sdk.swift in Sources */,
 				E1F0A2212909D80D00AB127E /* dng_area_task.cpp in Sources */,
 				E1F0A2222909D80D00AB127E /* dng_string.cpp in Sources */,
 				E1F0A2232909D80D00AB127E /* dng_safe_arithmetic.cpp in Sources */,
@@ -1739,7 +1734,6 @@
 				E1F0A2632909D80D00AB127E /* dng_exceptions.cpp in Sources */,
 				E1F0A2642909D80D00AB127E /* dng_shared.cpp in Sources */,
 				E1F0A2652909D80D00AB127E /* jdcolor.c in Sources */,
-				E1F0A2662909D80D00AB127E /* io.swift in Sources */,
 				E1F0A2672909D80D00AB127E /* dng_xmp_sdk.cpp in Sources */,
 				E1F0A2682909D80D00AB127E /* jchuff.c in Sources */,
 				E1F0A2692909D80D00AB127E /* dng_preview.cpp in Sources */,
@@ -1947,6 +1941,7 @@
 				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
 				PRODUCT_NAME = "Burst Photo";
+				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/io_dng/bridging_header.h;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -1981,6 +1976,7 @@
 				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
 				PRODUCT_NAME = "Burst Photo";
+				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/io_dng/bridging_header.h;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
