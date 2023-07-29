@@ -1928,6 +1928,7 @@
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = burstphoto/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				INFOPLIST_KEY_MetalCaptureEnabled = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -1963,6 +1964,7 @@
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = burstphoto/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				INFOPLIST_KEY_MetalCaptureEnabled = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
