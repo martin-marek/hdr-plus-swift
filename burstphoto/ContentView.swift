@@ -439,7 +439,7 @@ struct MyDropDelegate: DropDelegate {
             
             do {               
                 // align and merge the burst
-                out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, exposure_control: exposure_control_short, output_bit_depth: output_bit_depth_short)
+     out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: settings.merging_algorithm, tile_size: settings.tile_size, search_distance: settings.search_distance, noise_reduction: settings.noise_reduction, exposure_control: exposure_control_short, output_bit_depth: output_bit_depth_short, out_dir: NSHomeDirectory() + "/Pictures/Burst Photo/", tmp_dir: NSHomeDirectory() + "/Pictures/Burst Photo/.dngs/")
                    
                 // inform the user about the saved image
                 app_state = .image_saved

@@ -47,7 +47,7 @@ let textureCache = NSCache<NSString, ImageCacheWrapper>()
 /**
  Main function of the burst photo app.
  */
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native") throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native", out_dir: String, tmp_dir: String) throws -> URL {
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -61,20 +61,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // check that 2+ images were provided
     let n_images = image_urls.count
     if n_images < 2 {throw AlignmentError.less_than_two_images}
-    
-    // create output directory
-    let out_dir = NSHomeDirectory() + "/Pictures/Burst Photo/"
-    if !FileManager.default.fileExists(atPath: out_dir) {
-        try FileManager.default.createDirectory(atPath: out_dir, withIntermediateDirectories: true, attributes: nil)
-    }
-    
-    let tmp_dir = out_dir + ".dngs/"
-    // If it exists, delete a previously leftover temporary directory
-    var isDirectory : ObjCBool = true
-    if FileManager.default.fileExists(atPath: tmp_dir, isDirectory: &isDirectory) {
-        try FileManager.default.removeItem(atPath: tmp_dir)
-    }
-    try FileManager.default.createDirectory(atPath: tmp_dir, withIntermediateDirectories: true)
        
     // ensure that all files are .dng, converting them if necessary
     var dng_urls = image_urls
