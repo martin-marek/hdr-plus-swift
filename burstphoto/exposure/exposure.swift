@@ -18,7 +18,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
     // only apply exposure correction if reference image has an exposure, which is lower than the target exposure
     if (exposure_control != "Off" && white_level != -1 && black_level[0] != -1) {
           
-        var final_texture_blurred = blur_mosaic_texture(final_texture, 2, 2)
+        var final_texture_blurred = blur(final_texture, with_pattern_width: 2, using_kernel_size: 2)
         let max_texture_buffer = texture_max(final_texture_blurred)
         
         // find index of image with longest exposure to use the most robust black level value
@@ -66,7 +66,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         if (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") {
             
             let color_factor_mean = 0.25*(color_factors[ref_idx*3+0]+2.0*color_factors[ref_idx*3+1]+color_factors[ref_idx*3+2])
-            final_texture_blurred = blur_mosaic_texture(final_texture, 1, 1)
+            final_texture_blurred = blur(final_texture, with_pattern_width: 1, using_kernel_size: 1)
             
             command_encoder.setTexture(final_texture_blurred, index: 0)
             command_encoder.setTexture(final_texture, index: 1)
