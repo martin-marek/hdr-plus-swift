@@ -52,5 +52,8 @@ struct MyProgram {
         
         // terminate Adobe XMP SDK
         terminate_xmp_sdk()
+        
+        // Delete the temporary DNG directory
+        try FileManager.default.removeItem(atPath: NSHomeDirectory() + "/Pictures/Burst Photo/.dngs/")
     }
 }

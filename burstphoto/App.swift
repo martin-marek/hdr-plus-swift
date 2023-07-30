@@ -23,6 +23,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // let _ = NSApplication.shared.windows.map { $0.tabbingMode = .disallowed }
         NSWindow.allowsAutomaticWindowTabbing = false
     }
+    
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Delete the temporary DNG directory
+        do {
+            try FileManager.default.removeItem(atPath: NSHomeDirectory() + "/Pictures/Burst Photo/.dngs/")
+        } catch {
+            //
+        }
+        return .terminateNow
+    }
 }
 
 extension Scene {

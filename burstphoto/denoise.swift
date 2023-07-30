@@ -68,8 +68,12 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         try FileManager.default.createDirectory(atPath: out_dir, withIntermediateDirectories: true, attributes: nil)
     }
     
-    // create a directory for temporary dngs inside the output directory
     let tmp_dir = out_dir + ".dngs/"
+    // If it exists, delete a previously leftover temporary directory
+    var isDirectory : ObjCBool = true
+    if FileManager.default.fileExists(atPath: tmp_dir, isDirectory: &isDirectory) {
+        try FileManager.default.removeItem(atPath: tmp_dir)
+    }
     try FileManager.default.createDirectory(atPath: tmp_dir, withIntermediateDirectories: true)
        
     // ensure that all files are .dng, converting them if necessary
@@ -311,10 +315,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         // update out URL to new file
         out_url = final_url[0]
     }
-    
-    // delete the temporary dng directory
-//    try FileManager.default.removeItem(atPath: tmp_dir)
-    
+
     print("Time to save final image: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     print("")
     print("Total processing time for", textures.count, "images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
