@@ -121,7 +121,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
 }
 
 
-func load_images(_ urls: [URL], cache: NSCache<NSString, ImageCacheWrapper>) throws -> ([MTLTexture], Int, [Int], [Int], [Int], [Double], [Double]) {
+func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrapper>) throws -> ([MTLTexture], Int, [Int], [Int], [Int], [Double], [Double]) {
     
     var textures_dict: [Int: MTLTexture] = [:]
     let compute_group = DispatchGroup()
@@ -135,7 +135,7 @@ func load_images(_ urls: [URL], cache: NSCache<NSString, ImageCacheWrapper>) thr
     var color_factors = Array(repeating: 0.0, count: 3*urls.count)
 
     for i in 0..<urls.count {
-        if let cachedValue = cache.object(forKey: NSString(string: urls[i].absoluteString)) {
+        if let cachedValue = textureCache.object(forKey: NSString(string: urls[i].absoluteString)) {
             access_queue.sync {
                 textures_dict[i] = cachedValue.texture
                 mosaic_pattern_width = cachedValue.mosaic_pattern_width
@@ -158,13 +158,14 @@ func load_images(_ urls: [URL], cache: NSCache<NSString, ImageCacheWrapper>) thr
                     
                     // thread-safely save the texture
                     access_queue.sync {
-                        cache.setObject(ImageCacheWrapper(texture: texture,
+                        textureCache.setObject(ImageCacheWrapper(texture: texture,
                                                           mosaic_pattern_width: _mosaic_pattern_width,
                                                           white_level: _white_level,
                                                           black_levels: _black_level,
                                                           exposure_bias: _exposure_bias,
                                                           color_factors: _color_factors),
-                                        forKey: NSString(string: urls[i].absoluteString))
+                                               forKey: NSString(string: urls[i].absoluteString),
+                                               cost: Int(Float(texture.allocatedSize) / 1024 / 1024))
                         textures_dict[i] = texture
                         mosaic_pattern_width = _mosaic_pattern_width
                         white_level[i] = _white_level

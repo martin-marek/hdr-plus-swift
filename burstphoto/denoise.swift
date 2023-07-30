@@ -49,6 +49,10 @@ let textureCache = NSCache<NSString, ImageCacheWrapper>()
  */
 func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native", out_dir: String, tmp_dir: String) throws -> URL {
     
+    // Set the approximate limit for the texture cache in MBs.
+    // Default is ~30% of total system RAM
+    textureCache.totalCostLimit = Int(0.3 * Float(ProcessInfo.processInfo.physicalMemory) / 1024.0 / 1024.0)
+    
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
     var t = t0
@@ -87,7 +91,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // load images
     t = DispatchTime.now().uptimeNanoseconds
     print("Loading images...")
-    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias, ISO_exposure_time, color_factors) = try load_images(dng_urls, cache: textureCache)
+    var (textures, mosaic_pattern_width, white_level, black_level, ISO_exposure_time, exposure_bias, color_factors) = try load_images(dng_urls, textureCache: textureCache)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10_000_000 : 20_000_000) }
