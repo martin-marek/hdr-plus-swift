@@ -46,18 +46,21 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
     let compute_group = DispatchGroup()
     let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
     
-    compute_queue.async(group: compute_group) {
-        let semaphor = DispatchSemaphore(value: ProcessInfo.processInfo.processorCount)
-        for url in in_urls {
-            if override_cache || !FileManager.default.fileExists(atPath: tmp_dir + url.deletingPathExtension().lastPathComponent + ".dng") {
-                semaphor.wait()
-                compute_queue.async(group: compute_group) {
-                    do {
-                        try safeShell(command + " \"\(url.relativePath)\"")
-                        semaphor.signal()
-                    } catch {}
-                }
-            }
+    var parallel_commands = [String](repeating: command,
+                                     count: min(Int(0.75*Double(ProcessInfo.processInfo.processorCount)),
+                                                in_urls.count))
+    
+    for i in 0..<in_urls.count {
+        if override_cache || !FileManager.default.fileExists(atPath: tmp_dir + in_urls[i].deletingPathExtension().lastPathComponent + ".dng") {
+            parallel_commands[i % parallel_commands.count] += " \"\(in_urls[i].relativePath)\""
+        }
+    }
+    
+    for parallel_command in parallel_commands {
+        compute_queue.async(group: compute_group) {
+            do {
+                try safeShell(parallel_command)
+            } catch {}
         }
     }
     
