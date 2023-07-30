@@ -186,7 +186,7 @@ struct ProcessingView: View {
     func progress_int_to_str(_ int: Int) -> String {
         
         if progress.includes_conversion && progress.int < 10000000 {
-            return "Converting images to DNG (this might take a while)..."
+            return "Converting images to DNG..."
         } else if progress.int < 20000000 {
             return "Loading images..."
         } else if progress.int < 100000000 {
