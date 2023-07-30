@@ -46,7 +46,6 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
     let compute_group = DispatchGroup()
     let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
     
-    var need_to_convert = false
     for url in in_urls {
         if override_cache || !FileManager.default.fileExists(atPath: tmp_dir + url.deletingPathExtension().lastPathComponent + ".dng") {
             compute_queue.async(group: compute_group) {
