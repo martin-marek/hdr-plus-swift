@@ -193,22 +193,6 @@ kernel void add_texture_weighted(texture2d<float, access::read> texture1 [[textu
 }
 
 
-kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
-                      texture1d<float, access::write> out_texture [[texture(1)]],
-                      uint gid [[thread_position_in_grid]]) {
-    uint x = gid;
-    int texture_height = in_texture.get_height();
-    float total = 0;
-    
-    for (int y = 0; y < texture_height; y++) {
-        total += in_texture.read(uint2(x, y)).r;
-    }
-    
-    float avg = total / texture_height;
-    out_texture.write(avg, x);
-}
-
-
 kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
                       device float *out_buffer [[buffer(0)]],
                       constant int& width [[buffer(1)]],
@@ -224,19 +208,18 @@ kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
 }
 
 
-kernel void average_y_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
-                           texture1d<float, access::write> out_texture [[texture(1)]],
-                           uint gid [[thread_position_in_grid]]) {
+kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
+                      texture1d<float, access::write> out_texture [[texture(1)]],
+                      uint gid [[thread_position_in_grid]]) {
     uint x = gid;
-    
     int texture_height = in_texture.get_height();
-    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    float total = 0;
     
     for (int y = 0; y < texture_height; y++) {
-        total += in_texture.read(uint2(x, y));
+        total += in_texture.read(uint2(x, y)).r;
     }
     
-    float4 avg = total / texture_height;
+    float avg = total / texture_height;
     out_texture.write(avg, x);
 }
 
@@ -257,6 +240,23 @@ kernel void average_x_rgba(texture1d<float, access::read> in_texture [[texture(0
     out_buffer[1] = avg[1];
     out_buffer[2] = avg[2];
     out_buffer[3] = avg[3];
+}
+
+
+kernel void average_y_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
+                           texture1d<float, access::write> out_texture [[texture(1)]],
+                           uint gid [[thread_position_in_grid]]) {
+    uint x = gid;
+    
+    int texture_height = in_texture.get_height();
+    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    
+    for (int y = 0; y < texture_height; y++) {
+        total += in_texture.read(uint2(x, y));
+    }
+    
+    float4 avg = total / texture_height;
+    out_texture.write(avg, x);
 }
 
 
@@ -310,17 +310,6 @@ kernel void blur_mosaic_texture(texture2d<float, access::read> in_texture [[text
 }
 
 
-kernel void convert_uint16_to_float(texture2d<uint, access::read> in_texture [[texture(0)]],
-                                    texture2d<float, access::write> out_texture [[texture(1)]],
-                                    uint2 gid [[thread_position_in_grid]]) {
-    
-    uint4 val_unint = in_texture.read(gid);
-    
-    float4 val_float = clamp(float4(val_unint), 0.0f, FLOAT16_MAX_VAL);
-    out_texture.write(val_float, gid);
-}
-
-
 kernel void convert_float_to_uint16(texture2d<float, access::read> in_texture [[texture(0)]],
                                     texture2d<uint, access::write> out_texture [[texture(1)]],
                                     constant int& white_level [[buffer(0)]],
@@ -334,19 +323,14 @@ kernel void convert_float_to_uint16(texture2d<float, access::read> in_texture [[
 }
 
 
-kernel void convert_to_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
-                            texture2d<float, access::write> out_texture [[texture(1)]],
-                            constant int& crop_merge_x [[buffer(0)]],
-                            constant int& crop_merge_y [[buffer(1)]],
-                            uint2 gid [[thread_position_in_grid]]) {
+kernel void convert_uint16_to_float(texture2d<uint, access::read> in_texture [[texture(0)]],
+                                    texture2d<float, access::write> out_texture [[texture(1)]],
+                                    uint2 gid [[thread_position_in_grid]]) {
     
-    int const m = gid.x*2 + crop_merge_x;
-    int const n = gid.y*2 + crop_merge_y;
+    uint4 val_unint = in_texture.read(gid);
     
-    float4 color_value = float4(in_texture.read(uint2(m, n)).r,   in_texture.read(uint2(m+1, n)).r,
-                                in_texture.read(uint2(m, n+1)).r, in_texture.read(uint2(m+1, n+1)).r);
-    
-    out_texture.write(color_value, gid);
+    float4 val_float = clamp(float4(val_unint), 0.0f, FLOAT16_MAX_VAL);
+    out_texture.write(val_float, gid);
 }
 
 
@@ -363,6 +347,22 @@ kernel void convert_to_bayer(texture2d<float, access::read> in_texture [[texture
     out_texture.write(color_value[1], uint2(m+1, n));
     out_texture.write(color_value[2], uint2(m,   n+1));
     out_texture.write(color_value[3], uint2(m+1, n+1));
+}
+
+
+kernel void convert_to_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
+                            texture2d<float, access::write> out_texture [[texture(1)]],
+                            constant int& crop_merge_x [[buffer(0)]],
+                            constant int& crop_merge_y [[buffer(1)]],
+                            uint2 gid [[thread_position_in_grid]]) {
+    
+    int const m = gid.x*2 + crop_merge_x;
+    int const n = gid.y*2 + crop_merge_y;
+    
+    float4 color_value = float4(in_texture.read(uint2(m, n)).r,   in_texture.read(uint2(m+1, n)).r,
+                                in_texture.read(uint2(m, n+1)).r, in_texture.read(uint2(m+1, n+1)).r);
+    
+    out_texture.write(color_value, gid);
 }
 
 

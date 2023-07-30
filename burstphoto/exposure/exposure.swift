@@ -2,8 +2,8 @@
 import Foundation
 import MetalPerformanceShaders
 
-let correct_exposure_linear_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure_linear")!)
 let correct_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure")!)
+let correct_exposure_linear_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure_linear")!)
 let equalize_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure")!)
 let max_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_x")!)
 let max_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_y")!)
