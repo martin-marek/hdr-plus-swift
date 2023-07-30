@@ -50,8 +50,8 @@ let textureCache = NSCache<NSString, ImageCacheWrapper>()
 func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native", out_dir: String, tmp_dir: String) throws -> URL {
     
     // Set the approximate limit for the texture cache in MBs.
-    // Default is ~30% of total system RAM
-    textureCache.totalCostLimit = Int(0.3 * Float(ProcessInfo.processInfo.physicalMemory) / 1024.0 / 1024.0)
+    // Default is ~20% of total system RAM
+    textureCache.totalCostLimit = Int(0.2 * Float(ProcessInfo.processInfo.physicalMemory) / 1024.0 / 1024.0)
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
