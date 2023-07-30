@@ -19,8 +19,8 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     var height: Int32 = 0
     var _mosaic_pattern_width: Int32 = 0
     var white_level: Int32 = -1
-    // Hardcoding 9, I don't think anything has a mosaic width above 3
-    var black_level_from_dng: [Int32]       = [Int32](repeating: -1, count: 3*3)
+    // Hardcoding mosaic width of 6, I don't think anything has a mosaic width above 6 (X-Trans sensor)
+    var black_level_from_dng: [Int32]       = [Int32](repeating: -1, count: 6*6)
     let black_level_from_masked_area: [Int]
     // TODO: How to deal with unknown length here? Hardcode 9 and only use the ones we need?
     var black_level: [Int]

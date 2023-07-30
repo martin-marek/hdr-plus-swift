@@ -20,7 +20,7 @@ void terminate_xmp_sdk() {
 }
 
 
-int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_level, int* masked_areas, int* exposure_bias, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
+int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_levels, int* masked_areas, int* exposure_bias, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
     
     try {
         
@@ -82,39 +82,43 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
             }
         }
         
-        // get black level, white level and color factors for exposure correction
-        // currently only working for 2x2 Bayer mosaic pattern
-        if (*mosaic_pattern_width == 2) {
-            const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
-            if (linearization_info == NULL) {
-                printf("ERROR: LinearizationInfo is null.\n");
-                return 1;
-            } else {
-                // TODO: Hardcoded for rawIFD.fSamplesPerPixel == 1
-                // TODO: This ignores fBlackDeltaV and fBlackDeltaH (this is especially older Canon Cameras)
-                //       Get their size from fBlackDeltaV->LogicalSize()>>3 (idk why >>3)
-                //       The size from this (for e.g. a Canon EOS 350D) is smaller than image.Height()/image.Width*())
-                // TODO: Add basic support for fBlackDeltaV and fBlackDeltaH by simply averaging the values and adding them to the black levels.
-                *white_level = int(linearization_info->fWhiteLevel[0]);
-                *black_level     = linearization_info->fBlackLevel[0][0][0];
-                *(black_level+1) = linearization_info->fBlackLevel[0][1][0];
-                *(black_level+2) = linearization_info->fBlackLevel[1][0][0];
-                *(black_level+3) = linearization_info->fBlackLevel[1][1][0];
-            }
+        // Get black level, white level and color factors for exposure correction
+        const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
+        if (linearization_info == NULL) {
+            printf("ERROR: LinearizationInfo is null.\n");
+            return 1;
+        } else {
+            // TODO: This ignores fBlackDeltaV and fBlackDeltaH (this is especially older Canon Cameras)
+            //       Get their size from fBlackDeltaV->LogicalSize()>>3 (idk why >>3)
+            //       The size from this (for e.g. a Canon EOS 350D) is smaller than image.Height()/image.Width*())
             
-            // get color factors for neutral colors in camera color space
-            const dng_vector camera_neutral = negative->CameraNeutral();
-            if (camera_neutral.IsEmpty()) {
-                printf("ERROR: CameraNeutral is null.\n");
-                return 1;
-            } else {
-                *color_factor_r = float(camera_neutral[0]);
-                *color_factor_g = float(camera_neutral[1]);
-                *color_factor_b = float(camera_neutral[2]);
+            *white_level = int(linearization_info->fWhiteLevel[0]);
+            for (int row = 0; row < *mosaic_pattern_width; row++) {
+                for (int col = 0; col < *mosaic_pattern_width; col++) {
+                    double black_level = 0.0;
+                    for (int sample_num = 0; sample_num < rawIFD.fSamplesPerPixel; sample_num++) {
+                        black_level += linearization_info->fBlackLevel[row][col][sample_num];
+                    }
+                    black_level /= rawIFD.fSamplesPerPixel;
+                    
+                    // TODO: Add basic support for fBlackDeltaV and fBlackDeltaH by simply averaging the values and adding them to the black levels.
+                    *(black_levels + row + (*mosaic_pattern_width)*col) = (int) black_level;
+                }
             }
         }
         
-        // get exposure bias for exposure correction and product of ISO value and exposure time for control of hot pixel correction
+        // get color factors for neutral colors in camera color space
+        const dng_vector camera_neutral = negative->CameraNeutral();
+        if (camera_neutral.IsEmpty()) {
+            printf("ERROR: CameraNeutral is null.\n");
+            return 1;
+        } else {
+            *color_factor_r = float(camera_neutral[0]);
+            *color_factor_g = float(camera_neutral[1]);
+            *color_factor_b = float(camera_neutral[2]);
+        }
+        
+        // Get exposure bias for exposure correction  and product of ISO value and exposure time for control of hot pixel correction
         const dng_exif* exif = negative->GetExif();
         if (exif == NULL) {
             printf("ERROR: Exif is null.\n");
