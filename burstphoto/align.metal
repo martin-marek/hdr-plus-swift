@@ -1811,6 +1811,7 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
                               constant int& black_level3 [[buffer(4)]],
                               constant float& hot_pixel_threshold [[buffer(5)]],
                               constant float& hot_pixel_multiplicator [[buffer(6)]],
+                              constant float& correction_strength [[buffer(7)]],
                               uint2 gid [[thread_position_in_grid]]) {
        
     int const x = gid.x+2;
@@ -1859,7 +1860,7 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
         sum2      += in_texture.read(uint2(x+0, y+2)).r;
         
         // calculate weight for blending to have a smooth transition for not so obvious hot pixels
-        float const weight = 0.5f*min(hot_pixel_multiplicator*(pixel_ratio-hot_pixel_threshold), 2.0f);
+        float const weight = correction_strength*0.5f*min(hot_pixel_multiplicator*(pixel_ratio-hot_pixel_threshold), 2.0f);
         
         // blend values and replace hot pixel value
         out_texture.write(weight*0.25f*sum2 + (1.0f-weight)*in_texture.read(uint2(x, y)).r, uint2(x, y));

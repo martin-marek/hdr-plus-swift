@@ -147,7 +147,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // load images
     t = DispatchTime.now().uptimeNanoseconds
     print("Loading images...")
-    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias, color_factors) = try load_images(dng_urls)
+    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias, ISO_exposure_time, color_factors) = try load_images(dng_urls)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10000000 : 20000000) }
@@ -183,6 +183,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         for idx in 0..<white_level.count { white_level[idx] = -1 }
         for idx in 0..<black_level.count { black_level[idx] = -1 }
         for idx in 0..<color_factors.count { color_factors[idx] = -1.0 }
+        for idx in 0..<ISO_exposure_time.count { ISO_exposure_time[idx] = -1.0 }
     }
     
     // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
@@ -240,7 +241,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // correction of hot pixels
     if mosaic_pattern_width == 2 {
         // correction of hot pixels
-        correct_hotpixels(textures, black_level)
+        correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction)
         
         // correction of intensities for images with bracketed exposure
         // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
@@ -1608,56 +1609,75 @@ func normalize_mismatch(_ mismatch_texture: MTLTexture, _ mean_mismatch_buffer: 
 }
 
 
-func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int]) {
-         
-    // generate simple average of all textures
-    let average_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[0].width, height: textures[0].height, mipmapped: false)
-    average_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let average_texture = device.makeTexture(descriptor: average_texture_descriptor)!
-    fill_with_zeros(average_texture)
+func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int], _ ISO_exposure_time: [Double], _ noise_reduction: Double) {
     
-    // iterate over all images
-    for comp_idx in 0..<textures.count {
+    var correction_strength = 1.0
+    
+    // calculate hot pixel correction strength based on ISO value, exposure time and number of frames in the burst
+    if ISO_exposure_time[0] > 0.0 {
         
-        add_texture(textures[comp_idx], average_texture, textures.count)
+        correction_strength = 0.0
+        for comp_idx in 0..<textures.count {
+            correction_strength += ISO_exposure_time[comp_idx]
+        }
+        correction_strength = (min(max(correction_strength/sqrt(Double(textures.count)) * (noise_reduction==23.0 ? 0.5 : 1.0), 20.0), 100.0)-20.0)/80.0
     }
     
-    // calculate mean value specific for each color channel
-    let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), "rgba")
+    print(correction_strength)
     
-    // standard parameters if black level is not available / available
-    let hot_pixel_threshold     = (black_level[0] == -1) ? 1.0 : 2.0
-    let hot_pixel_multiplicator = (black_level[0] == -1) ? 2.0 : 1.0
-       
-    // iterate over all images and correct hot pixels in each texture
-    for comp_idx in 0..<textures.count {       
+    // only apply hot pixel correction if correction strength is larger than 0.001
+    if correction_strength > 0.001 {
+    
+        // generate simple average of all textures
+        let average_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[0].width, height: textures[0].height, mipmapped: false)
+        average_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+        let average_texture = device.makeTexture(descriptor: average_texture_descriptor)!
+        fill_with_zeros(average_texture)
         
-        let black_level0 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+0]
-        let black_level1 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+1]
-        let black_level2 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+2]
-        let black_level3 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+3]
+        // iterate over all images
+        for comp_idx in 0..<textures.count {
+            
+            add_texture(textures[comp_idx], average_texture, textures.count)
+        }
         
-        let tmp_texture = copy_texture(textures[comp_idx])
+        // calculate mean value specific for each color channel
+        let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), "rgba")
         
-        let command_buffer = command_queue.makeCommandBuffer()!
-        let command_encoder = command_buffer.makeComputeCommandEncoder()!
-        let state = correct_hotpixels_state
-        command_encoder.setComputePipelineState(state)
-        let threads_per_grid = MTLSize(width: average_texture.width-4, height: average_texture.height-4, depth: 1)
-        let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-        command_encoder.setTexture(average_texture, index: 0)
-        command_encoder.setTexture(tmp_texture, index: 1)
-        command_encoder.setTexture(textures[comp_idx], index: 2)
-        command_encoder.setBuffer(mean_texture_buffer, offset: 0, index: 0)
-        command_encoder.setBytes([Int32(black_level0)], length: MemoryLayout<Int32>.stride, index: 1)
-        command_encoder.setBytes([Int32(black_level1)], length: MemoryLayout<Int32>.stride, index: 2)
-        command_encoder.setBytes([Int32(black_level2)], length: MemoryLayout<Int32>.stride, index: 3)
-        command_encoder.setBytes([Int32(black_level3)], length: MemoryLayout<Int32>.stride, index: 4)
-        command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 5)
-        command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 6)
-        command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-        command_encoder.endEncoding()
-        command_buffer.commit()
+        // standard parameters if black level is not available / available
+        let hot_pixel_threshold     = (black_level[0] == -1) ? 1.0 : 2.0
+        let hot_pixel_multiplicator = (black_level[0] == -1) ? 2.0 : 1.0
+        
+        // iterate over all images and correct hot pixels in each texture
+        for comp_idx in 0..<textures.count {
+            
+            let black_level0 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+0]
+            let black_level1 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+1]
+            let black_level2 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+2]
+            let black_level3 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+3]
+            
+            let tmp_texture = copy_texture(textures[comp_idx])
+            
+            let command_buffer = command_queue.makeCommandBuffer()!
+            let command_encoder = command_buffer.makeComputeCommandEncoder()!
+            let state = correct_hotpixels_state
+            command_encoder.setComputePipelineState(state)
+            let threads_per_grid = MTLSize(width: average_texture.width-4, height: average_texture.height-4, depth: 1)
+            let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+            command_encoder.setTexture(average_texture, index: 0)
+            command_encoder.setTexture(tmp_texture, index: 1)
+            command_encoder.setTexture(textures[comp_idx], index: 2)
+            command_encoder.setBuffer(mean_texture_buffer, offset: 0, index: 0)
+            command_encoder.setBytes([Int32(black_level0)], length: MemoryLayout<Int32>.stride, index: 1)
+            command_encoder.setBytes([Int32(black_level1)], length: MemoryLayout<Int32>.stride, index: 2)
+            command_encoder.setBytes([Int32(black_level2)], length: MemoryLayout<Int32>.stride, index: 3)
+            command_encoder.setBytes([Int32(black_level3)], length: MemoryLayout<Int32>.stride, index: 4)
+            command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 5)
+            command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 6)
+            command_encoder.setBytes([Float32(correction_strength)], length: MemoryLayout<Float32>.stride, index: 7)
+            command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+            command_encoder.endEncoding()
+            command_buffer.commit()
+        }
     }
 }
 
