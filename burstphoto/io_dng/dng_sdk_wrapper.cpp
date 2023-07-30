@@ -82,27 +82,53 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
             }
         }
         
+        int mosaic_width = *mosaic_pattern_width;
         // Get black level, white level and color factors for exposure correction
         const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
         if (linearization_info == NULL) {
             printf("ERROR: LinearizationInfo is null.\n");
             return 1;
         } else {
-            // TODO: This ignores fBlackDeltaV and fBlackDeltaH (this is especially older Canon Cameras)
-            //       Get their size from fBlackDeltaV->LogicalSize()>>3 (idk why >>3)
-            //       The size from this (for e.g. a Canon EOS 350D) is smaller than image.Height()/image.Width*())
-            
             *white_level = int(linearization_info->fWhiteLevel[0]);
-            for (int row = 0; row < *mosaic_pattern_width; row++) {
-                for (int col = 0; col < *mosaic_pattern_width; col++) {
+            
+            // The following performs basic handling of fBlackDeltaV and fBlackDeltaH
+            // It is not fully correct, and will fail if each row and column have significant differences between black levels.
+            // The current support is added to allow for certain older canon cameras (e.g. Canon 350D) to work correctly since they rely on it.
+            double black_level_delta_adjust[6*6] = { 0 };
+            
+            if (linearization_info->RowBlackCount() > 0) {
+                for (int row = 0; row < linearization_info->RowBlackCount(); row++) {
+                    for (int col = 0; col < mosaic_width; col++) {
+                        black_level_delta_adjust[(row % mosaic_width) + col * mosaic_width] += linearization_info->fBlackDeltaV->Buffer_real64()[row];
+                    }
+                }
+                for (int i = 0; i < mosaic_width*mosaic_width; i++) {
+                    black_level_delta_adjust[i] /= (linearization_info->RowBlackCount() / mosaic_width);
+                }
+            }
+            
+            if (linearization_info->ColumnBlackCount() > 0) {
+                for (int col = 0; col < linearization_info->ColumnBlackCount(); col++) {
+                    for (int row = 0; row < mosaic_width; row++) {
+                        black_level_delta_adjust[(row % mosaic_width) + col * mosaic_width] += linearization_info->fBlackDeltaH->Buffer_real64()[col];
+                    }
+                }
+                
+                for (int i = 0; i < mosaic_width*mosaic_width; i++) {
+                    black_level_delta_adjust[i] /= (linearization_info->ColumnBlackCount() / mosaic_width);
+                }
+            }
+            
+            for (int row = 0; row < mosaic_width; row++) {
+                for (int col = 0; col < mosaic_width; col++) {
                     double black_level = 0.0;
+                    // If there are multiple samples, average them out
                     for (int sample_num = 0; sample_num < rawIFD.fSamplesPerPixel; sample_num++) {
                         black_level += linearization_info->fBlackLevel[row][col][sample_num];
                     }
                     black_level /= rawIFD.fSamplesPerPixel;
                     
-                    // TODO: Add basic support for fBlackDeltaV and fBlackDeltaH by simply averaging the values and adding them to the black levels.
-                    *(black_levels + row + (*mosaic_pattern_width)*col) = (int) black_level;
+                    *(black_levels + row + col*mosaic_width) = (int) (black_level + black_level_delta_adjust[row + col*mosaic_width]);
                 }
             }
         }
