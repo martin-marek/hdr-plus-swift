@@ -2,20 +2,6 @@
 using namespace metal;
 
 
-kernel void add_texture_weighted(texture2d<float, access::read> texture1 [[texture(0)]],
-                                 texture2d<float, access::read> texture2 [[texture(1)]],
-                                 texture2d<float, access::read> weight_texture [[texture(2)]],
-                                 texture2d<float, access::write> out_texture [[texture(3)]],
-                                 uint2 gid [[thread_position_in_grid]]) {
-    
-    float intensity1 = texture1.read(gid).r;
-    float intensity2 = texture2.read(gid).r;
-    float weight = weight_texture.read(gid).r;
-    
-    float out_intensity = weight * intensity2 + (1 - weight) * intensity1;
-    out_texture.write(out_intensity, gid);
-}
-
 kernel void color_difference(texture2d<float, access::read> texture1 [[texture(0)]],
                              texture2d<float, access::read> texture2 [[texture(1)]],
                              texture2d<float, access::write> out_texture [[texture(2)]],

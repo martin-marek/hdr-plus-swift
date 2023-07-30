@@ -4,7 +4,7 @@
 import Foundation
 import MetalPerformanceShaders
 
-let add_texture_weighted_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture_weighted")!)
+
 let color_difference_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "color_difference")!)
 let compute_merge_weight_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_merge_weight")!)
 
@@ -89,31 +89,6 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         // sync GUI progress
         DispatchQueue.main.async { progress.int += Int(80000000/Double(textures.count)) }
     }
-}
-
-
-func add_texture_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ weight_texture: MTLTexture) -> MTLTexture {
-    
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width, height: texture1.height, mipmapped: false)
-    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    
-    // add textures
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = add_texture_weighted_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: texture1.width, height: texture1.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(texture1, index: 0)
-    command_encoder.setTexture(texture2, index: 1)
-    command_encoder.setTexture(weight_texture, index: 2)
-    command_encoder.setTexture(out_texture, index: 3)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-    
-    return out_texture
 }
 
 
