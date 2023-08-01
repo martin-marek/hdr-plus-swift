@@ -2008,6 +2008,7 @@
 				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/io_dng/bridging_header.h;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -2039,6 +2040,7 @@
 				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/io_dng/bridging_header.h;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
