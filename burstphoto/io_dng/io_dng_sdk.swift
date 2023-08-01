@@ -35,7 +35,7 @@ enum ImageIOError: Error {
 /// If the output image already exists, it will not convert it again, unless `override_cache` is set to `true`.
 ///
 /// - Parameter override_cache: Default of `false`. This value should always be set to `true` when outputting the final image.
-func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String, override_cache: Bool = false) throws -> [URL] {
+func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String, _ texture_cache: NSCache<NSString, ImageCacheWrapper>, override_cache: Bool = false) throws -> [URL] {
 
     // create command string
     let executable_path = dng_converter_path + "/Contents/MacOS/Adobe DNG Converter"
@@ -49,10 +49,16 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
     var parallel_image_paths = [String](repeating: "",
                                      count: min(Int(0.75*Double(ProcessInfo.processInfo.processorCount)),
                                                 in_urls.count))
+    var urls_needing_conversion: Set<URL> = []
+    
     // j here is used to keep the parallel queues of equal length in-case some, but not all, of the images are cached.
     var j = 0
     for i in 0..<in_urls.count {
-        if override_cache || !FileManager.default.fileExists(atPath: tmp_dir + in_urls[i].deletingPathExtension().lastPathComponent + ".dng") {
+        let out_path = tmp_dir + in_urls[i].deletingPathExtension().lastPathComponent + ".dng"
+        if override_cache
+            || (!FileManager.default.fileExists(atPath: out_path)
+                && texture_cache.object(forKey: NSString(string: URL(fileURLWithPath: out_path).absoluteString)) == nil) {
+            urls_needing_conversion.insert(in_urls[i])
             parallel_image_paths[j % parallel_image_paths.count] += " \"\(in_urls[i].relativePath)\""
             j += 1
         }
@@ -78,7 +84,7 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
         let out_path = tmp_dir + fine_name
         let out_url = URL(fileURLWithPath: out_path)
         out_urls.append(out_url)
-        if !FileManager.default.fileExists(atPath: out_path) {
+        if urls_needing_conversion.contains(url) && !FileManager.default.fileExists(atPath: out_path) {
             throw AlignmentError.conversion_failed
         }
     }

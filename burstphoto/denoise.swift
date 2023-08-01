@@ -81,7 +81,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         } else {
             // the dng converter is installed -> use it
             print("Converting images...")
-            dng_urls = try convert_raws_to_dngs(image_urls, dng_converter_path, tmp_dir)
+            dng_urls = try convert_raws_to_dngs(image_urls, dng_converter_path, tmp_dir, textureCache)
             print("Time to convert images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
             DispatchQueue.main.async { progress.int += 10_000_000 }
             t = DispatchTime.now().uptimeNanoseconds
@@ -267,8 +267,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     DispatchQueue.main.async { progress.int += 10_000_000 }
     
     // set output location
-    let in_url = dng_urls[ref_idx]
-    let in_filename = in_url.deletingPathExtension().lastPathComponent
+    let ref_dng_url = dng_urls[ref_idx]
+    let in_filename = ref_dng_url.deletingPathExtension().lastPathComponent
     // adapt output filename with merging algorithm and noise reduction setting
     var suffix_merging = (merging_algorithm == "Higher quality" ? "q" : "f")
     suffix_merging = (noise_reduction==23.0 ? "_merged_avg" : "_merged_" + suffix_merging + "\(Int(noise_reduction+0.5))")
@@ -287,8 +287,11 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     let out_path = (dng_converter_present ? tmp_dir : out_dir) + out_filename
     var out_url = URL(fileURLWithPath: out_path)
     
+    // Ensure reference texture exists on disk (may not if it existed in memory cache)
+    _ = try convert_raws_to_dngs([image_urls[ref_idx]], dng_converter_path, tmp_dir, NSCache<NSString, ImageCacheWrapper>())
+    
     // save the output image
-    try texture_to_dng(output_texture_uint16, in_url, out_url, (scale_to_16bit ? Int32(factor_16bit*white_level[ref_idx]) : -1))
+    try texture_to_dng(output_texture_uint16, ref_dng_url, out_url, (scale_to_16bit ? Int32(factor_16bit*white_level[ref_idx]) : -1))
     
     // check if dng converter is installed
     if dng_converter_present {
@@ -300,7 +303,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         }
         
         // the dng converter is installed -> convert output DNG saved before with Adobe DNG Converter, which increases compatibility of the resulting DNG
-        let final_url = try convert_raws_to_dngs([out_url], dng_converter_path, out_dir, override_cache: true)
+        let final_url = try convert_raws_to_dngs([out_url], dng_converter_path, out_dir, textureCache, override_cache: true)
                    
         // update out URL to new file
         out_url = final_url[0]
