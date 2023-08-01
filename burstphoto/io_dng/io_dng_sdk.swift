@@ -46,21 +46,25 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
     let compute_group = DispatchGroup()
     let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
     
-    var parallel_commands = [String](repeating: command,
+    var parallel_image_paths = [String](repeating: "",
                                      count: min(Int(0.75*Double(ProcessInfo.processInfo.processorCount)),
                                                 in_urls.count))
-    
+    // j here is used to keep the parallel queues of equal length in-case some, but not all, of the images are cached.
+    var j = 0
     for i in 0..<in_urls.count {
         if override_cache || !FileManager.default.fileExists(atPath: tmp_dir + in_urls[i].deletingPathExtension().lastPathComponent + ".dng") {
-            parallel_commands[i % parallel_commands.count] += " \"\(in_urls[i].relativePath)\""
+            parallel_image_paths[j % parallel_image_paths.count] += " \"\(in_urls[i].relativePath)\""
+            j += 1
         }
     }
     
-    for parallel_command in parallel_commands {
-        compute_queue.async(group: compute_group) {
-            do {
-                try safeShell(parallel_command)
-            } catch {}
+    for parallel_command in parallel_image_paths {
+        if !parallel_command.isEmpty {
+            compute_queue.async(group: compute_group) {
+                do {
+                    try safeShell(command + parallel_command)
+                } catch {}
+            }
         }
     }
     
