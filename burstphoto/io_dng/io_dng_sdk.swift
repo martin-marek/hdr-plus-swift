@@ -47,8 +47,8 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
     let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
     
     var parallel_image_paths = [String](repeating: "",
-                                     count: min(Int(0.75*Double(ProcessInfo.processInfo.processorCount)),
-                                                in_urls.count))
+                                        count: min(Int(0.75*Double(ProcessInfo.processInfo.processorCount)),
+                                                   Int(in_urls.count / 2)))
     var urls_needing_conversion: Set<URL> = []
     
     // j here is used to keep the parallel queues of equal length in-case some, but not all, of the images are cached.
@@ -59,8 +59,8 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
             || (!FileManager.default.fileExists(atPath: out_path)
                 && texture_cache.object(forKey: NSString(string: URL(fileURLWithPath: out_path).absoluteString)) == nil) {
             urls_needing_conversion.insert(in_urls[i])
-            parallel_image_paths[j % parallel_image_paths.count] += " \"\(in_urls[i].relativePath)\""
-            j += 1
+            parallel_image_paths[Int(j/2) % parallel_image_paths.count] += " \"\(in_urls[i].relativePath)\""
+            j += 2
         }
     }
     
