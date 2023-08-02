@@ -331,9 +331,21 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // set output location
     let in_url = dng_urls[ref_idx]
     let in_filename = in_url.deletingPathExtension().lastPathComponent
-    // the value of the noise reduction strength is written into the filename
-    let suffix_merging = merging_algorithm == "Higher quality" ? "q" : "f"
-    let out_filename = in_filename + (noise_reduction==23.0 ? "_merged_avg.dng" : "_merged_" + suffix_merging + "\(Int(noise_reduction+0.5)).dng")
+    // adapt output filename with merging algorithm and noise reduction setting
+    var suffix_merging = (merging_algorithm == "Higher quality" ? "q" : "f")
+    suffix_merging = (noise_reduction==23.0 ? "_merged_avg" : "_merged_" + suffix_merging + "\(Int(noise_reduction+0.5))")
+    
+    // adapt output filename with exposure control setting
+    let suffix_exposure_control_dict = [
+        "Off"             : "",
+        "LinearFullRange" : "_l0",
+        "Linear1EV"       : "_l1",
+        "Curve0EV"        : "_nl0",
+        "Curve1EV"        : "_nl1",
+    ]
+    let suffix_exposure_control = suffix_exposure_control_dict[exposure_control]!
+    
+    let out_filename = in_filename + suffix_merging + suffix_exposure_control + ".dng"
     let out_path = (dng_converter_present ? tmp_dir : out_dir) + out_filename
     var out_url = URL(fileURLWithPath: out_path)
     
