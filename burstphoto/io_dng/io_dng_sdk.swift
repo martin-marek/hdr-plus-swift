@@ -48,7 +48,7 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
     
     var parallel_image_paths = [String](repeating: "",
                                         count: min(Int(0.75*Double(ProcessInfo.processInfo.processorCount)),
-                                                   Int(in_urls.count / 2)))
+                                                   max(1, Int(in_urls.count / 2))))
     var urls_needing_conversion: Set<URL> = []
     
     // j here is used to keep the parallel queues of equal length in-case some, but not all, of the images are cached.
