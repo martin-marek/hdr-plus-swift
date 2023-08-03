@@ -1632,7 +1632,7 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int], _ ISO_exp
         for comp_idx in 0..<textures.count {
             correction_strength += ISO_exposure_time[comp_idx]
         }
-        correction_strength = (min(max(correction_strength/sqrt(Double(textures.count)) * (noise_reduction==23.0 ? 0.5 : 1.0), 20.0), 100.0)-20.0)/80.0
+        correction_strength = (min(max(correction_strength/sqrt(Double(textures.count)) * (noise_reduction==23.0 ? 0.25 : 1.00), 5.0), 80.0)-5.0)/75.0
     }
     
     // only apply hot pixel correction if correction strength is larger than 0.001
