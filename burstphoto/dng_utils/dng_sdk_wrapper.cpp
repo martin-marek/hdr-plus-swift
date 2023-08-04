@@ -20,7 +20,7 @@ void terminate_xmp_sdk() {
 }
 
 
-int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_level0, int* black_level1, int* black_level2, int* black_level3, int* exposure_bias, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
+int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_level0, int* black_level1, int* black_level2, int* black_level3, int* exposure_bias, float* ISO_exposure_time, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
     
     try {
         
@@ -107,16 +107,21 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
             }
         }
         
-        // get exposure bias for exposure correction
+        // get exposure bias for exposure correction and product of ISO value and exposure time for control of hot pixel correction
         const dng_exif* exif = negative->GetExif();
         if (exif == NULL) {
             *exposure_bias = -1;
             printf("ERROR: Exif is null.\n");
             return 1;
         } else {
-            dng_srational exposure_bias_value = exif->fExposureBiasValue;
+            const dng_srational exposure_bias_value = exif->fExposureBiasValue;
             // scale exposure bias value that it is EV * 100
-            *exposure_bias = exposure_bias_value.n * 100/exposure_bias_value.d;            
+            *exposure_bias = exposure_bias_value.n * 100/exposure_bias_value.d;
+            
+            const dng_urational exposure_time_value = exif->fExposureTime;
+            const uint32 ISO_speed_value = exif->fISOSpeedRatings[0];
+            // calculate product of ISO value and exposure time
+            *ISO_exposure_time = ISO_speed_value*exposure_time_value.n/float(exposure_time_value.d);
         }
         
     }
@@ -126,7 +131,7 @@ int read_image(const char* in_path, void** pixel_bytes_pointer, int* width, int*
     return 0;
 }
 
-int write_image(const char *in_path, const char *out_path, void** pixel_bytes_pointer) {
+int write_image(const char *in_path, const char *out_path, void** pixel_bytes_pointer, const int white_level) {
     
     try {
         
@@ -175,7 +180,11 @@ int write_image(const char *in_path, const char *out_path, void** pixel_bytes_po
         //   a difference for other files
         // - this is used in the dng_validate script
         negative->SynchronizeMetadata();
-                   
+            
+        if (white_level > 0) {
+            negative->SetWhiteLevel(white_level, 0);
+        }
+        
         // write dng
         host.SetSaveLinearDNG(false);
         host.SetKeepOriginalFile(false);

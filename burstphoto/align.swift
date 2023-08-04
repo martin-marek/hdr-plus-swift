@@ -31,6 +31,8 @@ class ProcessingProgress: ObservableObject {
     @Published var includes_conversion = false
     @Published var show_nonbayer_hq_alert = false
     @Published var show_nonbayer_exposure_alert = false
+    @Published var show_nonbayer_bit_depth_alert = false
+    @Published var show_exposure_bit_depth_alert = false
 }
 
 // set up Metal device
@@ -95,7 +97,7 @@ let reduce_artifacts_tile_border_state = try! device.makeComputePipelineState(fu
 
 
 // main function of the burst photo app
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange") throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native") throws -> URL {
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -145,7 +147,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // load images
     t = DispatchTime.now().uptimeNanoseconds
     print("Loading images...")
-    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias, color_factors) = try load_images(dng_urls)
+    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias, ISO_exposure_time, color_factors) = try load_images(dng_urls)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10000000 : 20000000) }
@@ -181,6 +183,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         for idx in 0..<white_level.count { white_level[idx] = -1 }
         for idx in 0..<black_level.count { black_level[idx] = -1 }
         for idx in 0..<color_factors.count { color_factors[idx] = -1.0 }
+        for idx in 0..<ISO_exposure_time.count { ISO_exposure_time[idx] = -1.0 }
     }
     
     // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
@@ -190,9 +193,29 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         merging_algorithm = "Fast"
     }
        
+    // if user has selected the "16Bit" output bit depth but has a non-Bayer sensor, warn them the "Native" output bit depth will be used instead
+    var output_bit_depth = output_bit_depth
+    if output_bit_depth == "16Bit" && mosaic_pattern_width != 2 {
+        DispatchQueue.main.async { progress.show_nonbayer_bit_depth_alert = true }
+        output_bit_depth = "Native"
+    }
+    
+    // if user has selected the "16Bit" output bit depth but has a non-Bayer sensor, warn them the "Native" output bit depth will be used instead
+    if output_bit_depth == "16Bit" && exposure_control == "Off" {
+        DispatchQueue.main.async { progress.show_exposure_bit_depth_alert = true }
+        output_bit_depth = "Native"
+    }
+    
     // convert images from uint16 to float16
     textures = textures.map{texture_uint16_to_float($0)}
      
+    // check that the comparison image has the same resolution as the reference image
+    for comp_idx in 0..<textures.count {
+        if (textures[ref_idx].width != textures[comp_idx].width) || (textures[ref_idx].height != textures[comp_idx].height) {
+            throw AlignmentError.inconsistent_resolutions
+        }
+    }
+    
     // set the tile size for the alignment
     let tile_size_dict = [
         "Small": 16,
@@ -218,7 +241,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // correction of hot pixels
     if mosaic_pattern_width == 2 {
         // correction of hot pixels
-        correct_hotpixels(textures, black_level)
+        correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction)
         
         // correction of intensities for images with bracketed exposure
         // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
@@ -293,8 +316,12 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, ref_idx)
     }
     
+    // apply scaling to 16 bit
+    let scale_to_16bit = (output_bit_depth=="16Bit" && mosaic_pattern_width == 2 && exposure_control != "Off")
+    let factor_16bit = (scale_to_16bit ? Int(pow(2.0, 16.0-ceil(log2(Double(white_level[ref_idx]))))+0.5) : 1)
+      
     // convert final image to 16 bit integer
-    let output_texture_uint16 = convert_float_to_uint16(final_texture, (white_level[ref_idx] == -1 ? 1000000 : white_level[ref_idx]))
+    let output_texture_uint16 = convert_float_to_uint16(final_texture, (white_level[ref_idx] == -1 ? 1000000 : factor_16bit*white_level[ref_idx]), black_level, ref_idx, factor_16bit, color_factors)
       
     print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
@@ -304,14 +331,26 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // set output location
     let in_url = dng_urls[ref_idx]
     let in_filename = in_url.deletingPathExtension().lastPathComponent
-    // the value of the noise reduction strength is written into the filename
-    let suffix_merging = merging_algorithm == "Higher quality" ? "q" : "f"
-    let out_filename = in_filename + (noise_reduction==23.0 ? "_merged_avg.dng" : "_merged_" + suffix_merging + "\(Int(noise_reduction+0.5)).dng")
+    // adapt output filename with merging algorithm and noise reduction setting
+    var suffix_merging = (merging_algorithm == "Higher quality" ? "q" : "f")
+    suffix_merging = (noise_reduction==23.0 ? "_merged_avg" : "_merged_" + suffix_merging + "\(Int(noise_reduction+0.5))")
+    
+    // adapt output filename with exposure control setting
+    let suffix_exposure_control_dict = [
+        "Off"             : "",
+        "LinearFullRange" : "_l0",
+        "Linear1EV"       : "_l1",
+        "Curve0EV"        : "_nl0",
+        "Curve1EV"        : "_nl1",
+    ]
+    let suffix_exposure_control = suffix_exposure_control_dict[exposure_control]!
+    
+    let out_filename = in_filename + suffix_merging + suffix_exposure_control + ".dng"
     let out_path = (dng_converter_present ? tmp_dir : out_dir) + out_filename
     var out_url = URL(fileURLWithPath: out_path)
     
     // save the output image
-    try texture_to_dng(output_texture_uint16, in_url, out_url)
+    try texture_to_dng(output_texture_uint16, in_url, out_url, (scale_to_16bit ? Int32(factor_16bit*white_level[ref_idx]) : -1))
     
     // check if dng converter is installed
     if dng_converter_present {
@@ -447,11 +486,6 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
             
         // set comparison texture
         let comp_texture = extend_texture(textures[comp_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
-        
-        // check that the comparison image has the same resolution as the reference image
-        if (ref_texture.width != comp_texture.width) || (ref_texture.height != comp_texture.height) {
-            throw AlignmentError.inconsistent_resolutions
-        }
      
         let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
         color_factors3 = [color_factors[comp_idx*3+0], color_factors[comp_idx*3+1], color_factors[comp_idx*3+2]]
@@ -580,11 +614,6 @@ func align_merge_frequency_domain(progress: ProcessingProgress, shift_left_not_r
         // set and extend comparison texture
         let comp_texture = extend_texture(textures[comp_idx], pad_left, pad_right, pad_top, pad_bottom)
         
-        // check that the comparison image has the same resolution as the reference image
-        if (ref_texture.width != comp_texture.width) || (ref_texture.height != comp_texture.height) {
-            throw AlignmentError.inconsistent_resolutions
-        }
-        
         let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
         color_factors3 = [color_factors[comp_idx*3+0], color_factors[comp_idx*3+1], color_factors[comp_idx*3+2]]
         
@@ -699,7 +728,7 @@ func texture_uint16_to_float(_ in_texture: MTLTexture) -> MTLTexture {
 }
 
 
-func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int) -> MTLTexture {
+func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ ref_idx: Int, _ factor_16bit: Int, _ color_factors: [Double]) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: in_texture.width, height: in_texture.height, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
@@ -709,11 +738,19 @@ func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int) -> MT
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_float_to_uint16_state
     command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
+    let threads_per_grid = MTLSize(width: out_texture.width/2, height: out_texture.height/2, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(out_texture, index: 1)
     command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Int32(black_level[ref_idx*4+0])], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(black_level[ref_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(black_level[ref_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.setBytes([Int32(black_level[ref_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 4)
+    command_encoder.setBytes([Float32(color_factors[0])], length: MemoryLayout<Float32>.stride, index: 5)
+    command_encoder.setBytes([Float32(color_factors[1])], length: MemoryLayout<Float32>.stride, index: 6)
+    command_encoder.setBytes([Float32(color_factors[2])], length: MemoryLayout<Float32>.stride, index: 7)    
+    command_encoder.setBytes([Int32(factor_16bit)], length: MemoryLayout<Int32>.stride, index: 8)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -1584,56 +1621,73 @@ func normalize_mismatch(_ mismatch_texture: MTLTexture, _ mean_mismatch_buffer: 
 }
 
 
-func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int]) {
-         
-    // generate simple average of all textures
-    let average_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[0].width, height: textures[0].height, mipmapped: false)
-    average_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let average_texture = device.makeTexture(descriptor: average_texture_descriptor)!
-    fill_with_zeros(average_texture)
+func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int], _ ISO_exposure_time: [Double], _ noise_reduction: Double) {
     
-    // iterate over all images
-    for comp_idx in 0..<textures.count {
+    var correction_strength = 1.0
+    
+    // calculate hot pixel correction strength based on ISO value, exposure time and number of frames in the burst
+    if ISO_exposure_time[0] > 0.0 {
         
-        add_texture(textures[comp_idx], average_texture, textures.count)
+        correction_strength = 0.0
+        for comp_idx in 0..<textures.count {
+            correction_strength += ISO_exposure_time[comp_idx]
+        }
+        correction_strength = (min(max(correction_strength/sqrt(Double(textures.count)) * (noise_reduction==23.0 ? 0.25 : 1.00), 5.0), 80.0)-5.0)/75.0
     }
     
-    // calculate mean value specific for each color channel
-    let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), "rgba")
+    // only apply hot pixel correction if correction strength is larger than 0.001
+    if correction_strength > 0.001 {
     
-    // standard parameters if black level is not available / available
-    let hot_pixel_threshold     = (black_level[0] == -1) ? 1.0 : 2.0
-    let hot_pixel_multiplicator = (black_level[0] == -1) ? 2.0 : 1.0
-       
-    // iterate over all images and correct hot pixels in each texture
-    for comp_idx in 0..<textures.count {       
+        // generate simple average of all textures
+        let average_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[0].width, height: textures[0].height, mipmapped: false)
+        average_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+        let average_texture = device.makeTexture(descriptor: average_texture_descriptor)!
+        fill_with_zeros(average_texture)
         
-        let black_level0 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+0]
-        let black_level1 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+1]
-        let black_level2 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+2]
-        let black_level3 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+3]
+        // iterate over all images
+        for comp_idx in 0..<textures.count {
+            
+            add_texture(textures[comp_idx], average_texture, textures.count)
+        }
         
-        let tmp_texture = copy_texture(textures[comp_idx])
+        // calculate mean value specific for each color channel
+        let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), "rgba")
         
-        let command_buffer = command_queue.makeCommandBuffer()!
-        let command_encoder = command_buffer.makeComputeCommandEncoder()!
-        let state = correct_hotpixels_state
-        command_encoder.setComputePipelineState(state)
-        let threads_per_grid = MTLSize(width: average_texture.width-4, height: average_texture.height-4, depth: 1)
-        let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-        command_encoder.setTexture(average_texture, index: 0)
-        command_encoder.setTexture(tmp_texture, index: 1)
-        command_encoder.setTexture(textures[comp_idx], index: 2)
-        command_encoder.setBuffer(mean_texture_buffer, offset: 0, index: 0)
-        command_encoder.setBytes([Int32(black_level0)], length: MemoryLayout<Int32>.stride, index: 1)
-        command_encoder.setBytes([Int32(black_level1)], length: MemoryLayout<Int32>.stride, index: 2)
-        command_encoder.setBytes([Int32(black_level2)], length: MemoryLayout<Int32>.stride, index: 3)
-        command_encoder.setBytes([Int32(black_level3)], length: MemoryLayout<Int32>.stride, index: 4)
-        command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 5)
-        command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 6)
-        command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-        command_encoder.endEncoding()
-        command_buffer.commit()
+        // standard parameters if black level is not available / available
+        let hot_pixel_threshold     = (black_level[0] == -1) ? 1.0 : 2.0
+        let hot_pixel_multiplicator = (black_level[0] == -1) ? 2.0 : 1.0
+        
+        // iterate over all images and correct hot pixels in each texture
+        for comp_idx in 0..<textures.count {
+            
+            let black_level0 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+0]
+            let black_level1 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+1]
+            let black_level2 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+2]
+            let black_level3 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+3]
+            
+            let tmp_texture = copy_texture(textures[comp_idx])
+            
+            let command_buffer = command_queue.makeCommandBuffer()!
+            let command_encoder = command_buffer.makeComputeCommandEncoder()!
+            let state = correct_hotpixels_state
+            command_encoder.setComputePipelineState(state)
+            let threads_per_grid = MTLSize(width: average_texture.width-4, height: average_texture.height-4, depth: 1)
+            let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+            command_encoder.setTexture(average_texture, index: 0)
+            command_encoder.setTexture(tmp_texture, index: 1)
+            command_encoder.setTexture(textures[comp_idx], index: 2)
+            command_encoder.setBuffer(mean_texture_buffer, offset: 0, index: 0)
+            command_encoder.setBytes([Int32(black_level0)], length: MemoryLayout<Int32>.stride, index: 1)
+            command_encoder.setBytes([Int32(black_level1)], length: MemoryLayout<Int32>.stride, index: 2)
+            command_encoder.setBytes([Int32(black_level2)], length: MemoryLayout<Int32>.stride, index: 3)
+            command_encoder.setBytes([Int32(black_level3)], length: MemoryLayout<Int32>.stride, index: 4)
+            command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 5)
+            command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 6)
+            command_encoder.setBytes([Float32(correction_strength)], length: MemoryLayout<Float32>.stride, index: 7)
+            command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+            command_encoder.endEncoding()
+            command_buffer.commit()
+        }
     }
 }
 
