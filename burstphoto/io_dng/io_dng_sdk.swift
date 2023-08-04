@@ -188,7 +188,7 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
                                                           exposure_bias: _exposure_bias,
                                                           color_factors: _color_factors),
                                                forKey: NSString(string: urls[i].absoluteString),
-                                               cost: Int(Float(texture.allocatedSize) / 1024 / 1024))
+                                               cost: Int(Float(texture.allocatedSize) / 1000 / 1000))
                         textures_dict[i] = texture
                         mosaic_pattern_width = _mosaic_pattern_width
                         white_level[i] = _white_level
@@ -345,7 +345,7 @@ func size_of_and_chronological_contents_of(directory: URL) -> ([URL], [Double]) 
         i += 1
         
         dates.append(fileResourceValue.addedToDirectoryDate ?? Date(timeIntervalSince1970: 0)) // If it's missing default it to being the oldest file in the directory
-        sizes.append(Double(fileResourceValue.fileSize ?? 0) / 1024 / 1024 / 1024)
+        sizes.append(Double(fileResourceValue.fileSize ?? 0) / 1000 / 1000 / 1000)
     }
     // Sort the dates and
     let sorted_indicies = dates.enumerated().sorted{$0.element < $1.element}.map{$0.offset}
