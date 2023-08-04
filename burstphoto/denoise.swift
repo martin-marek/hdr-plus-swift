@@ -49,15 +49,17 @@ let textureCache = NSCache<NSString, ImageCacheWrapper>()
 func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native", out_dir: String, tmp_dir: String) throws -> URL {
     
     // Maximum size for the caches
-    let textureCacheMaxSizeMB = min(10_000,
-                                    Int(0.15 * Float(ProcessInfo.processInfo.physicalMemory) / 1000.0 / 1000.0))
+    let textureCacheMaxSizeMB: Double = min(10_000.0,
+                                            0.15 * Double(ProcessInfo.processInfo.physicalMemory) / 1000.0 / 1000.0)
     /// The initial value is set to be twice that of the in-memory cache.
     /// It is capped between 4–10 GB, but never allowed to be greater that 15% of the total free disk space.
     /// There is a hard cap of 15% of the total system free disk space.
-    let maxDNGFolderSizeGB: Double = min(10,
+    let maxDNGFolderSizeGB: Double = min(10.0,
                                          0.15 * systemFreeDiskSpace(),
-                                         max(4,
-                                             Double(2 * textureCacheMaxSizeMB/1000)))
+                                         max(4.0,
+                                             2 * textureCacheMaxSizeMB/1000))
+    
+    textureCache.totalCostLimit = Int(textureCacheMaxSizeMB)
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
