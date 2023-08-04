@@ -1,5 +1,5 @@
 #include <metal_stdlib>
-#include "../constants.h"
+#include "../misc/constants.h"
 
 using namespace metal;
 

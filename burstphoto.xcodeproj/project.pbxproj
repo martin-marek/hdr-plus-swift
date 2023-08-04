@@ -272,6 +272,8 @@
 		E1F0A2872909D80D00AB127E /* TXMPMeta.incl_cpp in Resources */ = {isa = PBXBuildFile; fileRef = E133AC3728FEF8770058B799 /* TXMPMeta.incl_cpp */; };
 		E1F0A28D2909D85D00AB127E /* cli.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F0A1FC2909A39700AB127E /* cli.swift */; };
 		E1F8351426F2741100994226 /* GameKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1F8351326F2741100994226 /* GameKit.framework */; };
+		FA2E952B2A7C801E00A1324F /* helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA2E952A2A7C801E00A1324F /* helpers.swift */; };
+		FA2E952C2A7C801E00A1324F /* helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA2E952A2A7C801E00A1324F /* helpers.swift */; };
 		FACC3BE32A54DE86002659D6 /* spatial.swift in Sources */ = {isa = PBXBuildFile; fileRef = FACC3BE22A54DE86002659D6 /* spatial.swift */; };
 		FACC3BE42A54DE86002659D6 /* spatial.swift in Sources */ = {isa = PBXBuildFile; fileRef = FACC3BE22A54DE86002659D6 /* spatial.swift */; };
 		FACC3BE62A54E0A9002659D6 /* spatial.metal in Sources */ = {isa = PBXBuildFile; fileRef = FACC3BE52A54E0A9002659D6 /* spatial.metal */; };
@@ -672,6 +674,7 @@
 		E1F0A1FC2909A39700AB127E /* cli.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = cli.swift; sourceTree = "<group>"; };
 		E1F0A28B2909D80D00AB127E /* cli.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cli.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1F8351326F2741100994226 /* GameKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameKit.framework; path = System/Library/Frameworks/GameKit.framework; sourceTree = SDKROOT; };
+		FA2E952A2A7C801E00A1324F /* helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = helpers.swift; sourceTree = "<group>"; };
 		FACC3BE22A54DE86002659D6 /* spatial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = spatial.swift; sourceTree = "<group>"; };
 		FACC3BE52A54E0A9002659D6 /* spatial.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = spatial.metal; sourceTree = "<group>"; };
 		FACC3BE82A54E12A002659D6 /* texture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = texture.swift; sourceTree = "<group>"; };
@@ -1300,11 +1303,11 @@
 				FAED70FA2A53A2F100BF63BD /* exposure */,
 				E1DDA10C29054173003EDF1A /* io_dng */,
 				FAED70E72A539CE000BF63BD /* merge */,
+				FA2E95292A7C800600A1324F /* misc */,
 				FA6660342A54F11200BF72DA /* texture */,
 				E1ACED6B26A490A1009B14EB /* ContentView.swift */,
 				E1F0A1FC2909A39700AB127E /* cli.swift */,
 				E15DBBDB26B5CAD200186172 /* denoise.swift */,
-				FAED70EE2A539F9A00BF63BD /* constants.h */,
 				E18CD6272703612000F4E1FB /* Credits.rtf */,
 				E1ACED6D26A490A2009B14EB /* Assets.xcassets */,
 				E1ACED7226A490A2009B14EB /* Info.plist */,
@@ -1331,6 +1334,15 @@
 				E15DBBD826B5CAA800186172 /* bridging_header.h */,
 			);
 			path = io_dng;
+			sourceTree = "<group>";
+		};
+		FA2E95292A7C800600A1324F /* misc */ = {
+			isa = PBXGroup;
+			children = (
+				FAED70EE2A539F9A00BF63BD /* constants.h */,
+				FA2E952A2A7C801E00A1324F /* helpers.swift */,
+			);
+			path = misc;
 			sourceTree = "<group>";
 		};
 		FA6660342A54F11200BF72DA /* texture */ = {
@@ -1508,6 +1520,7 @@
 				E133ADF428FEF8780058B799 /* jdmainct.c in Sources */,
 				E133AD9C28FEF8770058B799 /* dng_host.cpp in Sources */,
 				E133AD9E28FEF8770058B799 /* dng_bottlenecks.cpp in Sources */,
+				FA2E952B2A7C801E00A1324F /* helpers.swift in Sources */,
 				FACC3BE92A54E12A002659D6 /* texture.swift in Sources */,
 				E15DBBDC26B5CAD200186172 /* denoise.swift in Sources */,
 				E133ADC528FEF8770058B799 /* dng_orientation.cpp in Sources */,
@@ -1722,6 +1735,7 @@
 				E1F0A2582909D80D00AB127E /* dng_simple_image.cpp in Sources */,
 				E1F0A2592909D80D00AB127E /* dng_date_time.cpp in Sources */,
 				E1F0A25A2909D80D00AB127E /* jdmaster.c in Sources */,
+				FA2E952C2A7C801E00A1324F /* helpers.swift in Sources */,
 				FACC3BEA2A54E12A002659D6 /* texture.swift in Sources */,
 				E1F0A25B2909D80D00AB127E /* dng_rect.cpp in Sources */,
 				E1F0A25C2909D80D00AB127E /* dng_temperature.cpp in Sources */,
