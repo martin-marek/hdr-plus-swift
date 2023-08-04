@@ -182,11 +182,12 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
                     // thread-safely save the texture
                     access_queue.sync {
                         textureCache.setObject(ImageCacheWrapper(texture: texture,
-                                                          mosaic_pattern_width: _mosaic_pattern_width,
-                                                          white_level: _white_level,
-                                                          black_levels: _black_level,
-                                                          exposure_bias: _exposure_bias,
-                                                          color_factors: _color_factors),
+                                                                 mosaic_pattern_width: _mosaic_pattern_width,
+                                                                 white_level: _white_level,
+                                                                 black_levels: _black_level,
+                                                                 exposure_bias: _exposure_bias,
+                                                                 ISO_exposure_time: _ISO_exposure_time,
+                                                                 color_factors: _color_factors),
                                                forKey: NSString(string: urls[i].absoluteString),
                                                cost: Int(Float(texture.allocatedSize) / 1000 / 1000))
                         textures_dict[i] = texture
@@ -197,7 +198,7 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
                         black_level[4*i+2] = _black_level[2]
                         black_level[4*i+3] = _black_level[3]
                         exposure_bias[i] = _exposure_bias
-                        ISO_exposure_time = _ISO_exposure_time
+                        ISO_exposure_time[i] = _ISO_exposure_time
                         color_factors[3*i+0] = _color_factors[0]
                         color_factors[3*i+1] = _color_factors[1]
                         color_factors[3*i+2] = _color_factors[2]

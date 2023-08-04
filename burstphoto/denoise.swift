@@ -97,7 +97,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // load images
     t = DispatchTime.now().uptimeNanoseconds
     print("Loading images...")
-    var (textures, mosaic_pattern_width, white_level, black_level, ISO_exposure_time, exposure_bias, color_factors) = try load_images(dng_urls, textureCache: textureCache)
+    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias, ISO_exposure_time, color_factors) = try load_images(dng_urls, textureCache: textureCache)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10_000_000 : 20_000_000) }
