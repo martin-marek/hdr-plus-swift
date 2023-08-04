@@ -39,7 +39,7 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
 }
 
 
-func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture, Int, Int, [Int], Int, [Double]) {
+func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture, Int, Int, [Int], Int, Double, [Double]) {
     
     // read image
     var error_code: Int32
@@ -54,12 +54,13 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     var black_level3: Int32 = 0;
     var black_level: [Int] = [0, 0, 0, 0];
     var exposure_bias: Int32 = 0;
+    var ISO_exposure_time: Float32 = 0.0;
     var color_factor_r: Float32 = 0.0;
     var color_factor_g: Float32 = 0.0;
     var color_factor_b: Float32 = 0.0;
     var color_factors: [Double] = [0.0, 0.0, 0.0, 0.0];
     
-    error_code = read_dng_from_disk(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width, &white_level, &black_level0, &black_level1, &black_level2, &black_level3, &exposure_bias, &color_factor_r, &color_factor_g, &color_factor_b)
+    error_code = read_dng_from_disk(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width, &white_level, &black_level0, &black_level1, &black_level2, &black_level3, &exposure_bias, &ISO_exposure_time, &color_factor_r, &color_factor_g, &color_factor_b)
     if (error_code != 0) {throw ImageIOError.load_error}
     
     // convert image bitmap to MTLTexture
@@ -84,7 +85,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     color_factors[1] = Double(color_factor_g)
     color_factors[2] = Double(color_factor_b)
     
-    return (texture, Int(mosaic_pattern_width), Int(white_level), black_level, Int(exposure_bias), color_factors)
+    return (texture, Int(mosaic_pattern_width), Int(white_level), black_level, Int(exposure_bias), Double(ISO_exposure_time), color_factors)
 }
 
 
@@ -187,7 +188,7 @@ func safeShell(_ command: String) throws -> String {
 }
 
 
-func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) throws {
+func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL, _ white_level: Int32) throws {
     // synchronize GPU and CPU memory
     let command_buffer = command_queue.makeCommandBuffer()!
     let blit_encoder = command_buffer.makeBlitCommandEncoder()!
@@ -206,7 +207,7 @@ func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL) throws
     texture.getBytes(bytes_pointer!, bytesPerRow: bytes_per_row, from: mtl_region, mipmapLevel: 0)
 
     // save image
-    let error_code = write_dng_to_disk(in_url.path, out_url.path, &bytes_pointer)
+    let error_code = write_dng_to_disk(in_url.path, out_url.path, &bytes_pointer, white_level)
     if (error_code != 0) {throw ImageIOError.save_error}
     
     // free memory

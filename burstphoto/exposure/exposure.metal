@@ -49,7 +49,7 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
     // use luminance estimated as the binomial weighted mean pixel value in a 3x3 window around the main pixel
     // apply correction with color factors to reduce clipping of the green color channel
     float luminance_before = final_texture_blurred.read(gid).r;
-    luminance_before = clamp((luminance_before-black_level_mean)/(rescale_factor*color_factor_mean), 0.0f, 1.0f);
+    luminance_before = clamp((luminance_before-black_level_mean)/(rescale_factor*color_factor_mean), 1e-12, 1.0f);
     
     // apply gains
     float luminance_after0 = linear_gain * gain0 * luminance_before;

@@ -313,13 +313,36 @@ kernel void blur_mosaic_texture(texture2d<float, access::read> in_texture [[text
 kernel void convert_float_to_uint16(texture2d<float, access::read> in_texture [[texture(0)]],
                                     texture2d<uint, access::write> out_texture [[texture(1)]],
                                     constant int& white_level [[buffer(0)]],
+                                    constant int& black_level0 [[buffer(1)]],
+                                    constant int& black_level1 [[buffer(2)]],
+                                    constant int& black_level2 [[buffer(3)]],
+                                    constant int& black_level3 [[buffer(4)]],
+                                    constant float& color_factor0 [[buffer(5)]],
+                                    constant float& color_factor1 [[buffer(6)]],
+                                    constant float& color_factor2 [[buffer(7)]],
+                                    constant int& factor_16bit [[buffer(8)]],
                                     uint2 gid [[thread_position_in_grid]]) {
+    int const x = gid.x*2;
+    int const y = gid.y*2;
     
-    int out_value = int(round(in_texture.read(gid).r));
+    // load args
+    float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
     
+    // extract pixel values of 2x2 super pixel
+    float4 pixel_value = float4(in_texture.read(uint2(x,   y)).r,
+                                in_texture.read(uint2(x+1, y)).r,
+                                in_texture.read(uint2(x,   y+1)).r,
+                                in_texture.read(uint2(x+1, y+1)).r);
+    
+    // apply potential scaling to 16 bit and convert to integer
+    int4 out_value = int4(round((pixel_value - black_level)*factor_16bit + black_level));
     out_value = clamp(out_value, 0, min(white_level, int(UINT16_MAX_VAL)));
     
-    out_texture.write(uint(out_value), gid);
+    // write back into texture
+    out_texture.write(uint(out_value[0]), uint2(x,   y));
+    out_texture.write(uint(out_value[1]), uint2(x+1, y));
+    out_texture.write(uint(out_value[2]), uint2(x,   y+1));
+    out_texture.write(uint(out_value[3]), uint2(x+1, y+1));
 }
 
 
@@ -386,6 +409,7 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
                               constant int& black_level3 [[buffer(4)]],
                               constant float& hot_pixel_threshold [[buffer(5)]],
                               constant float& hot_pixel_multiplicator [[buffer(6)]],
+                              constant float& correction_strength [[buffer(7)]],
                               uint2 gid [[thread_position_in_grid]]) {
        
     int const x = gid.x+2;
@@ -434,7 +458,7 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
         sum2      += in_texture.read(uint2(x+0, y+2)).r;
         
         // calculate weight for blending to have a smooth transition for not so obvious hot pixels
-        float const weight = 0.5f*min(hot_pixel_multiplicator*(pixel_ratio-hot_pixel_threshold), 2.0f);
+        float const weight = correction_strength*0.5f*min(hot_pixel_multiplicator*(pixel_ratio-hot_pixel_threshold), 2.0f);
         
         // blend values and replace hot pixel value
         out_texture.write(weight*0.25f*sum2 + (1.0f-weight)*in_texture.read(uint2(x, y)).r, uint2(x, y));

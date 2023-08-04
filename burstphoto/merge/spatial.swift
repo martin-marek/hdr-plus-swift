@@ -68,11 +68,6 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
             
         // set comparison texture
         let comp_texture = extend_texture(textures[comp_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
-        
-        // check that the comparison image has the same resolution as the reference image
-        if (ref_texture.width != comp_texture.width) || (ref_texture.height != comp_texture.height) {
-            throw AlignmentError.inconsistent_resolutions
-        }
      
         let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
         color_factors3 = [color_factors[comp_idx*3+0], color_factors[comp_idx*3+1], color_factors[comp_idx*3+2]]
