@@ -7,6 +7,7 @@ class AppSettings: ObservableObject {
     @AppStorage("merging_algorithm") var merging_algorithm: String = "Fast"
     @AppStorage("noise_reduction") var noise_reduction: Double = 13.0
     @AppStorage("exposure_control") var exposure_control: String = " Linear (full bit range)"
+    @AppStorage("output_bit_depth") var output_bit_depth: String = "Native"
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {

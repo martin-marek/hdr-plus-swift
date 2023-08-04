@@ -36,14 +36,15 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 - [x] non-Bayer sensor support (beta)
 - [x] support for bursts with bracketed exposure
 - [x] optional exposure correction to improve tonality in the shadows
+- [x] optional output with full 16 bit precision
 - [x] preserves lens profiles
 - [x] hot pixel suppression
 - [x] multi-threaded image loading
 - [x] align+merge running in pure Metal
 - [x] native Intel, Apple Silicon support
 
-# TODO
-- [ ] super-resolution
+# List of Ideas
+- [ ] add super-resolution algorithm
 - [ ] fix progressbar getting stuck loading the first image
 
 Please feel free to contribute to any of these features or suggest other features.
