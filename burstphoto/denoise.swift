@@ -43,15 +43,21 @@ let mfl = device.makeDefaultLibrary()!
 // Must use NSString and not String since NSCache needs classes.
 let textureCache = NSCache<NSString, ImageCacheWrapper>()
 
+// Maximum size for the caches
+let textureCacheMaxSizeMB = min(10_000,
+                                Int(0.15 * Float(ProcessInfo.processInfo.physicalMemory) / 1024.0 / 1024.0))
+let maxDNGFolderSizeGB = max(4.0,
+                             min(10,
+                                 2
+                                )
+)
 
 /**
  Main function of the burst photo app.
  */
 func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native", out_dir: String, tmp_dir: String) throws -> URL {
     
-    // Set the approximate limit for the texture cache in MBs.
-    // Default is ~20% of total system RAM
-    textureCache.totalCostLimit = Int(0.2 * Float(ProcessInfo.processInfo.physicalMemory) / 1024.0 / 1024.0)
+    textureCache.totalCostLimit = textureCacheMaxSizeMB
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -304,6 +310,11 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         
         // the dng converter is installed -> convert output DNG saved before with Adobe DNG Converter, which increases compatibility of the resulting DNG
         let final_url = try convert_raws_to_dngs([out_url], dng_converter_path, out_dir, textureCache, override_cache: true)
+        
+        // Delete tmp version of final_url in the tmp dir
+        if FileManager.default.fileExists(atPath: out_path) {
+            try FileManager.default.removeItem(atPath: out_path)
+        }
                    
         // update out URL to new file
         out_url = final_url[0]
@@ -313,6 +324,9 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     print("")
     print("Total processing time for", textures.count, "images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
     print("")
+    
+    // Ensure the disk dng cache does not go above the set limit
+    try trim_disk_cache(cache_dir: tmp_dir, to_max_size: maxDNGFolderSizeGB)
     
     return out_url
 }

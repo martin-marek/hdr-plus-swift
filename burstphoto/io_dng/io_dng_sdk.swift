@@ -293,3 +293,66 @@ func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL, _ whit
     // free memory
     free(bytes_pointer!)
 }
+
+/// Function to ensure that the specified cache directory does not become bigger than the specified size.
+/// This folder will be deleted when the application starts and stops, but to ensure it does not become 10s of GBs while the application is running we run this function.
+///
+/// If the folder is larger than the specified maximum, files are deleted in chronological order (oldest ones first) under the asumption that those are the least likely to be needed again.
+///
+/// Based on information from:
+///
+/// - Parameter cache:      String representing the path to the to the dng cache folder on disk
+/// - Parameter max_size:   The maximum size, in gigabytes, of the cache folder.
+func trim_disk_cache(cache_dir: String, to_max_size max_size: Double) throws {
+    let cache_url = URL(fileURLWithPath: cache_dir)
+    
+    let (contents, sizes) = size_of_and_chronological_contents_of(directory: cache_url)
+    var excess_size = sizes.reduce(0, +) - max_size
+    
+    var i = 0
+    while excess_size > 0 && i < contents.count {
+        try FileManager.default.removeItem(at: contents[i])
+        excess_size -= sizes[i]
+        i += 1
+    }
+}
+ 
+
+/// Get all files in the directory, calculate their size (in GB), sort them based on when they were added to the directory, and return the sorted URLs and dates as two arrays.
+///
+/// Assumes there are no sub-directories in the folder, which for our .dng folder this is true.
+///
+/// Based on:  https://stackoverflow.com/questions/32814535/how-to-get-directory-size-with-swift-on-os-x
+func size_of_and_chronological_contents_of(directory: URL) -> ([URL], [Double]) {
+    var contents: [URL] = []
+    var dates: [Date] = []
+    var sizes: [Double] = []
+    do {
+        contents = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey, .addedToDirectoryDateKey])
+    } catch {
+        return ([], [])
+    }
+
+    var i = 0
+    while i < contents.count {
+        let fileResourceValue: URLResourceValues
+        do {
+            fileResourceValue = try contents[i].resourceValues(forKeys: [.fileSizeKey, .addedToDirectoryDateKey])
+        } catch {
+            contents.remove(at: i)
+            continue
+        }
+        i += 1
+        
+        dates.append(fileResourceValue.addedToDirectoryDate ?? Date(timeIntervalSince1970: 0)) // If it's missing default it to being the oldest file in the directory
+        sizes.append(Double(fileResourceValue.fileSize ?? 0) / 1024 / 1024 / 1024)
+    }
+    // Sort the dates and
+    let sorted_indicies = dates.enumerated().sorted{$0.element < $1.element}.map{$0.offset}
+    // Sort based on date and return only the sorted URLs.
+//    let sorted_data = zip(dates, contents, sizes).sorted{ $0.0 < $1.0 }
+    return (
+        sorted_indicies.map{contents[$0]},
+        sorted_indicies.map{sizes[$0]}
+    )
+}
