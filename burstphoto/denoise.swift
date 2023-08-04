@@ -57,7 +57,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     let maxDNGFolderSizeGB: Double = min(10,
                                          0.15 * systemFreeDiskSpace(),
                                          max(4,
-                                             Double(2 * textureCacheMaxSizeMB*1000)))
+                                             Double(2 * textureCacheMaxSizeMB/1000)))
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
