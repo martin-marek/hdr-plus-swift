@@ -14,7 +14,7 @@ func systemFreeDiskSpace() -> Double {
     }
 
     if let size = attributeDictionary[.systemFreeSize] as? NSNumber {
-        return Double(size.int64Value)
+        return Double(size.int64Value) / 1000 / 1000 / 1000
     } else {
         return 0.0
     }
