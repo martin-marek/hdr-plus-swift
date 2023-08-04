@@ -43,8 +43,8 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 - [x] align+merge running in pure Metal
 - [x] native Intel, Apple Silicon support
 
-# TODO
-- [ ] super-resolution
+# List of Ideas
+- [ ] add super-resolution algorithm
 - [ ] fix progressbar getting stuck loading the first image
 
 Please feel free to contribute to any of these features or suggest other features.
