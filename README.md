@@ -32,19 +32,21 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 - [x] simple temporal averaging
 - [x] robust merge in spatial domain (simplified)
 - [x] robust merge in frequency domain (similar to original publication)
-- [x] Bayer sensor support (good)
+- [x] Bayer sensor support
 - [x] non-Bayer sensor support (beta)
 - [x] support for bursts with bracketed exposure
 - [x] optional exposure correction to improve tonality in the shadows
 - [x] optional output with full 16 bit precision
 - [x] preserves lens profiles
 - [x] hot pixel suppression
-- [x] multi-threaded image loading
+- [x] multi-threaded RAW conversion and image loading
+- [x] caching of converted DNGs both on disk and in-memory
 - [x] align+merge running in pure Metal
 - [x] native Intel, Apple Silicon support
 
 # List of Ideas
 - [ ] add super-resolution algorithm
+- [ ] Demosaic images (or foveon cameras)
 - [ ] fix progressbar getting stuck loading the first image
 
 Please feel free to contribute to any of these features or suggest other features.
