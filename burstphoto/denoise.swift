@@ -321,7 +321,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         // update out URL to new file
         out_url = final_url[0]
     }
-
     print("Time to save final image: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     print("")
     print("Total processing time for", textures.count, "images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
