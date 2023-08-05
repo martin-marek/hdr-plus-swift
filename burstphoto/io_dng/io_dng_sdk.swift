@@ -56,12 +56,22 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
     var j = 0
     for i in 0..<in_urls.count {
         let out_path = tmp_dir + in_urls[i].deletingPathExtension().lastPathComponent + ".dng"
-        if override_cache
-            || (!FileManager.default.fileExists(atPath: out_path)
-                && texture_cache.object(forKey: NSString(string: URL(fileURLWithPath: out_path).absoluteString)) == nil) {
+        let dng_exists = FileManager.default.fileExists(atPath: out_path)
+        let in_memory_cache = texture_cache.object(forKey: NSString(string: URL(fileURLWithPath: out_path).absoluteString)) != nil
+        
+        if dng_exists {
+            print(in_urls[i].lastPathComponent + " already exists as DNG, not converting to DNG.")
+        }
+        if in_memory_cache {
+            print(in_urls[i].lastPathComponent + " already cached in memory, not converting to DNG.")
+        }
+        
+        if override_cache || (!dng_exists && !in_memory_cache) {
             urls_needing_conversion.insert(in_urls[i])
             parallel_image_paths[Int(j/2) % parallel_image_paths.count] += " \"\(in_urls[i].relativePath)\""
             j += 2
+            
+            
         }
     }
     
@@ -159,6 +169,7 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
 
     for i in 0..<urls.count {
         if let cachedValue = textureCache.object(forKey: NSString(string: urls[i].absoluteString)) {
+            print("Loading image " + urls[i].lastPathComponent + " from in-memory cache.")
             access_queue.sync {
                 textures_dict[i] = cachedValue.texture
                 mosaic_pattern_width = cachedValue.mosaic_pattern_width
@@ -174,6 +185,7 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
                 color_factors[3*i+2] = cachedValue.color_factors[2]
             }
         } else {
+            print("Loading image " + urls[i].lastPathComponent + " from disk.")
             compute_queue.async(group: compute_group) {
                 
                 // asynchronously load texture
