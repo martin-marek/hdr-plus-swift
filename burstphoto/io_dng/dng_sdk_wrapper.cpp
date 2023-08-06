@@ -20,7 +20,7 @@ void terminate_xmp_sdk() {
 }
 
 
-int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_levels, int* masked_areas, int* exposure_bias, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
+int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_levels, int* masked_areas, int* exposure_bias, float* ISO_exposure_time, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
     
     try {
         

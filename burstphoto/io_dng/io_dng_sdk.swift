@@ -109,24 +109,31 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     // read image
     var error_code: Int32
     var pixel_bytes: UnsafeMutableRawPointer?
-    var width: Int32 = 0;
-    var height: Int32 = 0;
-    var mosaic_pattern_width: Int32 = 0;
-    var white_level: Int32 = 0;
-    var black_level0: Int32 = 0;
-    var black_level1: Int32 = 0;
-    var black_level2: Int32 = 0;
-    var black_level3: Int32 = 0;
-    var black_level: [Int] = [0, 0, 0, 0];
-    var exposure_bias: Int32 = 0;
+    var width: Int32 = 0
+    var height: Int32 = 0
+    var _mosaic_pattern_width: Int32 = 0
+    var white_level: Int32 = -1
+    // Hardcoding mosaic width of 6, I don't think anything has a mosaic width above 6 (X-Trans sensor)
+    var black_level_from_dng: [Int32]       = [Int32](repeating: -1, count: 6*6)
+    let black_level_from_masked_area: [Int]
+    var black_level: [Int]
+    var exposure_bias: Int32 = -1
     var ISO_exposure_time: Float32 = 0.0;
-    var color_factor_r: Float32 = 0.0;
-    var color_factor_g: Float32 = 0.0;
-    var color_factor_b: Float32 = 0.0;
-    var color_factors: [Double] = [0.0, 0.0, 0.0, 0.0];
+    var color_factor_r: Float32 = -1.0
+    var color_factor_g: Float32 = -1.0
+    var color_factor_b: Float32 = -1.0
+    var color_factors: [Double] = [0.0, 0.0, 0.0, 0.0]
+    // There are at most 4 masked areas. Each one has, in order, the: top, left, bottom, and right edge of the masked area.
+    var masked_areas: [Int32] = [
+        -1, -1, -1, -1,
+        -1, -1, -1, -1,
+        -1, -1, -1, -1,
+        -1, -1, -1, -1]
     
-    error_code = read_dng_from_disk(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width, &white_level, &black_level0, &black_level1, &black_level2, &black_level3, &exposure_bias, &ISO_exposure_time, &color_factor_r, &color_factor_g, &color_factor_b)
+    error_code = read_dng_from_disk(url.path, &pixel_bytes, &width, &height, &_mosaic_pattern_width, &white_level, &black_level_from_dng, &masked_areas, &exposure_bias, &ISO_exposure_time, &color_factor_r, &color_factor_g, &color_factor_b)
     if (error_code != 0) {throw ImageIOError.load_error}
+    
+    let mosaic_pattern_width = Int(_mosaic_pattern_width)
     
     // convert image bitmap to MTLTexture
     let bytes_per_pixel = 2
@@ -137,20 +144,27 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     let mtl_region = MTLRegionMake2D(0, 0, Int(width), Int(height))
     texture.replace(region: mtl_region, mipmapLevel: 0, withBytes: pixel_bytes!, bytesPerRow: bytes_per_row)
     
-    // free memory
     free(pixel_bytes!)
 
-    // convert four black levels to int16
-    black_level[0] = Int(black_level0)
-    black_level[1] = Int(black_level1)
-    black_level[2] = Int(black_level2)
-    black_level[3] = Int(black_level3)
+    // If any masked areas exist, calculate the black levels from it
+    black_level_from_masked_area = calculate_black_levels(for: texture, from_masked_areas: &masked_areas, mosaic_pattern_width: mosaic_pattern_width)
+    
+    // Load black levels either from the values the DNG reported or from the masked area
+    black_level = [Int](repeating: 0, count: mosaic_pattern_width*mosaic_pattern_width)
+    for i in 0..<black_level.count {
+        // 0 is hardcoded as a suspicious black level value.
+        if black_level_from_dng[i] > 0 {
+            black_level[i] = Int(black_level_from_dng[i])
+        } else {
+            black_level[i] = black_level_from_masked_area[i]
+        }
+    }
     
     color_factors[0] = Double(color_factor_r)
     color_factors[1] = Double(color_factor_g)
     color_factors[2] = Double(color_factor_b)
     
-    return (texture, Int(mosaic_pattern_width), Int(white_level), black_level, Int(exposure_bias), Double(ISO_exposure_time), color_factors)
+    return (texture, mosaic_pattern_width, Int(white_level), black_level, Int(exposure_bias), Double(ISO_exposure_time), color_factors)
 }
 
 
