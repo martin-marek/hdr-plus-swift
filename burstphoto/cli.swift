@@ -11,6 +11,21 @@ struct MyProgram {
         // initialize Adobe XMP SDK
         initialize_xmp_sdk()
         
+        // create output directory
+        let out_dir = NSHomeDirectory() + "/Pictures/Burst Photo/"
+        if !FileManager.default.fileExists(atPath: out_dir) {
+            try FileManager.default.createDirectory(atPath: out_dir, withIntermediateDirectories: true, attributes: nil)
+        }
+        
+        let tmp_dir = out_dir + ".dngs/"
+        // If it exists, delete a previously leftover temporary directory
+        // TODO: This needs to run once when the application is opened, not every time a file is drag and dropped.
+        var isDirectory : ObjCBool = true
+        if FileManager.default.fileExists(atPath: tmp_dir, isDirectory: &isDirectory) {
+            try FileManager.default.removeItem(atPath: tmp_dir)
+        }
+        try FileManager.default.createDirectory(atPath: tmp_dir, withIntermediateDirectories: true)
+        
         // create a list of bursts to process
         let burst_dirs = [
                      
@@ -45,12 +60,15 @@ struct MyProgram {
             let output_bit_depth = "Native"
             
             // align+merge
-            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: merging_algorithm, tile_size: tile_size, search_distance: search_distance, noise_reduction: noise_reduction, exposure_control: exposure_control, output_bit_depth: output_bit_depth)
+            let out_url = try perform_denoising(image_urls: image_urls, progress: progress, merging_algorithm: merging_algorithm, tile_size: tile_size, search_distance: search_distance, noise_reduction: noise_reduction, exposure_control: exposure_control, output_bit_depth: output_bit_depth, out_dir: out_dir, tmp_dir: tmp_dir)
            
             print("Image saved in:", out_url.relativePath)            
         }
         
         // terminate Adobe XMP SDK
         terminate_xmp_sdk()
+        
+        // Delete the temporary DNG directory
+        try FileManager.default.removeItem(atPath: NSHomeDirectory() + "/Pictures/Burst Photo/.dngs/")
     }
 }

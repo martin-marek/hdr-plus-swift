@@ -22,6 +22,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // ensure that tabs cannot be created
         // let _ = NSApplication.shared.windows.map { $0.tabbingMode = .disallowed }
         NSWindow.allowsAutomaticWindowTabbing = false
+        
+        // create output directory
+        if !FileManager.default.fileExists(atPath: NSHomeDirectory() + "/Pictures/Burst Photo/") {
+            do {
+                try FileManager.default.createDirectory(atPath: NSHomeDirectory() + "/Pictures/Burst Photo/", withIntermediateDirectories: true, attributes: nil)
+            } catch {}
+        }
+        
+        do {
+            // If it exists, delete a previously leftover temporary directory
+            var isDirectory : ObjCBool = true
+            if FileManager.default.fileExists(atPath: NSHomeDirectory() + "/Pictures/Burst Photo/.dngs/", isDirectory: &isDirectory) {
+                try FileManager.default.removeItem(atPath: NSHomeDirectory() + "/Pictures/Burst Photo/.dngs/")
+            }
+            try FileManager.default.createDirectory(atPath: NSHomeDirectory() + "/Pictures/Burst Photo/.dngs/", withIntermediateDirectories: true)
+        } catch {}
+    }
+    
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Delete the temporary DNG directory
+        do {
+            try FileManager.default.removeItem(atPath: NSHomeDirectory() + "/Pictures/Burst Photo/.dngs/")
+        } catch {}
+        return .terminateNow
     }
 }
 

@@ -11,7 +11,6 @@ let compute_merge_weight_state = try! device.makeComputePipelineState(function: 
 
 /// Convenience function for the spatial merging approach
 func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, kernel_size: Int, robustness: Double, uniform_exposure: Bool, black_level: [Int], color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
-    
     // set original texture size
     let texture_width_orig = textures[ref_idx].width
     let texture_height_orig = textures[ref_idx].height

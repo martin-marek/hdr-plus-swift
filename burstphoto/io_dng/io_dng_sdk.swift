@@ -1,6 +1,29 @@
 import Foundation
 import MetalKit
 
+/**
+ Must create a class to pass into NSCache.
+ */
+class ImageCacheWrapper : NSObject {
+    let texture : MTLTexture
+    let mosaic_pattern_width: Int
+    let white_level: Int
+    let black_levels: [Int]
+    let exposure_bias: Int
+    let ISO_exposure_time: Double
+    let color_factors: [Double]
+    
+    init(texture: MTLTexture, mosaic_pattern_width: Int, white_level: Int, black_levels: [Int], exposure_bias: Int, ISO_exposure_time: Double, color_factors: [Double]) {
+        self.texture = texture
+        self.mosaic_pattern_width = mosaic_pattern_width
+        self.white_level = white_level
+        self.black_levels = black_levels
+        self.exposure_bias = exposure_bias
+        self.ISO_exposure_time = ISO_exposure_time
+        self.color_factors = color_factors
+    }
+}
+
 // possible error types
 enum ImageIOError: Error {
     case load_error
@@ -8,20 +31,62 @@ enum ImageIOError: Error {
     case save_error
 }
 
-
-func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String) throws -> [URL] {
+/// Take a list of urls representing non-DNG raw files and converts them using the Adobe DNG Converter.
+/// If the output image already exists, it will not convert it again, unless `override_cache` is set to `true`.
+///
+/// - Parameter override_cache: Default of `false`. This value should always be set to `true` when outputting the final image.
+func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_dir: String, _ texture_cache: NSCache<NSString, ImageCacheWrapper>, override_cache: Bool = false) throws -> [URL] {
 
     // create command string
     let executable_path = dng_converter_path + "/Contents/MacOS/Adobe DNG Converter"
     // changed args to convert raw files to compressed DNGs
     let args = "--args -c -p0 -d \"\(tmp_dir)\""
-    var command = "\"\(executable_path)\" \(args)"
-    for url in in_urls {
-        command += " \"\(url.relativePath)\""
+    let command = "\"\(executable_path)\" \(args)"
+    
+    let compute_group = DispatchGroup()
+    let compute_queue = DispatchQueue.global() // this is a concurrent queue to do compute
+    
+    var parallel_image_paths = [String](repeating: "",
+                                        count: min(Int(0.75*Double(ProcessInfo.processInfo.processorCount)),
+                                                   Int(0.6 + Double(in_urls.count)/2)
+                                                  ))
+    var urls_needing_conversion: Set<URL> = []
+    
+    // j here is used to keep the parallel queues of equal length in-case some, but not all, of the images are cached.
+    var j = 0
+    for i in 0..<in_urls.count {
+        let out_path = tmp_dir + in_urls[i].deletingPathExtension().lastPathComponent + ".dng"
+        let dng_exists = FileManager.default.fileExists(atPath: out_path)
+        let in_memory_cache = texture_cache.object(forKey: NSString(string: URL(fileURLWithPath: out_path).absoluteString)) != nil
+        
+        if dng_exists {
+            print(in_urls[i].lastPathComponent + " already exists as DNG, not converting to DNG.")
+        }
+        if in_memory_cache {
+            print(in_urls[i].lastPathComponent + " already cached in memory, not converting to DNG.")
+        }
+        
+        if override_cache || (!dng_exists && !in_memory_cache) {
+            urls_needing_conversion.insert(in_urls[i])
+            parallel_image_paths[Int(j/2) % parallel_image_paths.count] += " \"\(in_urls[i].relativePath)\""
+            j += 2
+            
+            
+        }
     }
-
-    // call adobe dng converter
-    let output = try safeShell(command)
+    
+    for parallel_command in parallel_image_paths {
+        if !parallel_command.isEmpty {
+            compute_queue.async(group: compute_group) {
+                do {
+                    try safeShell(command + parallel_command)
+                } catch {}
+            }
+        }
+    }
+    
+    // Wait until all images have been converted
+    compute_group.wait()
 
     // return urls of the newly created dngs
     var out_urls: [URL] = []
@@ -30,7 +95,7 @@ func convert_raws_to_dngs(_ in_urls: [URL], _ dng_converter_path: String, _ tmp_
         let out_path = tmp_dir + fine_name
         let out_url = URL(fileURLWithPath: out_path)
         out_urls.append(out_url)
-        if !FileManager.default.fileExists(atPath: out_path) {
+        if urls_needing_conversion.contains(url) && !FileManager.default.fileExists(atPath: out_path) {
             throw AlignmentError.conversion_failed
         }
     }
@@ -89,7 +154,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
 }
 
 
-func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int, [Int], [Int], [Int], [Double], [Double]) {
+func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrapper>) throws -> ([MTLTexture], Int, [Int], [Int], [Int], [Double], [Double]) {
     
     var textures_dict: [Int: MTLTexture] = [:]
     let compute_group = DispatchGroup()
@@ -103,25 +168,53 @@ func load_images(_ urls: [URL]) throws -> ([MTLTexture], Int, [Int], [Int], [Int
     var color_factors = Array(repeating: 0.0, count: 3*urls.count)
 
     for i in 0..<urls.count {
-        compute_queue.async(group: compute_group) {
-    
-            // asynchronously load texture
-            if let (texture, _mosaic_pattern_width, _white_level, _black_level, _exposure_bias, _ISO_exposure_time, _color_factors) = try? image_url_to_texture(urls[i], device) {
-        
-                // thread-safely save the texture
-                access_queue.sync {
-                    textures_dict[i] = texture
-                    mosaic_pattern_width = _mosaic_pattern_width
-                    white_level[i] = _white_level
-                    black_level[4*i+0] = _black_level[0]
-                    black_level[4*i+1] = _black_level[1]
-                    black_level[4*i+2] = _black_level[2]
-                    black_level[4*i+3] = _black_level[3]
-                    exposure_bias[i] = _exposure_bias
-                    ISO_exposure_time[i] = _ISO_exposure_time
-                    color_factors[3*i+0] = _color_factors[0]
-                    color_factors[3*i+1] = _color_factors[1]
-                    color_factors[3*i+2] = _color_factors[2]
+        if let cachedValue = textureCache.object(forKey: NSString(string: urls[i].absoluteString)) {
+            print("Loading image " + urls[i].lastPathComponent + " from in-memory cache.")
+            access_queue.sync {
+                textures_dict[i] = cachedValue.texture
+                mosaic_pattern_width = cachedValue.mosaic_pattern_width
+                white_level[i] = cachedValue.white_level
+                black_level[4*i+0] = cachedValue.black_levels[0]
+                black_level[4*i+1] = cachedValue.black_levels[1]
+                black_level[4*i+2] = cachedValue.black_levels[2]
+                black_level[4*i+3] = cachedValue.black_levels[3]
+                exposure_bias[i] = cachedValue.exposure_bias
+                ISO_exposure_time[i] = cachedValue.ISO_exposure_time
+                color_factors[3*i+0] = cachedValue.color_factors[0]
+                color_factors[3*i+1] = cachedValue.color_factors[1]
+                color_factors[3*i+2] = cachedValue.color_factors[2]
+            }
+        } else {
+            print("Loading image " + urls[i].lastPathComponent + " from disk.")
+            compute_queue.async(group: compute_group) {
+                
+                // asynchronously load texture
+                if let (texture, _mosaic_pattern_width, _white_level, _black_level, _exposure_bias, _ISO_exposure_time, _color_factors) = try? image_url_to_texture(urls[i], device) {
+                    
+                    // thread-safely save the texture
+                    access_queue.sync {
+                        textureCache.setObject(ImageCacheWrapper(texture: texture,
+                                                                 mosaic_pattern_width: _mosaic_pattern_width,
+                                                                 white_level: _white_level,
+                                                                 black_levels: _black_level,
+                                                                 exposure_bias: _exposure_bias,
+                                                                 ISO_exposure_time: _ISO_exposure_time,
+                                                                 color_factors: _color_factors),
+                                               forKey: NSString(string: urls[i].absoluteString),
+                                               cost: Int(Float(texture.allocatedSize) / 1000 / 1000))
+                        textures_dict[i] = texture
+                        mosaic_pattern_width = _mosaic_pattern_width
+                        white_level[i] = _white_level
+                        black_level[4*i+0] = _black_level[0]
+                        black_level[4*i+1] = _black_level[1]
+                        black_level[4*i+2] = _black_level[2]
+                        black_level[4*i+3] = _black_level[3]
+                        exposure_bias[i] = _exposure_bias
+                        ISO_exposure_time[i] = _ISO_exposure_time
+                        color_factors[3*i+0] = _color_factors[0]
+                        color_factors[3*i+1] = _color_factors[1]
+                        color_factors[3*i+2] = _color_factors[2]
+                    }
                 }
             }
         }
@@ -212,4 +305,67 @@ func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL, _ whit
     
     // free memory
     free(bytes_pointer!)
+}
+
+/// Function to ensure that the specified cache directory does not become bigger than the specified size.
+/// This folder will be deleted when the application starts and stops, but to ensure it does not become 10s of GBs while the application is running we run this function.
+///
+/// If the folder is larger than the specified maximum, files are deleted in chronological order (oldest ones first) under the asumption that those are the least likely to be needed again.
+///
+/// Based on information from:
+///
+/// - Parameter cache:      String representing the path to the to the dng cache folder on disk
+/// - Parameter max_size:   The maximum size, in gigabytes, of the cache folder.
+func trim_disk_cache(cache_dir: String, to_max_size max_size: Double) throws {
+    let cache_url = URL(fileURLWithPath: cache_dir)
+    
+    let (contents, sizes) = size_of_and_chronological_contents_of(directory: cache_url)
+    var excess_size = sizes.reduce(0, +) - max_size
+    
+    var i = 0
+    while excess_size > 0 && i < contents.count {
+        try FileManager.default.removeItem(at: contents[i])
+        excess_size -= sizes[i]
+        i += 1
+    }
+}
+ 
+
+/// Get all files in the directory, calculate their size (in GB), sort them based on when they were added to the directory, and return the sorted URLs and dates as two arrays.
+///
+/// Assumes there are no sub-directories in the folder, which for our .dng folder this is true.
+///
+/// Based on:  https://stackoverflow.com/questions/32814535/how-to-get-directory-size-with-swift-on-os-x
+func size_of_and_chronological_contents_of(directory: URL) -> ([URL], [Double]) {
+    var contents: [URL] = []
+    var dates: [Date] = []
+    var sizes: [Double] = []
+    do {
+        contents = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey, .addedToDirectoryDateKey])
+    } catch {
+        return ([], [])
+    }
+
+    var i = 0
+    while i < contents.count {
+        let fileResourceValue: URLResourceValues
+        do {
+            fileResourceValue = try contents[i].resourceValues(forKeys: [.fileSizeKey, .addedToDirectoryDateKey])
+        } catch {
+            contents.remove(at: i)
+            continue
+        }
+        i += 1
+        
+        dates.append(fileResourceValue.addedToDirectoryDate ?? Date(timeIntervalSince1970: 0)) // If it's missing default it to being the oldest file in the directory
+        sizes.append(Double(fileResourceValue.fileSize ?? 0) / 1000 / 1000 / 1000)
+    }
+    // Sort the dates and
+    let sorted_indicies = dates.enumerated().sorted{$0.element < $1.element}.map{$0.offset}
+    // Sort based on date and return only the sorted URLs.
+//    let sorted_data = zip(dates, contents, sizes).sorted{ $0.0 < $1.0 }
+    return (
+        sorted_indicies.map{contents[$0]},
+        sorted_indicies.map{sizes[$0]}
+    )
 }

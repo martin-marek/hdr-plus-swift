@@ -40,11 +40,26 @@ let device = MTLCreateSystemDefaultDevice()!
 let command_queue = device.makeCommandQueue()!
 let mfl = device.makeDefaultLibrary()!
 
+// Must use NSString and not String since NSCache needs classes.
+let textureCache = NSCache<NSString, ImageCacheWrapper>()
 
 /**
  Main function of the burst photo app.
  */
-func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native") throws -> URL {
+func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native", out_dir: String, tmp_dir: String) throws -> URL {
+    
+    // Maximum size for the caches
+    let textureCacheMaxSizeMB: Double = min(10_000.0,
+                                            0.15 * Double(ProcessInfo.processInfo.physicalMemory) / 1000.0 / 1000.0)
+    /// The initial value is set to be twice that of the in-memory cache.
+    /// It is capped between 4–10 GB, but never allowed to be greater that 15% of the total free disk space.
+    /// There is a hard cap of 15% of the total system free disk space.
+    let maxDNGFolderSizeGB: Double = min(10.0,
+                                         0.15 * systemFreeDiskSpace(),
+                                         max(4.0,
+                                             2 * textureCacheMaxSizeMB/1000))
+    
+    textureCache.totalCostLimit = Int(textureCacheMaxSizeMB)
     
     // measure execution time
     let t0 = DispatchTime.now().uptimeNanoseconds
@@ -58,16 +73,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // check that 2+ images were provided
     let n_images = image_urls.count
     if n_images < 2 {throw AlignmentError.less_than_two_images}
-    
-    // create output directory
-    let out_dir = NSHomeDirectory() + "/Pictures/Burst Photo/"
-    if !FileManager.default.fileExists(atPath: out_dir) {
-        try FileManager.default.createDirectory(atPath: out_dir, withIntermediateDirectories: true, attributes: nil)
-    }
-    
-    // create a directory for temporary dngs inside the output directory
-    let tmp_dir = out_dir + ".dngs/"
-    try FileManager.default.createDirectory(atPath: tmp_dir, withIntermediateDirectories: true)
        
     // ensure that all files are .dng, converting them if necessary
     var dng_urls = image_urls
@@ -84,7 +89,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         } else {
             // the dng converter is installed -> use it
             print("Converting images...")
-            dng_urls = try convert_raws_to_dngs(image_urls, dng_converter_path, tmp_dir)
+            dng_urls = try convert_raws_to_dngs(image_urls, dng_converter_path, tmp_dir, textureCache)
             print("Time to convert images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
             DispatchQueue.main.async { progress.int += 10_000_000 }
             t = DispatchTime.now().uptimeNanoseconds
@@ -94,7 +99,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     // load images
     t = DispatchTime.now().uptimeNanoseconds
     print("Loading images...")
-    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias, ISO_exposure_time, color_factors) = try load_images(dng_urls)
+    var (textures, mosaic_pattern_width, white_level, black_level, exposure_bias, ISO_exposure_time, color_factors) = try load_images(dng_urls, textureCache: textureCache)
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10_000_000 : 20_000_000) }
@@ -270,8 +275,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     DispatchQueue.main.async { progress.int += 10_000_000 }
     
     // set output location
-    let in_url = dng_urls[ref_idx]
-    let in_filename = in_url.deletingPathExtension().lastPathComponent
+    let ref_dng_url = dng_urls[ref_idx]
+    let in_filename = ref_dng_url.deletingPathExtension().lastPathComponent
     // adapt output filename with merging algorithm and noise reduction setting
     var suffix_merging = (merging_algorithm == "Higher quality" ? "q" : "f")
     suffix_merging = (noise_reduction==23.0 ? "_merged_avg" : "_merged_" + suffix_merging + "\(Int(noise_reduction+0.5))")
@@ -290,8 +295,11 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     let out_path = (dng_converter_present ? tmp_dir : out_dir) + out_filename
     var out_url = URL(fileURLWithPath: out_path)
     
+    // Ensure reference texture exists on disk (may not if it existed in memory cache)
+    _ = try convert_raws_to_dngs([image_urls[ref_idx]], dng_converter_path, tmp_dir, NSCache<NSString, ImageCacheWrapper>())
+    
     // save the output image
-    try texture_to_dng(output_texture_uint16, in_url, out_url, (scale_to_16bit ? Int32(factor_16bit*white_level[ref_idx]) : -1))
+    try texture_to_dng(output_texture_uint16, ref_dng_url, out_url, (scale_to_16bit ? Int32(factor_16bit*white_level[ref_idx]) : -1))
     
     // check if dng converter is installed
     if dng_converter_present {
@@ -303,19 +311,23 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         }
         
         // the dng converter is installed -> convert output DNG saved before with Adobe DNG Converter, which increases compatibility of the resulting DNG
-        let final_url = try convert_raws_to_dngs([out_url], dng_converter_path, out_dir)
+        let final_url = try convert_raws_to_dngs([out_url], dng_converter_path, out_dir, textureCache, override_cache: true)
+        
+        // Delete tmp version of final_url in the tmp dir
+        if FileManager.default.fileExists(atPath: out_path) {
+            try FileManager.default.removeItem(atPath: out_path)
+        }
                    
         // update out URL to new file
         out_url = final_url[0]
     }
-    
-    // delete the temporary dng directory
-    try FileManager.default.removeItem(atPath: tmp_dir)
-    
     print("Time to save final image: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     print("")
     print("Total processing time for", textures.count, "images: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
     print("")
+    
+    // Ensure the disk dng cache does not go above the set limit
+    try trim_disk_cache(cache_dir: tmp_dir, to_max_size: maxDNGFolderSizeGB)
     
     return out_url
 }
