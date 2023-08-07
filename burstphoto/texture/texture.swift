@@ -53,9 +53,9 @@ func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textur
 }
 
 
-func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textures: Int, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double], _ comp_idx: Int) {
+func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textures: Int, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double]) {
     
-    let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
+    let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
 
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -68,17 +68,17 @@ func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture,
     command_encoder.setBytes([Float32(n_textures)], length: MemoryLayout<Float32>.stride, index: 0)
     command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 1)
     command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 2)
-    command_encoder.setBytes([Float32(color_factors[comp_idx*3+0]/color_factors[comp_idx*3+1])], length: MemoryLayout<Float32>.stride, index: 3)
-    command_encoder.setBytes([Float32(color_factors[comp_idx*3+2]/color_factors[comp_idx*3+1])], length: MemoryLayout<Float32>.stride, index: 4)
+    command_encoder.setBytes([Float32(color_factors[0]/color_factors[1])], length: MemoryLayout<Float32>.stride, index: 3)
+    command_encoder.setBytes([Float32(color_factors[2]/color_factors[1])], length: MemoryLayout<Float32>.stride, index: 4)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
 }
 
 
-func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ norm_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level: [Int], _ comp_idx: Int) {
+func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ norm_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level: [Int]) {
     
-    let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
+    let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
     
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -159,7 +159,7 @@ func blur(_ in_texture: MTLTexture, with_pattern_width mosaic_pattern_width: Int
 
 
 /// Convert a texture of floats into 16 bit uints for storing in a DNG file.
-func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ ref_idx: Int, _ factor_16bit: Int, _ color_factors: [Double]) -> MTLTexture {
+func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ factor_16bit: Int, _ color_factors: [Double]) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: in_texture.width, height: in_texture.height, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
@@ -174,10 +174,10 @@ func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ bla
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(out_texture, index: 1)
     command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(black_level[ref_idx*4+0])], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.setBytes([Int32(black_level[ref_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([Int32(black_level[ref_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.setBytes([Int32(black_level[ref_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 4)
+    command_encoder.setBytes([Int32(black_level[0])], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(black_level[1])], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(black_level[2])], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.setBytes([Int32(black_level[3])], length: MemoryLayout<Int32>.stride, index: 4)
     command_encoder.setBytes([Float32(color_factors[0])], length: MemoryLayout<Float32>.stride, index: 5)
     command_encoder.setBytes([Float32(color_factors[1])], length: MemoryLayout<Float32>.stride, index: 6)
     command_encoder.setBytes([Float32(color_factors[2])], length: MemoryLayout<Float32>.stride, index: 7)    
@@ -282,7 +282,7 @@ func copy_texture(_ in_texture: MTLTexture) -> MTLTexture {
 }
 
 
-func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int], _ ISO_exposure_time: [Double], _ noise_reduction: Double) {
+func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [[Int]], _ ISO_exposure_time: [Double], _ noise_reduction: Double) {
     
     var correction_strength = 1.0
     
@@ -315,16 +315,16 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int], _ ISO_exp
         let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), .rgba)
         
         // standard parameters if black level is not available / available
-        let hot_pixel_threshold     = (black_level[0] == -1) ? 1.0 : 2.0
-        let hot_pixel_multiplicator = (black_level[0] == -1) ? 2.0 : 1.0
+        let hot_pixel_threshold     = (black_level[0][0] == -1) ? 1.0 : 2.0
+        let hot_pixel_multiplicator = (black_level[0][0] == -1) ? 2.0 : 1.0
         
         // iterate over all images and correct hot pixels in each texture
         for comp_idx in 0..<textures.count {
             
-            let black_level0 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+0]
-            let black_level1 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+1]
-            let black_level2 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+2]
-            let black_level3 = (black_level[0] == -1) ? Int(0) : black_level[comp_idx*4+3]
+            let black_level0 = (black_level[comp_idx][0] == -1) ? Int(0) : black_level[comp_idx][0]
+            let black_level1 = (black_level[comp_idx][0] == -1) ? Int(0) : black_level[comp_idx][1]
+            let black_level2 = (black_level[comp_idx][0] == -1) ? Int(0) : black_level[comp_idx][2]
+            let black_level3 = (black_level[comp_idx][0] == -1) ? Int(0) : black_level[comp_idx][3]
             
             let tmp_texture = copy_texture(textures[comp_idx])
             

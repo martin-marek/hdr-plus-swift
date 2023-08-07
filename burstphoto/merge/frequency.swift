@@ -23,7 +23,7 @@ let forward_fft_state = try! device.makeComputePipelineState(function: mfl.makeF
 ///
 /// Perform the merging 4 times with a slight displacement between the frame to supress artifacts in the merging process.
 /// The shift is equal to to the tile size used in the merging process, which later translates into tile\_size\_merge/2 when each color channel is processed independently.
-func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], black_level: [Int], color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], black_level: [[Int]], color_factors: [[Double]], textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // The tile size for merging in frequency domain is set to 8x8 for all tile sizes used for alignment. The smaller tile size leads to a reduction of artifacts at specular highlights at the expense of a slightly reduced suppression of low-frequency noise in the shadows. The fixed value of 8 is supported by the highly-optimized fast Fourier transform (works up to value of <= 16). A slow, but easier to understand discrete Fourier transform is also provided for values larger than 16.
     // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
@@ -129,7 +129,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         // convert reference texture into RGBA pixel format that SIMD instructions can be applied
         let ref_texture_rgba = convert_to_rgba(ref_texture, crop_merge_x, crop_merge_y)
         
-        var color_factors3 = [color_factors[ref_idx*3+0], color_factors[ref_idx*3+1], color_factors[ref_idx*3+2]]
+        var color_factors3 = [color_factors[ref_idx][0], color_factors[ref_idx][1], color_factors[ref_idx][2]]
         
         // build reference pyramid
         let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, color_factors3)
@@ -163,8 +163,8 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             // set and extend comparison texture
             let comp_texture = extend_texture(textures[comp_idx], pad_left, pad_right, pad_top, pad_bottom)
             
-            let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
-            color_factors3 = [color_factors[comp_idx*3+0], color_factors[comp_idx*3+1], color_factors[comp_idx*3+2]]
+            let black_level_mean = 0.25*Double(black_level[comp_idx][0] + black_level[comp_idx][1] + black_level[comp_idx][2] + black_level[comp_idx][3])
+            color_factors3 = [color_factors[comp_idx][0], color_factors[comp_idx][1], color_factors[comp_idx][2]]
             
             // align comparison texture
             let aligned_texture_rgba = convert_to_rgba(
@@ -215,7 +215,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         // transform output texture back to image domain
         var output_texture = backward_ft(final_texture_ft, tmp_texture_ft, tile_info_merge, textures.count)
         // reduce potential artifacts at tile borders
-        reduce_artifacts_tile_border(output_texture, ref_texture_rgba, tile_info_merge, black_level, ref_idx)
+        reduce_artifacts_tile_border(output_texture, ref_texture_rgba, tile_info_merge, black_level[ref_idx])
         // convert back to the 2x2 pixel structure and crop to original size
         output_texture = crop_texture(convert_to_bayer(output_texture), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
         
@@ -376,7 +376,7 @@ func normalize_mismatch(_ mismatch_texture: MTLTexture, _ mean_mismatch_buffer: 
 }
 
 
-func reduce_artifacts_tile_border(_ output_texture: MTLTexture, _ ref_texture: MTLTexture, _ tile_info: TileInfo, _ black_level: [Int], _ ref_idx: Int) {
+func reduce_artifacts_tile_border(_ output_texture: MTLTexture, _ ref_texture: MTLTexture, _ tile_info: TileInfo, _ black_level: [Int]) {
         
     if (black_level[0] != -1) {
         
@@ -389,10 +389,10 @@ func reduce_artifacts_tile_border(_ output_texture: MTLTexture, _ ref_texture: M
         command_encoder.setTexture(output_texture, index: 0)
         command_encoder.setTexture(ref_texture, index: 1)
         command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
-        command_encoder.setBytes([Int32(black_level[ref_idx*4+0])], length: MemoryLayout<Int32>.stride, index: 1)
-        command_encoder.setBytes([Int32(black_level[ref_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 2)
-        command_encoder.setBytes([Int32(black_level[ref_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 3)
-        command_encoder.setBytes([Int32(black_level[ref_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 4)
+        command_encoder.setBytes([Int32(black_level[0])], length: MemoryLayout<Int32>.stride, index: 1)
+        command_encoder.setBytes([Int32(black_level[1])], length: MemoryLayout<Int32>.stride, index: 2)
+        command_encoder.setBytes([Int32(black_level[2])], length: MemoryLayout<Int32>.stride, index: 3)
+        command_encoder.setBytes([Int32(black_level[3])], length: MemoryLayout<Int32>.stride, index: 4)
         command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
         command_encoder.endEncoding()
         command_buffer.commit()

@@ -168,7 +168,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
 }
 
 
-func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrapper>) throws -> ([MTLTexture], Int, [Int], [Int], [Int], [Double], [Double]) {
+func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrapper>) throws -> ([MTLTexture], Int, [Int], [[Int]], [Int], [Double], [[Double]]) {
     
     var textures_dict: [Int: MTLTexture] = [:]
     let compute_group = DispatchGroup()
@@ -176,10 +176,11 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
     let access_queue = DispatchQueue(label: "") // this is a serial queue to read/save data thread-safely
     var mosaic_pattern_width: Int?
     var white_level = Array(repeating: 0, count: urls.count)
-    var black_level = Array(repeating: 0, count: 4*urls.count)
+    // Setting to
+    var black_levels = Array(repeating: Array(repeating: 0, count: 6*6), count: urls.count)
     var exposure_bias = Array(repeating: 0, count: urls.count)
     var ISO_exposure_time = Array(repeating: 0.0, count: urls.count)
-    var color_factors = Array(repeating: 0.0, count: 3*urls.count)
+    var color_factors = Array(repeating: Array(repeating: 0.0, count: 3), count: urls.count)
 
     for i in 0..<urls.count {
         if let cachedValue = textureCache.object(forKey: NSString(string: urls[i].absoluteString)) {
@@ -188,29 +189,28 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
                 textures_dict[i] = cachedValue.texture
                 mosaic_pattern_width = cachedValue.mosaic_pattern_width
                 white_level[i] = cachedValue.white_level
-                black_level[4*i+0] = cachedValue.black_levels[0]
-                black_level[4*i+1] = cachedValue.black_levels[1]
-                black_level[4*i+2] = cachedValue.black_levels[2]
-                black_level[4*i+3] = cachedValue.black_levels[3]
+                for j in 0..<cachedValue.black_levels.count {
+                    black_levels[i][j] = cachedValue.black_levels[j]
+                }
                 exposure_bias[i] = cachedValue.exposure_bias
                 ISO_exposure_time[i] = cachedValue.ISO_exposure_time
-                color_factors[3*i+0] = cachedValue.color_factors[0]
-                color_factors[3*i+1] = cachedValue.color_factors[1]
-                color_factors[3*i+2] = cachedValue.color_factors[2]
+                for j in 0..<3 {
+                    color_factors[i][j] = cachedValue.color_factors[j]
+                }
             }
         } else {
             print("Loading image " + urls[i].lastPathComponent + " from disk.")
             compute_queue.async(group: compute_group) {
                 
                 // asynchronously load texture
-                if let (texture, _mosaic_pattern_width, _white_level, _black_level, _exposure_bias, _ISO_exposure_time, _color_factors) = try? image_url_to_texture(urls[i], device) {
+                if let (texture, _mosaic_pattern_width, _white_level, _black_levels, _exposure_bias, _ISO_exposure_time, _color_factors) = try? image_url_to_texture(urls[i], device) {
                     
                     // thread-safely save the texture
                     access_queue.sync {
                         textureCache.setObject(ImageCacheWrapper(texture: texture,
                                                                  mosaic_pattern_width: _mosaic_pattern_width,
                                                                  white_level: _white_level,
-                                                                 black_levels: _black_level,
+                                                                 black_levels: _black_levels,
                                                                  exposure_bias: _exposure_bias,
                                                                  ISO_exposure_time: _ISO_exposure_time,
                                                                  color_factors: _color_factors),
@@ -219,15 +219,14 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
                         textures_dict[i] = texture
                         mosaic_pattern_width = _mosaic_pattern_width
                         white_level[i] = _white_level
-                        black_level[4*i+0] = _black_level[0]
-                        black_level[4*i+1] = _black_level[1]
-                        black_level[4*i+2] = _black_level[2]
-                        black_level[4*i+3] = _black_level[3]
+                        for j in 0..<_black_levels.count {
+                            black_levels[i][j] = _black_levels[j]
+                        }
                         exposure_bias[i] = _exposure_bias
                         ISO_exposure_time[i] = _ISO_exposure_time
-                        color_factors[3*i+0] = _color_factors[0]
-                        color_factors[3*i+1] = _color_factors[1]
-                        color_factors[3*i+2] = _color_factors[2]
+                        for j in 0..<3 {
+                            color_factors[i][j] = _color_factors[j]
+                        }
                     }
                 }
             }
@@ -253,7 +252,26 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
         }
     }
     
-    return (textures_list, mosaic_pattern_width!, white_level, black_level, exposure_bias, ISO_exposure_time, color_factors)
+    // TODO: Ensure mosaic pattern width is uniform between images.
+    // TODO: Trim black level to mosaic_patther_width
+    // TODO: Can I do that by trimming the array?
+    if mosaic_pattern_width != nil {
+        let mosaic_squared = mosaic_pattern_width! * mosaic_pattern_width!
+        for i in 0..<black_levels.count {
+            var black_levels_row = black_levels[i]
+            for _ in mosaic_squared..<black_levels_row.count {
+                black_levels_row.popLast()
+            }
+        }
+    }
+    
+    for i in 1..<textures_list.count {
+        if (textures_list[0].width != textures_list[i].width) || (textures_list[0].height != textures_list[i].height) {
+            throw AlignmentError.inconsistent_resolutions
+        }
+    }
+    
+    return (textures_list, mosaic_pattern_width!, white_level, black_levels, exposure_bias, ISO_exposure_time, color_factors)
 }
 
 
