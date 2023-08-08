@@ -95,7 +95,8 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     command_buffer.commit()
 }
 
-
+/// Calculate the weighted average of `texture1` and `texture2` using the spatially varying weights specified in `weight_texture`.
+/// Larger weights bias towards `texture1`.
 func add_texture_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ weight_texture: MTLTexture) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width, height: texture1.height, mipmapped: false)
