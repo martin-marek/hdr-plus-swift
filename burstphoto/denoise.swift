@@ -102,11 +102,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     print("Time to load all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10_000_000 : 20_000_000) }
-    for i in 1..<textures.count {
-        if (textures[0].width != textures[i].width) || (textures[0].height != textures[i].height) {
-            throw AlignmentError.inconsistent_resolutions
-        }
-    }
     
     // if images have a uniform exposure: use central image as reference
     var ref_idx = image_urls.count / 2
@@ -165,13 +160,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
        
     // convert images from uint16 to float16
     textures = textures.map{convert_uint16_to_float($0)}
-    
-    // check that the comparison image has the same resolution as the reference image
-    for comp_idx in 0..<textures.count {
-        if (textures[ref_idx].width != textures[comp_idx].width) || (textures[ref_idx].height != textures[comp_idx].height) {
-            throw AlignmentError.inconsistent_resolutions
-        }
-    }
 
     // set the tile size for the alignment
     let tile_size_dict = [
