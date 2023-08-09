@@ -323,8 +323,8 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         
         // normalization of the final image
         normalize_texture(final_texture, norm_texture)
-        
-    } else if (white_level != -1 && black_level[0] != -1 && color_factors[0] > -0.9 && mosaic_pattern_width == 2) {
+        // If color_factor is NOT available, a negative value will be set.
+    } else if (white_level != -1 && black_level[0] != -1 && color_factors[0] > 0 && mosaic_pattern_width == 2) {
         
         // temporal averaging with extrapolation of green channels for very bright pixels
         for comp_idx in 0..<textures.count {

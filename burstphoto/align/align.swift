@@ -108,8 +108,8 @@ func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<I
     var pyramid: Array<MTLTexture> = []
     for (i, downscale_factor) in downscale_factor_list.enumerated() {
         if i == 0 {
-            // TODO: Document this `color_factors3[0] > -0.9` term.
-            pyramid.append(avg_pool(input_texture, downscale_factor, color_factors3[0] > -0.9, color_factors3))
+            // If color_factor is NOT available, a negative value will be set.
+            pyramid.append(avg_pool(input_texture, downscale_factor, color_factors3[0] > 0, color_factors3))
         } else {
             pyramid.append(avg_pool(blur(pyramid.last!, with_pattern_width: 1, using_kernel_size: 2), downscale_factor, false, color_factors3))
         }
