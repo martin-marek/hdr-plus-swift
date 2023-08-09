@@ -206,7 +206,6 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             // sync GUI progress
             DispatchQueue.main.async { progress.int += Int(80000000/Double(4*(textures.count-1))) }
         }
-        print("Align+merge (", i, "/4): ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
         // apply simple deconvolution to slightly correct potential blurring from misalignment of bursts
         deconvolute_frequency_domain(final_texture_ft, total_mismatch_texture, tile_info_merge)
         
@@ -219,6 +218,8 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         
         // add output texture to the final texture to collect all textures of the four iterations
         add_texture(output_texture, final_texture, 1)
+        
+        print("Align+merge (", i, "/4): ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
     }
 }
 
