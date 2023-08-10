@@ -506,7 +506,9 @@ kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[
     in_texture.write(in_texture.read(gid).r/norm_texture.read(gid).r, gid);
 }
 
-
+/**
+  Naming based on https://en.wikipedia.org/wiki/Bilinear_interpolation#/media/File:BilinearInterpolation.svg
+  */
 kernel void upsample_bilinear_float(texture2d<float, access::read> in_texture [[texture(0)]],
                                     texture2d<float, access::write> out_texture [[texture(1)]],
                                     constant float& scale_x [[buffer(0)]],

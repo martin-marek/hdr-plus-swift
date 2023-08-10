@@ -10,7 +10,14 @@ let compute_merge_weight_state = try! device.makeComputePipelineState(function: 
 
 
 /// Convenience function for the spatial merging approach
-func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, kernel_size: Int, robustness: Double, uniform_exposure: Bool, black_level: [Int], color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, black_level: [Int], color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
+    
+    let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
+    
+    // derive normalized robustness value: four steps in noise_reduction (-4.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the sd of shot noise increases by a factor of sqrt(2) per iso level
+    let robustness_rev = 0.5*(36.0-Double(Int(noise_reduction+0.5)))
+    let robustness = 0.12*pow(1.3, robustness_rev) - 0.4529822
+    
     // set original texture size
     let texture_width_orig = textures[ref_idx].width
     let texture_height_orig = textures[ref_idx].height
@@ -52,7 +59,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
     
     // blur reference texure and estimate noise standard deviation
     // -  the computation is done here to avoid repeating the same computation in 'robust_merge()'
-    let ref_texture_blurred = blur_mosaic_texture(textures[ref_idx], kernel_size, mosaic_pattern_width)
+    let ref_texture_blurred = blur(textures[ref_idx], with_pattern_width: mosaic_pattern_width, using_kernel_size: kernel_size)
     let noise_sd = estimate_color_noise(textures[ref_idx], ref_texture_blurred, mosaic_pattern_width)
 
     // iterate over comparison images
@@ -86,7 +93,9 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
 }
 
 
-func color_difference(_ texture1: MTLTexture, _ texture2: MTLTexture, _ mosaic_pattern_width: Int) -> MTLTexture {
+/// For each super-pixel, calculate the sum of absolute differences between each color channel.
+/// E.g. for a Bayer RGG'B super pixel this calculates, for each superpixel, `abs(R1 - R2) + abs(G1 - G2) + abs(G'1 - G'2) + abs(B1 - B2)`.
+func color_difference(between texture1: MTLTexture, and texture2: MTLTexture, mosaic_pattern_width: Int) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width/mosaic_pattern_width, height: texture1.height/mosaic_pattern_width, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
@@ -114,10 +123,10 @@ func color_difference(_ texture1: MTLTexture, _ texture2: MTLTexture, _ mosaic_p
 func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, _ mosaic_pattern_width: Int) -> MTLBuffer {
     
     // compute the color difference of each mosaic superpixel between the original and the blurred texture
-    let texture_diff = color_difference(texture, texture_blurred, mosaic_pattern_width)
+    let texture_diff = color_difference(between: texture, and: texture_blurred, mosaic_pattern_width: mosaic_pattern_width)
     
     // compute the average of the difference between the original and the blurred texture
-    let mean_diff = texture_mean(texture_diff, "r")
+    let mean_diff = texture_mean(texture_diff, .r)
     
     return mean_diff
 }
@@ -126,10 +135,10 @@ func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, 
 func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, _ comp_texture: MTLTexture, _ kernel_size: Int, _ robustness: Double, _ noise_sd: MTLBuffer, _ mosaic_pattern_width: Int) -> MTLTexture {
     
     // blur comparison texture
-    let comp_texture_blurred = blur_mosaic_texture(comp_texture, kernel_size, mosaic_pattern_width)
+    let comp_texture_blurred = blur(comp_texture, with_pattern_width: mosaic_pattern_width, using_kernel_size: kernel_size)
     
     // compute the color difference of each superpixel between the blurred reference and the comparison textures
-    let texture_diff = color_difference(ref_texture_blurred, comp_texture_blurred, mosaic_pattern_width)
+    let texture_diff = color_difference(between: ref_texture_blurred, and: comp_texture_blurred, mosaic_pattern_width: mosaic_pattern_width)
     
     // create a weight texture
     let weight_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: texture_diff.width, height: texture_diff.height, mipmapped: false)
@@ -152,7 +161,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     command_buffer.commit()
     
     // upsample merge weight to full image resolution
-    let weight_texture_upsampled = upsample(weight_texture, width: ref_texture.width, height: ref_texture.height, mode: "bilinear")
+    let weight_texture_upsampled = upsample(weight_texture, to_width: ref_texture.width, to_height: ref_texture.height, using: .Bilinear)
     
     // average the input textures based on the weight
     let output_texture = add_texture_weighted(ref_texture, comp_texture, weight_texture_upsampled)

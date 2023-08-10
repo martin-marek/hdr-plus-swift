@@ -24,6 +24,15 @@ let normalize_texture_state = try! device.makeComputePipelineState(function: mfl
 let upsample_bilinear_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_bilinear_float")!)
 let upsample_nearest_int_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_nearest_int")!)
 
+enum PixelFormat {
+    case rgba
+    case r
+}
+
+enum UpsampleType {
+    case Bilinear
+    case NearestNeighbour
+}
 
 func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textures: Int) {
     
@@ -86,7 +95,8 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     command_buffer.commit()
 }
 
-
+/// Calculate the weighted average of `texture1` and `texture2` using the spatially varying weights specified in `weight_texture`.
+/// Larger weights bias towards `texture1`.
 func add_texture_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ weight_texture: MTLTexture) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width, height: texture1.height, mipmapped: false)
@@ -112,15 +122,13 @@ func add_texture_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ weig
 }
 
 
-func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_pattern_width: Int) -> MTLTexture {
-    
-    // create a temp texture blurred along x-axis only and the output texture, blurred along both x- and y-axis
-    let blur_x = texture_like(in_texture)
-    let blur_xy = texture_like(in_texture)
+func blur(_ in_texture: MTLTexture, with_pattern_width mosaic_pattern_width: Int, using_kernel_size kernel_size: Int) -> MTLTexture {
+    let blurred_in_x_texture = texture_like(in_texture)
+    let blurred_in_xy_texture = texture_like(in_texture)
     
     let kernel_size_mapped = (kernel_size == 16) ? 16 : max(0, min(8, kernel_size))
     
-    // blur the texture along the x-axis
+    // Blur the texture along the x-axis
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = blur_mosaic_texture_state
@@ -128,16 +136,16 @@ func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(blur_x, index: 1)
+    command_encoder.setTexture(blurred_in_x_texture, index: 1)
     command_encoder.setBytes([Int32(kernel_size_mapped)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([Int32(0)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     
-    // blur the texture along the y-axis
-    command_encoder.setTexture(blur_x, index: 0)
-    command_encoder.setTexture(blur_xy, index: 1)
+    // Blur along the y-axis
+    command_encoder.setTexture(blurred_in_x_texture, index: 0)
+    command_encoder.setTexture(blurred_in_xy_texture, index: 1)
     command_encoder.setBytes([Int32(in_texture.height)], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([Int32(1)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
@@ -145,7 +153,7 @@ func blur_mosaic_texture(_ in_texture: MTLTexture, _ kernel_size: Int, _ mosaic_
     command_encoder.endEncoding()
     command_buffer.commit()
     
-    return blur_xy
+    return blurred_in_xy_texture
 }
 
 
@@ -303,7 +311,7 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [Int], _ ISO_exp
         }
         
         // calculate mean value specific for each color channel
-        let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), "rgba")
+        let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), .rgba)
         
         // standard parameters if black level is not available / available
         let hot_pixel_threshold     = (black_level[0] == -1) ? 1.0 : 2.0
@@ -449,7 +457,7 @@ func texture_like(_ input_texture: MTLTexture) -> MTLTexture {
 
 
 /// Function to calculate the average pixel value over the whole of a texture. If `pixelformat` is `rgba` then each channel will have an independent average calculated. Otherwise, a single value will be returned for the whole texture.
-func texture_mean(_ in_texture: MTLTexture, _ pixelformat: String) -> MTLBuffer {
+func texture_mean(_ in_texture: MTLTexture, _ pixelformat: PixelFormat) -> MTLBuffer {
     // create a 1d texture that will contain the averages of the input texture along the x-axis
     let texture_descriptor = MTLTextureDescriptor()
     texture_descriptor.textureType = .type1D
@@ -461,7 +469,7 @@ func texture_mean(_ in_texture: MTLTexture, _ pixelformat: String) -> MTLBuffer 
     // average the input texture along the y-axis
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = (pixelformat == "rgba" ? average_y_rgba_state : average_y_state)
+    let state = (pixelformat == .rgba ? average_y_rgba_state : average_y_state)
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
     let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
@@ -470,10 +478,10 @@ func texture_mean(_ in_texture: MTLTexture, _ pixelformat: String) -> MTLBuffer 
     command_encoder.setTexture(avg_y, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     
-    // average the generated 1d texture along the x-axis
-    let state2 = (pixelformat == "rgba" ? average_x_rgba_state : average_x_state)
+    // average the generated 1D texture along the x-axis
+    let state2 = (pixelformat == .rgba ? average_x_rgba_state : average_x_state)
     command_encoder.setComputePipelineState(state2)
-    let avg_buffer = device.makeBuffer(length: (pixelformat=="rgba" ? 4 : 1)*MemoryLayout<Float32>.size, options: .storageModeShared)!
+    let avg_buffer = device.makeBuffer(length: (pixelformat == .rgba ? 4 : 1)*MemoryLayout<Float32>.size, options: .storageModeShared)!
     command_encoder.setTexture(avg_y, index: 0)
     command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
     command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
@@ -485,7 +493,8 @@ func texture_mean(_ in_texture: MTLTexture, _ pixelformat: String) -> MTLBuffer 
 }
 
 
-func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String) -> MTLTexture {
+/// Upsample the provided texture to the specified widths using either a nearest neighbour approach or using bilinear interpolation.
+func upsample(_ input_texture: MTLTexture, to_width width: Int, to_height height: Int, using mode: UpsampleType) -> MTLTexture {
     let scale_x = Double(width) / Double(input_texture.width)
     let scale_y = Double(height) / Double(input_texture.height)
     
@@ -496,7 +505,7 @@ func upsample(_ input_texture: MTLTexture, width: Int, height: Int, mode: String
     
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = (mode == "bilinear" ? upsample_bilinear_float_state : upsample_nearest_int_state)
+    let state = (mode == .Bilinear ? upsample_bilinear_float_state : upsample_nearest_int_state)
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)

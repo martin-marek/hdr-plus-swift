@@ -43,9 +43,8 @@ let mfl = device.makeDefaultLibrary()!
 // Must use NSString and not String since NSCache needs classes.
 let textureCache = NSCache<NSString, ImageCacheWrapper>()
 
-/**
- Main function of the burst photo app.
- */
+
+/// Main function of the burst photo app.
 func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native", out_dir: String, tmp_dir: String) throws -> URL {
     
     // Maximum size for the caches
@@ -161,13 +160,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
        
     // convert images from uint16 to float16
     textures = textures.map{convert_uint16_to_float($0)}
-    
-    // check that the comparison image has the same resolution as the reference image
-    for comp_idx in 0..<textures.count {
-        if (textures[ref_idx].width != textures[comp_idx].width) || (textures[ref_idx].height != textures[comp_idx].height) {
-            throw AlignmentError.inconsistent_resolutions
-        }
-    }
 
     // set the tile size for the alignment
     let tile_size_dict = [
@@ -201,61 +193,18 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         print("Special mode: temporal averaging only...")
         
         try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, color_factors: color_factors, textures: textures, final_texture: final_texture)
-  
 
     // alignment and merging of tiles in frequency domain (only 2x2 Bayer pattern)
     } else if merging_algorithm == "Higher quality" {
         print("Merging in the frequency domain...")
         
-        // The tile size for merging in frequency domain is set to 8x8 for all tile sizes used for alignment. The smaller tile size leads to a reduction of artifacts at specular highlights at the expense of a slightly reduced suppression of low-frequency noise in the shadows. The fixed value of 8 is supported by the highly-optimized fast Fourier transform (works up to value of <= 16). A slow, but easier to understand discrete Fourier transform is also provided for values larger than 16.
-        // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
-        let tile_size_merge = Int(8)
-
-        // These corrections account for the fact that bursts with exposure bracketing include images with longer exposure times, which exhibit a better signal-to-noise ratio. Thus the expected noise level n used in the merging equation d^2/(d^2 + n) has to be reduced to get a comparable noise reduction strength on average (exposure_corr1). Furthermore, a second correction (exposure_corr2) takes into account that images with longer exposure get slightly larger weights than images with shorter exposure (applied as an increased value for the parameter max_motion_norm => see call of function merge_frequency_domain). The simplified formulas do not correctly include read noise (a square is ignored) and as a consequence, merging weights in the shadows will be very slightly overestimated. As the shadows are typically lifted heavily in HDR shots, this effect may be even preferable.
-        var exposure_corr1 = 0.0
-        var exposure_corr2 = 0.0
-
-        for comp_idx in 0..<exposure_bias.count {
-            let exposure_factor = pow(2.0, (Double(exposure_bias[comp_idx]-exposure_bias[ref_idx])/100.0))
-            exposure_corr1 += (0.5 + 0.5/exposure_factor)
-            exposure_corr2 += min(4.0, exposure_factor)
-        }
-        exposure_corr1 /= Double(exposure_bias.count)
-        exposure_corr2 /= Double(exposure_bias.count)
-                
-        // derive normalized robustness value: two steps in noise_reduction (-2.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the variance of shot noise increases by a factor of two per iso level
-        let robustness_rev = 0.5*(26.5-Double(Int(noise_reduction+0.5)))
-        let robustness_norm = exposure_corr1/exposure_corr2*pow(2.0, (-robustness_rev + 7.5))
-        
-        // derive estimate of read noise with the idea that read noise increases approx. by a factor of three (stronger than increase in shot noise) per iso level to increase noise reduction in darker regions relative to bright regions
-        let read_noise = pow(pow(2.0, (-robustness_rev + 10.0)), 1.6)
-        
-        // derive a maximum value for the motion norm with the idea that denoising can be stronger in static regions with good alignment compared to regions with motion
-        // factors from Google paper: daylight = 1, night = 6, darker night = 14, extreme low-light = 25. We use a continuous value derived from the robustness value to cover a similar range as proposed in the paper
-        // see https://graphics.stanford.edu/papers/night-sight-sigasia19/night-sight-sigasia19.pdf for more details
-        let max_motion_norm = max(1.0, pow(1.3, (11.0-robustness_rev)))
-                
-        // perform align and merge 4 times in a row with slight displacement of the frame to prevent artifacts in the merging process. The shift equals the tile size used in the merging process here, which later translates into tile_size_merge/2 when each color channel is processed independently
-        try align_merge_frequency_domain(progress: progress, shift_left_not_right: true, shift_top_not_bottom: true, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
-        
-        try align_merge_frequency_domain(progress: progress, shift_left_not_right: false, shift_top_not_bottom: true, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
-         
-        try align_merge_frequency_domain(progress: progress, shift_left_not_right: true, shift_top_not_bottom: false, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
-            
-        try align_merge_frequency_domain(progress: progress, shift_left_not_right: false, shift_top_not_bottom: false, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, tile_size_merge: tile_size_merge, robustness_norm: robustness_norm, read_noise: read_noise, max_motion_norm: max_motion_norm, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
-                
+        try align_merge_frequency_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
         
     // alignment and merging of tiles in the spatial domain (supports non-Bayer sensors)
     } else {
         print("Merging in the spatial domain...")
-    
-        let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
         
-        // derive normalized robustness value: four steps in noise_reduction (-4.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the sd of shot noise increases by a factor of sqrt(2) per iso level
-        let robustness_rev = 0.5*(36.0-Double(Int(noise_reduction+0.5)))
-        let robustness_norm = 0.12*pow(1.3, robustness_rev) - 0.4529822
-    
-        try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, kernel_size: kernel_size, robustness: robustness_norm, uniform_exposure: uniform_exposure, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
+        try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
     }
     
     if (mosaic_pattern_width == 2 && exposure_control != "Off") {
@@ -333,9 +282,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
 }
 
 
-/**
- Convenience function for temporal averaging
- */
+
+/// Convenience function for temporal averaging.
 func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [Int], uniform_exposure: Bool, color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // find index of image with shortest exposure
@@ -363,8 +311,8 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         
         // normalization of the final image
         normalize_texture(final_texture, norm_texture)
-        
-    } else if (white_level != -1 && black_level[0] != -1 && color_factors[0] > -0.9 && mosaic_pattern_width == 2) {
+        // If color_factor is NOT available, a negative value will be set.
+    } else if (white_level != -1 && black_level[0] != -1 && color_factors[0] > 0 && mosaic_pattern_width == 2) {
         
         // temporal averaging with extrapolation of green channels for very bright pixels
         for comp_idx in 0..<textures.count {

@@ -50,7 +50,7 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
         }
         
         // upsample alignment vectors by a factor of 2
-        prev_alignment = upsample(current_alignment, width: n_tiles_x, height: n_tiles_y, mode: "nearest")
+        prev_alignment = upsample(current_alignment, to_width: n_tiles_x, to_height: n_tiles_y, using: .NearestNeighbour)
         
         // compare three alignment vector candidates, which improves alignment at borders of moving object
         // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
@@ -107,12 +107,11 @@ func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<I
     // iteratively resize the current layer in the pyramid
     var pyramid: Array<MTLTexture> = []
     for (i, downscale_factor) in downscale_factor_list.enumerated() {
-        if (i == 0 && color_factors3[0] > -0.9) {
-            pyramid.append(avg_pool(input_texture, downscale_factor, true, color_factors3))
-        } else if i == 0 {
-            pyramid.append(avg_pool(input_texture, downscale_factor, false, color_factors3))
+        if i == 0 {
+            // If color_factor is NOT available, a negative value will be set.
+            pyramid.append(avg_pool(input_texture, downscale_factor, color_factors3[0] > 0, color_factors3))
         } else {
-            pyramid.append(avg_pool(blur_mosaic_texture(pyramid.last!, 2, 1), downscale_factor, false, color_factors3))
+            pyramid.append(avg_pool(blur(pyramid.last!, with_pattern_width: 1, using_kernel_size: 2), downscale_factor, false, color_factors3))
         }
     }
     return pyramid
@@ -211,7 +210,10 @@ func find_best_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLText
 
 func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile_info: TileInfo, _ downscale_factor: Int) -> MTLTexture {
     
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture_to_warp.pixelFormat, width: texture_to_warp.width, height: texture_to_warp.height, mipmapped: false)
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture_to_warp.pixelFormat,
+                                                                          width: texture_to_warp.width,
+                                                                          height: texture_to_warp.height,
+                                                                          mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let warped_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     

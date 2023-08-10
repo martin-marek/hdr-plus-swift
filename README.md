@@ -46,7 +46,7 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 
 # List of Ideas
 - [ ] add super-resolution algorithm
-- [ ] Demosaic images (or foveon cameras)
+- [ ] add support for demosaic images (or foveon cameras)
 - [ ] fix progressbar getting stuck loading the first image
 
 Please feel free to contribute to any of these features or suggest other features.
