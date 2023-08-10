@@ -340,7 +340,7 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [[Int]], _ ISO_e
             let tmp_texture = copy_texture(textures[comp_idx])
             
             let command_buffer = command_queue.makeCommandBuffer()!
-            command_buffer.label = "Hotpixel Correction: \(com_idx)"
+            command_buffer.label = "Hotpixel Correction: \(comp_idx)"
             let command_encoder = command_buffer.makeComputeCommandEncoder()!
             let state = correct_hotpixels_state
             command_encoder.setComputePipelineState(state)

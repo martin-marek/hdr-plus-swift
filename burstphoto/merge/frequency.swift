@@ -229,6 +229,7 @@ func calculate_mismatch_rgba(_ aligned_texture: MTLTexture, _ ref_texture: MTLTe
     let mismatch_texture = device.makeTexture(descriptor: mismatch_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Mismatch RGBA"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = calculate_mismatch_rgba_state
     command_encoder.setComputePipelineState(state)
@@ -255,6 +256,7 @@ func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLT
     let rms_texture = device.makeTexture(descriptor: rms_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "RMS RGBA"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = calculate_rms_rgba_state
     command_encoder.setComputePipelineState(state)
@@ -274,6 +276,7 @@ func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLT
 func deconvolute_frequency_domain(_ final_texture_ft: MTLTexture, _ total_mismatch_texture: MTLTexture, _ tile_info: TileInfo) {
         
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Deconvolute"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = deconvolute_frequency_domain_state
     command_encoder.setComputePipelineState(state)
@@ -295,6 +298,7 @@ func backward_ft(_ in_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ ti
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Backwards FT"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     // either use discrete Fourier transform or highly-optimized fast Fourier transform (only possible if tile_size <= 16)
     let state = (tile_info.tile_size_merge <= 16 ? backward_fft_state : backward_dft_state)
@@ -317,6 +321,7 @@ func backward_ft(_ in_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ ti
 func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_texture_ft: MTLTexture, _ tile_info: TileInfo) {
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Forwards FT"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     // either use discrete Fourier transform or highly-optimized fast Fourier transform (only possible if tile_size <= 16)
     let state = (tile_info.tile_size_merge <= 16 ? forward_fft_state : forward_dft_state)
@@ -336,6 +341,7 @@ func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_te
 func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ mismatch_texture: MTLTexture, _ robustness_norm: Double, _ read_noise: Double, _ max_motion_norm: Double, _ uniform_exposure: Bool, _ tile_info: TileInfo) {
         
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Merge Frequency"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = merge_frequency_domain_state
     command_encoder.setComputePipelineState(state)
@@ -359,6 +365,7 @@ func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: 
 func normalize_mismatch(_ mismatch_texture: MTLTexture, _ mean_mismatch_buffer: MTLBuffer) {
    
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Normalize Mismatch"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = normalize_mismatch_state
     command_encoder.setComputePipelineState(state)
@@ -377,6 +384,7 @@ func reduce_artifacts_tile_border(_ output_texture: MTLTexture, _ ref_texture: M
     if (black_level[0] != -1) {
         
         let command_buffer = command_queue.makeCommandBuffer()!
+        command_buffer.label = "Reduce Artifacts at Tile Border"
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
         let state = reduce_artifacts_tile_border_state
         command_encoder.setComputePipelineState(state)

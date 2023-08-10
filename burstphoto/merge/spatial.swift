@@ -103,7 +103,7 @@ func color_difference(between texture1: MTLTexture, and texture2: MTLTexture, mo
     
     // compute pixel pairwise differences
     let command_buffer = command_queue.makeCommandBuffer()!
-    
+    command_buffer.label = "Color Difference"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = color_difference_state
     command_encoder.setComputePipelineState(state)
@@ -148,6 +148,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     
     // compute merge weight
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Spatial Merge"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = compute_merge_weight_state
     command_encoder.setComputePipelineState(state)
