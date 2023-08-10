@@ -129,11 +129,9 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         let ref_texture = extend_texture(textures[ref_idx], pad_left, pad_right, pad_top, pad_bottom)
         // convert reference texture into RGBA pixel format that SIMD instructions can be applied
         let ref_texture_rgba = convert_to_rgba(ref_texture, crop_merge_x, crop_merge_y)
-        
-        var color_factors3 = [color_factors[ref_idx][0], color_factors[ref_idx][1], color_factors[ref_idx][2]]
-        
+               
         // build reference pyramid
-        let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, color_factors3)
+        let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, color_factors[ref_idx])
         
         // initialize textures to store real and imaginary parts of the reference texture, the aligned comparison texture and a temp texture used inside the Fourier transform functions
         let ref_texture_ft      = device.makeTexture(descriptor: ref_texture_ft_descriptor)!
@@ -163,11 +161,10 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             let comp_texture = extend_texture(textures[comp_idx], pad_left, pad_right, pad_top, pad_bottom)
             
             let black_level_mean = 0.25*Double(black_level[comp_idx][0] + black_level[comp_idx][1] + black_level[comp_idx][2] + black_level[comp_idx][3])
-            color_factors3 = [color_factors[comp_idx][0], color_factors[comp_idx][1], color_factors[comp_idx][2]]
             
             // align comparison texture
             let aligned_texture_rgba = convert_to_rgba(
-                align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean, color_factors3),
+                align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean, color_factors[comp_idx]),
                 crop_merge_x,
                 crop_merge_y
             )
