@@ -63,10 +63,8 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
                                      constant int& downscale_factor [[buffer(0)]],
                                      constant int& tile_size [[buffer(1)]],
                                      constant int& search_dist [[buffer(2)]],
-                                     constant int& n_tiles_x [[buffer(3)]],
-                                     constant int& n_tiles_y [[buffer(4)]],
-                                     constant float& black_level [[buffer(5)]],
-                                     constant int& weight_ssd [[buffer(6)]],
+                                     constant float& black_level [[buffer(3)]],
+                                     constant int& weight_ssd [[buffer(4)]],
                                      uint3 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -125,10 +123,8 @@ kernel void compute_tile_differences25(texture2d<half, access::read> ref_texture
                                        constant int& downscale_factor [[buffer(0)]],
                                        constant int& tile_size [[buffer(1)]],
                                        constant int& search_dist [[buffer(2)]],
-                                       constant int& n_tiles_x [[buffer(3)]],
-                                       constant int& n_tiles_y [[buffer(4)]],
-                                       constant float& black_level [[buffer(5)]],
-                                       constant int& weight_ssd [[buffer(6)]],
+                                       constant float& black_level [[buffer(3)]],
+                                       constant int& weight_ssd [[buffer(4)]],
                                        uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -234,10 +230,8 @@ kernel void compute_tile_differences_exposure25(texture2d<half, access::read> re
                                                 constant int& downscale_factor [[buffer(0)]],
                                                 constant int& tile_size [[buffer(1)]],
                                                 constant int& search_dist [[buffer(2)]],
-                                                constant int& n_tiles_x [[buffer(3)]],
-                                                constant int& n_tiles_y [[buffer(4)]],
-                                                constant float& black_level [[buffer(5)]],
-                                                constant int& weight_ssd [[buffer(6)]],
+                                                constant float& black_level [[buffer(3)]],
+                                                constant int& weight_ssd [[buffer(4)]],
                                                 uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -583,14 +577,14 @@ kernel void find_best_tile_alignment(texture3d<float, access::read> tile_diff [[
 }
 
 
-kernel void warp_texture(texture2d<half, access::read> in_texture [[texture(0)]],
-                         texture2d<half, access::write> out_texture [[texture(1)]],
-                         texture2d<int, access::read> prev_alignment [[texture(2)]],
-                         constant int& downscale_factor [[buffer(0)]],
-                         constant int& half_tile_size [[buffer(1)]],
-                         constant int& n_tiles_x [[buffer(2)]],
-                         constant int& n_tiles_y [[buffer(3)]],
-                         uint2 gid [[thread_position_in_grid]]) {
+kernel void warp_texture_Bayer(texture2d<half, access::read> in_texture [[texture(0)]],
+                               texture2d<half, access::write> out_texture [[texture(1)]],
+                               texture2d<int, access::read> prev_alignment [[texture(2)]],
+                               constant int& downscale_factor [[buffer(0)]],
+                               constant int& half_tile_size [[buffer(1)]],
+                               constant int& n_tiles_x [[buffer(2)]],
+                               constant int& n_tiles_y [[buffer(3)]],
+                               uint2 gid [[thread_position_in_grid]]) {
     
     // load args
     int const x = gid.x;
@@ -634,4 +628,74 @@ kernel void warp_texture(texture2d<half, access::read> in_texture [[texture(0)]]
     
     // write output pixel
     out_texture.write(pixel_value/total_weight, gid);
+}
+
+
+kernel void warp_texture_XTrans(texture2d<float, access::read> in_texture [[texture(0)]],
+                                texture2d<float, access::read_write> out_texture [[texture(1)]],
+                                texture2d<int, access::read> prev_alignment [[texture(2)]],
+                                constant int& downscale_factor [[buffer(0)]],
+                                constant int& tile_size [[buffer(1)]],
+                                constant int& n_tiles_x [[buffer(2)]],
+                                constant int& n_tiles_y [[buffer(3)]],
+                                uint2 gid [[thread_position_in_grid]]) {
+    
+    // load args
+    int texture_width = in_texture.get_width();
+    int texture_height = in_texture.get_height();
+    int tile_half_size = tile_size / 2;
+    
+    // load coordinates of output pixel
+    int x1_pix = gid.x;
+    int y1_pix = gid.y;
+    
+    // compute the coordinates of output pixel in tile-grid units
+    float x1_grid = float(x1_pix - tile_half_size) / float(texture_width  - tile_size - 1) * (n_tiles_x - 1);
+    float y1_grid = float(y1_pix - tile_half_size) / float(texture_height - tile_size - 1) * (n_tiles_y - 1);
+    
+    // compute the two possible tile-grid indices that the given output pixel belongs to
+    int x_grid_list[] = {int(floor(x1_grid)), int(floor(x1_grid)), int(ceil (x1_grid)), int(ceil(x1_grid))};
+    int y_grid_list[] = {int(floor(y1_grid)), int(ceil (y1_grid)), int(floor(y1_grid)), int(ceil(y1_grid))};
+    
+    // loop over the two possible tile-grid indices that the given output pixel belongs to
+    float total_intensity = 0;
+    float total_weight = 0;
+    for (int i = 0; i < 4; i++){
+        
+        // load the index of the tile
+        int x_grid = x_grid_list[i];
+        int y_grid = y_grid_list[i];
+        
+        // compute the pixel coordinates of the center of the reference tile
+        int x0_pix = int(floor( tile_half_size + float(x_grid)/float(n_tiles_x-1) * (texture_width  - tile_size - 1) ));
+        int y0_pix = int(floor( tile_half_size + float(y_grid)/float(n_tiles_y-1) * (texture_height - tile_size - 1) ));
+        
+        // check that the output pixel falls within the reference tile
+        if ((abs(x1_pix - x0_pix) <= tile_half_size) && (abs(y1_pix - y0_pix) <= tile_half_size)) {
+            
+            // compute tile displacement
+            int4 prev_align = prev_alignment.read(uint2(x_grid, y_grid));
+            int dx = downscale_factor * prev_align.x;
+            int dy = downscale_factor * prev_align.y;
+
+            // load coordinates of the corresponding pixel from the comparison tile
+            int x2_pix = x1_pix + dx;
+            int y2_pix = y1_pix + dy;
+            
+            // compute the weight of the aligned pixel (based on distance from tile center)
+            int dist_x = abs(x1_pix - x0_pix);
+            int dist_y = abs(y1_pix - y0_pix);
+            float weight_x = tile_size - dist_x - dist_y;
+            float weight_y = tile_size - dist_x - dist_y;
+            float curr_weight = weight_x * weight_y;
+            total_weight += curr_weight;
+            
+            // add pixel value to the output
+            total_intensity += curr_weight * in_texture.read(uint2(x2_pix, y2_pix)).r;
+        }
+    }
+    
+    // write output pixel
+    float out_intensity = total_intensity / total_weight;
+    out_texture.write(out_intensity, uint2(x1_pix, y1_pix));
 }

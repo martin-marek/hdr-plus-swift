@@ -8,7 +8,8 @@ let compute_tile_differences25_state = try! device.makeComputePipelineState(func
 let compute_tile_differences_exposure25_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences_exposure25")!)
 let correct_upsampling_error_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_upsampling_error")!)
 let find_best_tile_alignment_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "find_best_tile_alignment")!)
-let warp_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture")!)
+let warp_texture_Bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture_Bayer")!)
+let warp_texture_XTrans_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture_XTrans")!)
 
 func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ downscale_factor_array: Array<Int>, _ tile_size_array: Array<Int>, _ search_dist_array: Array<Int>, _ uniform_exposure: Bool, _ black_level_mean: Double, _ color_factors3: Array<Double>) -> MTLTexture {
         
@@ -145,10 +146,8 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     command_encoder.setBytes([Int32(downscale_factor)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.setBytes([Int32(tile_info.search_dist)], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([Int32(tile_info.n_tiles_x)], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.setBytes([Int32(tile_info.n_tiles_y)], length: MemoryLayout<Int32>.stride, index: 4)
-    command_encoder.setBytes([Float32(uniform_exposure ? 0.0 : black_level_mean)], length: MemoryLayout<Float32>.stride, index: 5)
-    command_encoder.setBytes([Int32(use_ssd ? 1 : 0)], length: MemoryLayout<Int32>.stride, index: 6)
+    command_encoder.setBytes([Float32(uniform_exposure ? 0.0 : black_level_mean)], length: MemoryLayout<Float32>.stride, index: 3)
+    command_encoder.setBytes([Int32(use_ssd ? 1 : 0)], length: MemoryLayout<Int32>.stride, index: 4)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -219,7 +218,8 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile
     
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = warp_texture_state
+    // The function warp_texture_XTrans corresponds to an old version of the warp function and would also work with images with Bayer pattern
+    let state = (downscale_factor==2 ? warp_texture_Bayer_state : warp_texture_XTrans_state)
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: texture_to_warp.width, height: texture_to_warp.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
@@ -227,7 +227,7 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile
     command_encoder.setTexture(warped_texture, index: 1)
     command_encoder.setTexture(alignment, index: 2)
     command_encoder.setBytes([Int32(downscale_factor)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32((downscale_factor==2 ? 1 : downscale_factor)*tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.setBytes([Int32(tile_info.n_tiles_x)], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([Int32(tile_info.n_tiles_y)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)

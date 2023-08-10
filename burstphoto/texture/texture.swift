@@ -158,7 +158,7 @@ func blur(_ in_texture: MTLTexture, with_pattern_width mosaic_pattern_width: Int
 
 
 /// Convert a texture of floats into 16 bit uints for storing in a DNG file.
-func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ ref_idx: Int, _ factor_16bit: Int, _ color_factors: [Double]) -> MTLTexture {
+func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ ref_idx: Int, _ factor_16bit: Int) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: in_texture.width, height: in_texture.height, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
@@ -177,10 +177,7 @@ func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ bla
     command_encoder.setBytes([Int32(black_level[ref_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([Int32(black_level[ref_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.setBytes([Int32(black_level[ref_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 4)
-    command_encoder.setBytes([Float32(color_factors[0])], length: MemoryLayout<Float32>.stride, index: 5)
-    command_encoder.setBytes([Float32(color_factors[1])], length: MemoryLayout<Float32>.stride, index: 6)
-    command_encoder.setBytes([Float32(color_factors[2])], length: MemoryLayout<Float32>.stride, index: 7)    
-    command_encoder.setBytes([Int32(factor_16bit)], length: MemoryLayout<Int32>.stride, index: 8)
+    command_encoder.setBytes([Int32(factor_16bit)], length: MemoryLayout<Int32>.stride, index: 5)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()

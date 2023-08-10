@@ -1,6 +1,6 @@
 # Burst Photo
 
-This is a macOS app written in Swift / SwiftUI / Metal that implements a simplified version of HDR+, the computational photography pipeline in Google Pixel phones. You can read more about HDR+ in Google's paper [Burst photography for high dynamic range and low-light imaging on mobile cameras](http://static.googleusercontent.com/media/www.hdrplusdata.org/en//hdrplus.pdf).
+Burst Photo is a macOS app written in Swift / SwiftUI / Metal that implements a simplified version of HDR+, the computational photography pipeline in Google Pixel phones. With Burst Photo, this processing can be applied to a burst of images from any camera increasing dynamic range and reducing noise of the resulting image. You can read more about HDR+ in Google's paper [Burst photography for high dynamic range and low-light imaging on mobile cameras](http://static.googleusercontent.com/media/www.hdrplusdata.org/en//hdrplus.pdf).
 
 If you are a researcher or you prefer Python/PyTorch, you can check out [hdr-plus-pytorch](https://github.com/martin-marek/hdr-plus-pytorch).
 
@@ -18,7 +18,7 @@ For more examples, please visit [burst.photo/gallery/](https://burst.photo/galle
 
 # Usage
 
-To process a burst of RAW images, simply drag-and-drop them into the app. Only DNG files are supported by default - but if you download and install [Adobe DNG Converter](https://helpx.adobe.com/camera-raw/using/adobe-dng-converter.html), Burst Photo will be able to convert most RAW formats in the background. You can read more at [burst.photo/help/](https://burst.photo/help/).
+To process a burst of RAW images, simply drag-and-drop them into the app. Only DNG files are supported by default - but if you download and install [Adobe DNG Converter](https://helpx.adobe.com/camera-raw/using/adobe-dng-converter.html), Burst Photo will be able to convert most RAW formats in the background. The processed image will be in the RAW-DNG format and can be further processed with the RAW converter of choice. You can read more at [burst.photo/help/](https://burst.photo/help/).
 
 ![](docs/assets/images/help/drag-and-drop.jpg)
 
@@ -30,8 +30,8 @@ You can download the app from the [Mac App Store](https://burst.photo/download/)
 - [x] DNG support
 - [x] RAW support (requires Adobe DNG Converter to be installed)
 - [x] simple temporal averaging
-- [x] robust merge in spatial domain (simplified)
-- [x] robust merge in frequency domain (similar to original publication)
+- [x] motion-robust merge in spatial domain (simplified)
+- [x] motion-robust merge in frequency domain (similar to original publication)
 - [x] Bayer sensor support
 - [x] non-Bayer sensor support (beta)
 - [x] support for bursts with bracketed exposure
