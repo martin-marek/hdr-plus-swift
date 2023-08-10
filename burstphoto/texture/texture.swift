@@ -39,6 +39,7 @@ enum UpsampleType {
 func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textures: Int) {
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Add Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = add_texture_state
     command_encoder.setComputePipelineState(state)
@@ -58,6 +59,7 @@ func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture,
     let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
 
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Add Texture (Highlights)"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = add_texture_highlights_state
     command_encoder.setComputePipelineState(state)
@@ -81,6 +83,7 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Add Texture (Exposure)"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = add_texture_exposure_state
     command_encoder.setComputePipelineState(state)
@@ -107,6 +110,7 @@ func add_texture_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ weig
     
     // add textures
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Add Texture (Weighted)"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = add_texture_weighted_state
     command_encoder.setComputePipelineState(state)
@@ -132,6 +136,7 @@ func blur(_ in_texture: MTLTexture, with_pattern_width mosaic_pattern_width: Int
     
     // Blur the texture along the x-axis
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Blur"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = blur_mosaic_texture_state
     command_encoder.setComputePipelineState(state)
@@ -167,6 +172,7 @@ func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ bla
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Float to UInt"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_float_to_uint16_state
     command_encoder.setComputePipelineState(state)
@@ -199,6 +205,7 @@ func convert_uint16_to_float(_ in_texture: MTLTexture) -> MTLTexture {
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "UInt to Float"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_uint16_to_float_state
     command_encoder.setComputePipelineState(state)
@@ -221,6 +228,7 @@ func convert_to_rgba(_ in_texture: MTLTexture, _ crop_merge_x: Int, _ crop_merge
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
         
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "To RGBA"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_to_rgba_state
     command_encoder.setComputePipelineState(state)
@@ -245,6 +253,7 @@ func convert_to_bayer(_ in_texture: MTLTexture) -> MTLTexture {
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
         
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "To Bayer"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_to_bayer_state
     command_encoder.setComputePipelineState(state)
@@ -268,6 +277,7 @@ func copy_texture(_ in_texture: MTLTexture) -> MTLTexture {
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Copy Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = copy_texture_state
     command_encoder.setComputePipelineState(state)
@@ -330,6 +340,7 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [[Int]], _ ISO_e
             let tmp_texture = copy_texture(textures[comp_idx])
             
             let command_buffer = command_queue.makeCommandBuffer()!
+            command_buffer.label = "Hotpixel Correction: \(com_idx)"
             let command_encoder = command_buffer.makeComputeCommandEncoder()!
             let state = correct_hotpixels_state
             command_encoder.setComputePipelineState(state)
@@ -361,6 +372,7 @@ func crop_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Crop Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = crop_texture_state
     command_encoder.setComputePipelineState(state)
@@ -386,6 +398,7 @@ func extend_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int,
     fill_with_zeros(out_texture)
         
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Extend Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = extend_texture_state
     command_encoder.setComputePipelineState(state)
@@ -405,6 +418,7 @@ func extend_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int,
 /// Initialize the passed in texture with zeros.
 func fill_with_zeros(_ texture: MTLTexture) {
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Fill with Zeros"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = fill_with_zeros_state
     command_encoder.setComputePipelineState(state)
@@ -436,6 +450,7 @@ func get_threads_per_thread_group(_ state: MTLComputePipelineState, _ threads_pe
 func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture) {
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Normalize Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = normalize_texture_state
     command_encoder.setComputePipelineState(state)
@@ -470,6 +485,7 @@ func texture_mean(_ in_texture: MTLTexture, _ pixelformat: PixelFormat) -> MTLBu
     
     // average the input texture along the y-axis
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Mean"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = (pixelformat == .rgba ? average_y_rgba_state : average_y_state)
     command_encoder.setComputePipelineState(state)
@@ -506,6 +522,7 @@ func upsample(_ input_texture: MTLTexture, to_width width: Int, to_height height
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Upsample"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = (mode == .Bilinear ? upsample_bilinear_float_state : upsample_nearest_int_state)
     command_encoder.setComputePipelineState(state)
@@ -554,6 +571,7 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
         // Sum along columns
         let command_buffer = command_queue.makeCommandBuffer()!
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        command_buffer.label = "Black Levels \(i) for \(texture.label)"
         command_encoder.setComputePipelineState(sum_rect_columns_state)
         let thread_groups_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
         let max_threads_per_thread_group = sum_rect_columns_state.maxTotalThreadsPerThreadgroup
