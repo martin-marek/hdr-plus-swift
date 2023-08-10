@@ -97,7 +97,8 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     command_buffer.commit()
 }
 
-
+/// Calculate the weighted average of `texture1` and `texture2` using the spatially varying weights specified in `weight_texture`.
+/// Larger weights bias towards `texture1`.
 func add_texture_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ weight_texture: MTLTexture) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width, height: texture1.height, mipmapped: false)
@@ -124,8 +125,8 @@ func add_texture_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ weig
 
 
 func blur(_ in_texture: MTLTexture, with_pattern_width mosaic_pattern_width: Int, using_kernel_size kernel_size: Int) -> MTLTexture {
-    let blured_in_x_texture = texture_like(in_texture)
-    let blur_in_xy_texture = texture_like(in_texture)
+    let blurred_in_x_texture = texture_like(in_texture)
+    let blurred_in_xy_texture = texture_like(in_texture)
     
     let kernel_size_mapped = (kernel_size == 16) ? 16 : max(0, min(8, kernel_size))
     
@@ -137,7 +138,7 @@ func blur(_ in_texture: MTLTexture, with_pattern_width mosaic_pattern_width: Int
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(blured_in_x_texture, index: 1)
+    command_encoder.setTexture(blurred_in_x_texture, index: 1)
     command_encoder.setBytes([Int32(kernel_size_mapped)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 2)
@@ -145,8 +146,8 @@ func blur(_ in_texture: MTLTexture, with_pattern_width mosaic_pattern_width: Int
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     
     // Blur along the y-axis
-    command_encoder.setTexture(blured_in_x_texture, index: 0)
-    command_encoder.setTexture(blur_in_xy_texture, index: 1)
+    command_encoder.setTexture(blurred_in_x_texture, index: 0)
+    command_encoder.setTexture(blurred_in_xy_texture, index: 1)
     command_encoder.setBytes([Int32(in_texture.height)], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([Int32(1)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
@@ -154,7 +155,7 @@ func blur(_ in_texture: MTLTexture, with_pattern_width mosaic_pattern_width: Int
     command_encoder.endEncoding()
     command_buffer.commit()
     
-    return blur_in_xy_texture
+    return blurred_in_xy_texture
 }
 
 

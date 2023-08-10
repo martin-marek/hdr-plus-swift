@@ -19,7 +19,6 @@ struct MyProgram {
         
         let tmp_dir = out_dir + ".dngs/"
         // If it exists, delete a previously leftover temporary directory
-        // TODO: This needs to run once when the application is opened, not every time a file is drag and dropped.
         var isDirectory : ObjCBool = true
         if FileManager.default.fileExists(atPath: tmp_dir, isDirectory: &isDirectory) {
             try FileManager.default.removeItem(atPath: tmp_dir)

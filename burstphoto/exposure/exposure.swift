@@ -64,7 +64,6 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
        
         if (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") {
-            // TODO:
             let color_factor_mean = 0.25*(color_factors[ref_idx][0]+2.0*color_factors[ref_idx][1]+color_factors[ref_idx][2])
             final_texture_blurred = blur(final_texture, with_pattern_width: 1, using_kernel_size: 1)
             

@@ -112,6 +112,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
                                    n_pos_2d: 0)
     
     for i in 1...4 {
+        let t0 = DispatchTime.now().uptimeNanoseconds
         // set shift values
         let shift_left   = i % 2 == 0   ? tile_size_merge : 0;
         let shift_right  = i % 2 == 1   ? tile_size_merge : 0;
@@ -158,8 +159,6 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
                 continue
             }
             
-            let t0 = DispatchTime.now().uptimeNanoseconds
-            
             // set and extend comparison texture
             let comp_texture = extend_texture(textures[comp_idx], pad_left, pad_right, pad_top, pad_bottom)
             
@@ -205,10 +204,8 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             //capture_manager.stopCapture()
             
             // sync GUI progress
-            print("Align+merge: ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
             DispatchQueue.main.async { progress.int += Int(80000000/Double(4*(textures.count-1))) }
         }
-        
         // apply simple deconvolution to slightly correct potential blurring from misalignment of bursts
         deconvolute_frequency_domain(final_texture_ft, total_mismatch_texture, tile_info_merge)
         
@@ -221,6 +218,8 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         
         // add output texture to the final texture to collect all textures of the four iterations
         add_texture(output_texture, final_texture, 1)
+        
+        print("Align+merge (\(i)/4): ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
     }
 }
 

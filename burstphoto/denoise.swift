@@ -160,13 +160,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
        
     // convert images from uint16 to float16
     textures = textures.map{convert_uint16_to_float($0)}
-    
-    // check that the comparison image has the same resolution as the reference image
-    for comp_idx in 0..<textures.count {
-        if (textures[ref_idx].width != textures[comp_idx].width) || (textures[ref_idx].height != textures[comp_idx].height) {
-            throw AlignmentError.inconsistent_resolutions
-        }
-    }
 
     // set the tile size for the alignment
     let tile_size_dict = [
@@ -317,8 +310,8 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         
         // normalization of the final image
         normalize_texture(final_texture, norm_texture)
-        
-    } else if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > -0.9 && mosaic_pattern_width == 2) {
+        // If color_factor is NOT available, a negative value will be set.
+    } else if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
         // TODO: Why `color_factors[0][0] > -0.9`?
         // temporal averaging with extrapolation of green channels for very bright pixels
         for comp_idx in 0..<textures.count {

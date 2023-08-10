@@ -252,9 +252,7 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
         }
     }
     
-    // TODO: Ensure mosaic pattern width is uniform between images.
-    // TODO: Trim black level to mosaic_patther_width
-    // TODO: Can I do that by trimming the array?
+    // Ensure mosaic pattern width is uniform between images.
     if mosaic_pattern_width != nil {
         let mosaic_squared = mosaic_pattern_width! * mosaic_pattern_width!
         for i in 0..<black_levels.count {
