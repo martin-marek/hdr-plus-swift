@@ -92,31 +92,6 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
     }
 }
 
-/// Calculate the weighted average of `texture1` and `texture2` using the spatially varying weights specified in `weight_texture`.
-/// Larger weights bias towards `texture1`.
-func weighted_average(of texture1: MTLTexture, and texture2: MTLTexture, using_weights weight_texture: MTLTexture) -> MTLTexture {
-    
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width, height: texture1.height, mipmapped: false)
-    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    
-    // add textures
-    let command_buffer = command_queue.makeCommandBuffer()!
-    let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = add_texture_weighted_state
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: texture1.width, height: texture1.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-    command_encoder.setTexture(texture1, index: 0)
-    command_encoder.setTexture(texture2, index: 1)
-    command_encoder.setTexture(weight_texture, index: 2)
-    command_encoder.setTexture(out_texture, index: 3)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-    command_encoder.endEncoding()
-    command_buffer.commit()
-    
-    return out_texture
-}
 
 /// For each super-pixel, calculate the sum of absolute differences between each color channel.
 /// E.g. for a Bayer RGG'B super pixel this calculates, for each superpixel, `abs(R1 - R2) + abs(G1 - G2) + abs(G'1 - G'2) + abs(B1 - B2)`.
@@ -128,6 +103,7 @@ func color_difference(between texture1: MTLTexture, and texture2: MTLTexture, mo
     
     // compute pixel pairwise differences
     let command_buffer = command_queue.makeCommandBuffer()!
+    
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = color_difference_state
     command_encoder.setComputePipelineState(state)
@@ -189,7 +165,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     let weight_texture_upsampled = upsample(weight_texture, to_width: ref_texture.width, to_height: ref_texture.height, using: .Bilinear)
     
     // average the input textures based on the weight
-    let output_texture = weighted_average(of: ref_texture, and: comp_texture, using_weights: weight_texture_upsampled)
+    let output_texture = add_texture_weighted(ref_texture, comp_texture, weight_texture_upsampled)
     
     return output_texture
 }
