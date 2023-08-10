@@ -256,9 +256,8 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
     if mosaic_pattern_width != nil {
         let mosaic_squared = mosaic_pattern_width! * mosaic_pattern_width!
         for i in 0..<black_levels.count {
-            var black_levels_row = black_levels[i]
-            for _ in mosaic_squared..<black_levels_row.count {
-                black_levels_row.popLast()
+            for _ in mosaic_squared..<black_levels[i].count {
+                black_levels[i].popLast()
             }
         }
     }
