@@ -314,6 +314,7 @@ func safeShell(_ command: String) throws -> String {
 func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL, _ white_level: Int32) throws {
     // synchronize GPU and CPU memory
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Texture to DNG"
     let blit_encoder = command_buffer.makeBlitCommandEncoder()!
     blit_encoder.synchronize(resource: texture)
     blit_encoder.endEncoding()

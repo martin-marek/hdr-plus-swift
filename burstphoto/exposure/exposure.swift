@@ -57,6 +57,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         }
         
         let command_buffer = command_queue.makeCommandBuffer()!
+        command_buffer.label = "Correct Exposure"
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
         let state = (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") ? correct_exposure_state : correct_exposure_linear_state
         command_encoder.setComputePipelineState(state)
@@ -111,6 +112,7 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [[Int]], _ expos
         if (exposure_diff != 0 && black_level[0][0] != -1) {
             
             let command_buffer = command_queue.makeCommandBuffer()!
+            command_buffer.label = "Equalize Exposure: \(comp_idx)"
             let command_encoder = command_buffer.makeComputeCommandEncoder()!
             let state = equalize_exposure_state
             command_encoder.setComputePipelineState(state)
@@ -144,6 +146,7 @@ func texture_max(_ in_texture: MTLTexture) -> MTLBuffer {
     
     // average the input texture along the y-axis
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Texture Max"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = max_y_state
     command_encoder.setComputePipelineState(state)
