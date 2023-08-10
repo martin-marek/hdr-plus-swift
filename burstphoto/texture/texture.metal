@@ -317,10 +317,7 @@ kernel void convert_float_to_uint16(texture2d<float, access::read> in_texture [[
                                     constant int& black_level1 [[buffer(2)]],
                                     constant int& black_level2 [[buffer(3)]],
                                     constant int& black_level3 [[buffer(4)]],
-                                    constant float& color_factor0 [[buffer(5)]],
-                                    constant float& color_factor1 [[buffer(6)]],
-                                    constant float& color_factor2 [[buffer(7)]],
-                                    constant int& factor_16bit [[buffer(8)]],
+                                    constant int& factor_16bit [[buffer(5)]],
                                     uint2 gid [[thread_position_in_grid]]) {
     int const x = gid.x*2;
     int const y = gid.y*2;

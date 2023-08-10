@@ -219,7 +219,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         // add output texture to the final texture to collect all textures of the four iterations
         add_texture(output_texture, final_texture, 1)
         
-        print("Align+merge (", i, "/4): ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
+        print("Align+merge (\(i)/4): ", Float(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000_000)
     }
 }
 

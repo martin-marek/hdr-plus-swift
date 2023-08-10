@@ -63,10 +63,8 @@ kernel void compute_tile_differences(texture2d<float, access::read> ref_texture 
                                      constant int& downscale_factor [[buffer(0)]],
                                      constant int& tile_size [[buffer(1)]],
                                      constant int& search_dist [[buffer(2)]],
-                                     constant int& n_tiles_x [[buffer(3)]],
-                                     constant int& n_tiles_y [[buffer(4)]],
-                                     constant float& black_level [[buffer(5)]],
-                                     constant int& weight_ssd [[buffer(6)]],
+                                     constant float& black_level [[buffer(3)]],
+                                     constant int& weight_ssd [[buffer(4)]],
                                      uint3 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -125,10 +123,8 @@ kernel void compute_tile_differences25(texture2d<half, access::read> ref_texture
                                        constant int& downscale_factor [[buffer(0)]],
                                        constant int& tile_size [[buffer(1)]],
                                        constant int& search_dist [[buffer(2)]],
-                                       constant int& n_tiles_x [[buffer(3)]],
-                                       constant int& n_tiles_y [[buffer(4)]],
-                                       constant float& black_level [[buffer(5)]],
-                                       constant int& weight_ssd [[buffer(6)]],
+                                       constant float& black_level [[buffer(3)]],
+                                       constant int& weight_ssd [[buffer(4)]],
                                        uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -234,10 +230,8 @@ kernel void compute_tile_differences_exposure25(texture2d<half, access::read> re
                                                 constant int& downscale_factor [[buffer(0)]],
                                                 constant int& tile_size [[buffer(1)]],
                                                 constant int& search_dist [[buffer(2)]],
-                                                constant int& n_tiles_x [[buffer(3)]],
-                                                constant int& n_tiles_y [[buffer(4)]],
-                                                constant float& black_level [[buffer(5)]],
-                                                constant int& weight_ssd [[buffer(6)]],
+                                                constant float& black_level [[buffer(3)]],
+                                                constant int& weight_ssd [[buffer(4)]],
                                                 uint2 gid [[thread_position_in_grid]]) {
     
     // load args
