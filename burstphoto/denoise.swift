@@ -211,7 +211,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         fill_with_zeros(final_texture)
         
         if mosaic_pattern_width == 2 {
-            correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction)
+            correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction, mosaic_pattern_width)
             equalize_exposure(textures, black_level, exposure_bias, ref_idx)
         }
         
