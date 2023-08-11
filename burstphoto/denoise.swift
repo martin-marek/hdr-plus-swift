@@ -50,15 +50,15 @@ var last_texture: MTLTexture? = nil
 var last_settings: String = ""
 
 let tile_size_dict = [
-    "Small": 16,
+    "Small":  16,
     "Medium": 32,
-    "Large": 64,
+    "Large":  64,
 ]
 
 let search_distance_dict = [
-    "Small": 128,
-    "Medium": 64,
-    "Large": 32,
+    "Small":  128,
+    "Medium":  64,
+    "Large":   32,
 ]
 
 
