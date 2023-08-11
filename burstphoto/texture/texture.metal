@@ -404,17 +404,18 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
                               constant int& black_level1 [[buffer(2)]],
                               constant int& black_level2 [[buffer(3)]],
                               constant int& black_level3 [[buffer(4)]],
-                              constant float& hot_pixel_threshold [[buffer(5)]],
-                              constant float& hot_pixel_multiplicator [[buffer(6)]],
-                              constant float& correction_strength [[buffer(7)]],
+                              constant int& mosaic_pattern_width [[buffer(5)]],
+                              constant float& hot_pixel_threshold [[buffer(6)]],
+                              constant float& hot_pixel_multiplicator [[buffer(7)]],
+                              constant float& correction_strength [[buffer(8)]],
                               uint2 gid [[thread_position_in_grid]]) {
-       
-    int const x = gid.x+2;
-    int const y = gid.y+2;
     
-    // load args
+    int const w = mosaic_pattern_width;  // Redefine here to keep equations more readable
+    int const x = gid.x + w;
+    int const y = gid.y + w;
+    
     float mean_texture = 0.0f;
-    float black_level = 0.0f;
+    float black_level  = 0.0f;
     
     // extract color channel-dependent mean value of the average texture of all images and the black level
     if (x%2 == 0 & y%2 == 0) {
@@ -432,27 +433,25 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
     }
         
     // calculate weighted sum of 8 pixels surrounding the potential hot pixel based on the average texture
-    float sum =   average_texture.read(uint2(x-2, y-2)).r;
-    sum      +=   average_texture.read(uint2(x+2, y-2)).r;
-    sum      +=   average_texture.read(uint2(x-2, y+2)).r;
-    sum      +=   average_texture.read(uint2(x+2, y+2)).r;
-    sum      += 2*average_texture.read(uint2(x-2, y+0)).r;
-    sum      += 2*average_texture.read(uint2(x+2, y+0)).r;
-    sum      += 2*average_texture.read(uint2(x+0, y-2)).r;
-    sum      += 2*average_texture.read(uint2(x+0, y+2)).r;
+    float sum =   average_texture.read(uint2(x-w, y-w)).r;
+    sum      +=   average_texture.read(uint2(x+w, y-w)).r;
+    sum      +=   average_texture.read(uint2(x-w, y+w)).r;
+    sum      +=   average_texture.read(uint2(x+w, y+w)).r;
+    sum      += 2*average_texture.read(uint2(x-w, y+0)).r;
+    sum      += 2*average_texture.read(uint2(x+w, y+0)).r;
+    sum      += 2*average_texture.read(uint2(x+0, y-w)).r;
+    sum      += 2*average_texture.read(uint2(x+0, y+w)).r;
     
     // extract value of potential hot pixel from the average texture and divide by sum of surrounding pixels
     float const pixel_value = average_texture.read(uint2(x, y)).r;
     float const pixel_ratio = max(pixel_value-black_level, 1.0f)/max(sum/12.0f-black_level, 1.0f);
     
-    // if hot pixel is detected
     if (pixel_ratio >= hot_pixel_threshold & pixel_value >= 2.0f*mean_texture) {
-        
         // calculate mean value of 4 surrounding values
-        float sum2 = in_texture.read(uint2(x-2, y+0)).r;
-        sum2      += in_texture.read(uint2(x+2, y+0)).r;
-        sum2      += in_texture.read(uint2(x+0, y-2)).r;
-        sum2      += in_texture.read(uint2(x+0, y+2)).r;
+        float sum2 = in_texture.read(uint2(x-w, y+0)).r;
+        sum2      += in_texture.read(uint2(x+w, y+0)).r;
+        sum2      += in_texture.read(uint2(x+0, y-w)).r;
+        sum2      += in_texture.read(uint2(x+0, y+w)).r;
         
         // calculate weight for blending to have a smooth transition for not so obvious hot pixels
         float const weight = correction_strength*0.5f*min(hot_pixel_multiplicator*(pixel_ratio-hot_pixel_threshold), 2.0f);

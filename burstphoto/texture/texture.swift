@@ -395,7 +395,6 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [[Int]], _ ISO_e
         
         // iterate over all images
         for comp_idx in 0..<textures.count {
-            
             add_texture(textures[comp_idx], average_texture, textures.count)
         }
         
@@ -431,9 +430,10 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [[Int]], _ ISO_e
             command_encoder.setBytes([Int32(black_level1)], length: MemoryLayout<Int32>.stride, index: 2)
             command_encoder.setBytes([Int32(black_level2)], length: MemoryLayout<Int32>.stride, index: 3)
             command_encoder.setBytes([Int32(black_level3)], length: MemoryLayout<Int32>.stride, index: 4)
-            command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 5)
-            command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 6)
-            command_encoder.setBytes([Float32(correction_strength)], length: MemoryLayout<Float32>.stride, index: 7)
+            command_encoder.setBytes([Int32(2)], length: MemoryLayout<Int32>.stride, index: 5)
+            command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 6)
+            command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 7)
+            command_encoder.setBytes([Float32(correction_strength)], length: MemoryLayout<Float32>.stride, index: 8)
             command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
             command_encoder.endEncoding()
             command_buffer.commit()
