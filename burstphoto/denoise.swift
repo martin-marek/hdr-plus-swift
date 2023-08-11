@@ -170,7 +170,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
      output_bit_depth = "Native"
     }
 
-    // if user has selected the "16Bit" output bit depth but has a non-Bayer sensor, warn them the "Native" output bit depth will be used instead
+    // if user has selected the "16Bit" output bit depth but exposure control set to "Off", warn them the "Native" output bit depth will be used instead
     if output_bit_depth == "16Bit" && exposure_control == "Off" {
      DispatchQueue.main.async { progress.show_exposure_bit_depth_alert = true }
      output_bit_depth = "Native"
