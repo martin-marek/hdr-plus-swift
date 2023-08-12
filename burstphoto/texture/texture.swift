@@ -26,11 +26,6 @@ let sum_row_state = try! device.makeComputePipelineState(function: mfl.makeFunct
 let upsample_bilinear_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_bilinear_float")!)
 let upsample_nearest_int_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_nearest_int")!)
 
-enum PixelFormat {
-    case rgba
-    case r
-}
-
 enum UpsampleType {
     case Bilinear
     case NearestNeighbour
@@ -398,7 +393,9 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_levels: [[Int]], _ ISO_
         }
         
         // calculate mean value specific for each color channel
-        let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), .rgba)
+        let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0),
+                                               per_sub_pixel: true,
+                                               mosaic_patthern_width: mosaic_pattern_width)
         
         // standard parameters if black level is not available / available
         let hot_pixel_threshold     = (black_levels[0][0] == -1) ? 1.0 : 2.0
@@ -424,10 +421,10 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_levels: [[Int]], _ ISO_
             command_encoder.setTexture(textures[comp_idx], index: 2)
             command_encoder.setBuffer(mean_texture_buffer, offset: 0, index: 0)
             command_encoder.setBuffer(black_levels_buffer, offset: 0, index: 1)
-            command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 2)
-            command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 3)
+            command_encoder.setBytes([Int32(mosaic_pattern_width)],      length: MemoryLayout<Int32>.stride,   index: 2)
+            command_encoder.setBytes([Float32(hot_pixel_threshold)],     length: MemoryLayout<Float32>.stride, index: 3)
             command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 4)
-            command_encoder.setBytes([Float32(correction_strength)], length: MemoryLayout<Float32>.stride, index: 5)
+            command_encoder.setBytes([Float32(correction_strength)],        length: MemoryLayout<Float32>.stride, index: 5)
             command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
             command_encoder.endEncoding()
             command_buffer.commit()
@@ -545,7 +542,7 @@ func texture_like(_ input_texture: MTLTexture) -> MTLTexture {
 
 
 /// Function to calculate the average pixel value over the whole of a texture. If `pixelformat` is `rgba` then each channel will have an independent average calculated. Otherwise, a single value will be returned for the whole texture.
-func texture_mean(_ in_texture: MTLTexture, _ pixelformat: PixelFormat) -> MTLBuffer {
+func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_patthern_width: Int) -> MTLBuffer {
     // create a 1d texture that will contain the averages of the input texture along the x-axis
     let texture_descriptor = MTLTextureDescriptor()
     texture_descriptor.textureType = .type1D
@@ -558,7 +555,7 @@ func texture_mean(_ in_texture: MTLTexture, _ pixelformat: PixelFormat) -> MTLBu
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Mean"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = (pixelformat == .rgba ? average_y_rgba_state : average_y_state)
+    let state = (per_sub_pixel ? average_y_rgba_state : average_y_state)
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
     let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
@@ -568,9 +565,10 @@ func texture_mean(_ in_texture: MTLTexture, _ pixelformat: PixelFormat) -> MTLBu
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     
     // average the generated 1D texture along the x-axis
-    let state2 = (pixelformat == .rgba ? average_x_rgba_state : average_x_state)
+    let state2 = (per_sub_pixel ? average_x_rgba_state : average_x_state)
     command_encoder.setComputePipelineState(state2)
-    let avg_buffer = device.makeBuffer(length: (pixelformat == .rgba ? 4 : 1)*MemoryLayout<Float32>.size, options: .storageModeShared)!
+    let avg_buffer = device.makeBuffer(length: (per_sub_pixel ? mosaic_patthern_width*mosaic_patthern_width : 1)*MemoryLayout<Float32>.size,
+                                       options: .storageModeShared)!
     command_encoder.setTexture(avg_y, index: 0)
     command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
     command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
