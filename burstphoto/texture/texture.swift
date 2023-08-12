@@ -407,7 +407,8 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_levels: [[Int]], _ ISO_
         // iterate over all images and correct hot pixels in each texture
         for comp_idx in 0..<textures.count {
             let black_levels_comp = black_levels[comp_idx].map({ $0 == -1 ? Int32(0) : Int32($0)})
-            let black_levels_buffer = device.makeBuffer(bytes: black_levels_comp, length: MemoryLayout<Int32>.size * black_levels_comp.count)!
+            let black_levels_buffer = device.makeBuffer(bytes: black_levels_comp,
+                                                        length: MemoryLayout<Int32>.size * black_levels_comp.count)!
             let tmp_texture = copy_texture(textures[comp_idx])
             
             let command_buffer = command_queue.makeCommandBuffer()!
@@ -415,6 +416,7 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_levels: [[Int]], _ ISO_
             let command_encoder = command_buffer.makeComputeCommandEncoder()!
             let state = correct_hotpixels_state
             command_encoder.setComputePipelineState(state)
+            // TODO: Why the -4?
             let threads_per_grid = MTLSize(width: average_texture.width-4, height: average_texture.height-4, depth: 1)
             let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
             command_encoder.setTexture(average_texture, index: 0)
