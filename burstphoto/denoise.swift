@@ -180,6 +180,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     let current_settings = merging_algorithm + String(noise_reduction) + tile_size + String(search_distance) + image_urls.map({$0.absoluteString}).joined(separator: ".")
     if last_texture != nil && last_settings == current_settings {
         final_texture = copy_texture(last_texture!)
+        DispatchQueue.main.async { progress.int += Int(80_000_000) }
     } else {
         // convert images from uint16 to float16
         textures = textures.map{convert_uint16_to_float($0)}
