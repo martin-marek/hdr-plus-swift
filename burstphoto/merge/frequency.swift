@@ -9,6 +9,7 @@ let merge_frequency_domain_state = try! device.makeComputePipelineState(function
 
 let calculate_mismatch_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_mismatch_rgba")!)
 let calculate_rms_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_rms_rgba")!)
+let check_clipped_highlights_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "check_clipped_highlights_rgba")!)
 let deconvolute_frequency_domain_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "deconvolute_frequency_domain")!)
 let normalize_mismatch_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_mismatch")!)
 let reduce_artifacts_tile_border_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "reduce_artifacts_tile_border")!)
@@ -23,7 +24,7 @@ let forward_fft_state = try! device.makeComputePipelineState(function: mfl.makeF
 ///
 /// Perform the merging 4 times with a slight displacement between the frame to supress artifacts in the merging process.
 /// The shift is equal to to the tile size used in the merging process, which later translates into tile\_size\_merge/2 when each color channel is processed independently.
-func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], black_level: [Int], color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], white_level: Int, black_level: [Int], color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // The tile size for merging in frequency domain is set to 8x8 for all tile sizes used for alignment. The smaller tile size leads to a reduction of artifacts at specular highlights at the expense of a slightly reduced suppression of low-frequency noise in the shadows. The fixed value of 8 is supported by the highly-optimized fast Fourier transform (works up to value of <= 16). A slow, but easier to understand discrete Fourier transform is also provided for values larger than 16.
     // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
@@ -184,6 +185,8 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             
             // add mismatch texture to the total, accumulated mismatch texture
             add_texture(mismatch_texture, total_mismatch_texture, textures.count)
+         
+            let highlights_corr_texture = check_clipped_highlights_rgba(aligned_texture_rgba, exposure_factor, tile_info_merge, (white_level == -1 ? 1000000 : white_level), black_level_mean)
             
             // start debug capture
             //let capture_manager = MTLCaptureManager.shared()
@@ -198,7 +201,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             let max_motion_norm_exposure = (uniform_exposure ? max_motion_norm : min(4.0, exposure_factor)*sqrt(max_motion_norm))
             
             // merge aligned comparison texture with reference texture in the frequency domain
-            merge_frequency_domain(ref_texture_ft, aligned_texture_ft, final_texture_ft, rms_texture, mismatch_texture, robustness_norm, read_noise, max_motion_norm_exposure, uniform_exposure, tile_info_merge)
+            merge_frequency_domain(ref_texture_ft, aligned_texture_ft, final_texture_ft, rms_texture, mismatch_texture, highlights_corr_texture, robustness_norm, read_noise, max_motion_norm_exposure, uniform_exposure, tile_info_merge)
             
             // stop debug capture
             //capture_manager.stopCapture()
@@ -274,6 +277,33 @@ func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLT
 }
 
 
+func check_clipped_highlights_rgba(_ aligned_texture: MTLTexture, _ exposure_factor: Double, _ tile_info: TileInfo, _ white_level: Int, _ black_level_mean: Double) -> MTLTexture {
+  
+    // create mismatch texture
+    let highlights_corr_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, mipmapped: false)
+    highlights_corr_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    let highlights_corr_texture = device.makeTexture(descriptor: highlights_corr_texture_descriptor)!
+    
+    let command_buffer = command_queue.makeCommandBuffer()!
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = check_clipped_highlights_rgba_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(aligned_texture, index: 0)
+    command_encoder.setTexture(highlights_corr_texture, index: 1)
+    command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Float32(exposure_factor)], length: MemoryLayout<Float32>.stride, index: 1)
+    command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 2)
+    command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 3)    
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    return highlights_corr_texture
+}
+
+
 func deconvolute_frequency_domain(_ final_texture_ft: MTLTexture, _ total_mismatch_texture: MTLTexture, _ tile_info: TileInfo) {
         
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -336,7 +366,7 @@ func forward_ft(_ in_texture: MTLTexture, _ out_texture_ft: MTLTexture, _ tmp_te
 }
 
 
-func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ mismatch_texture: MTLTexture, _ robustness_norm: Double, _ read_noise: Double, _ max_motion_norm: Double, _ uniform_exposure: Bool, _ tile_info: TileInfo) {
+func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ mismatch_texture: MTLTexture, _ highlights_corr_texture: MTLTexture, _ robustness_norm: Double, _ read_noise: Double, _ max_motion_norm: Double, _ uniform_exposure: Bool, _ tile_info: TileInfo) {
         
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -349,6 +379,7 @@ func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: 
     command_encoder.setTexture(out_texture_ft, index: 2)
     command_encoder.setTexture(rms_texture, index: 3)
     command_encoder.setTexture(mismatch_texture, index: 4)
+    command_encoder.setTexture(highlights_corr_texture, index: 5)
     command_encoder.setBytes([Float32(robustness_norm)], length: MemoryLayout<Float32>.stride, index: 0)
     command_encoder.setBytes([Float32(read_noise)], length: MemoryLayout<Float32>.stride, index: 1)
     command_encoder.setBytes([Float32(max_motion_norm)], length: MemoryLayout<Float32>.stride, index: 2)
