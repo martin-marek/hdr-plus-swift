@@ -15,6 +15,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
                                    texture2d<float, access::read_write> out_texture_ft [[texture(2)]],
                                    texture2d<float, access::read> rms_texture [[texture(3)]],
                                    texture2d<float, access::read> mismatch_texture [[texture(4)]],
+                                   texture2d<float, access::read> highlights_norm_texture [[texture(5)]],
                                    constant float& robustness_norm [[buffer(0)]],
                                    constant float& read_noise [[buffer(1)]],
                                    constant float& max_motion_norm [[buffer(2)]],
@@ -33,6 +34,9 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
     float const mismatch_weight = clamp(1.0f - 10.0f*(mismatch-0.2f), 0.0f, 1.0f);
     
     float const motion_norm = clamp(max_motion_norm-(mismatch-0.02f)*(max_motion_norm-1.0f)/0.15f, 1.0f, max_motion_norm);
+    
+    // extract correction factor for clipped highlights
+    float const highlights_norm = highlights_norm_texture.read(gid).r;
     
     // compute tile positions from gid
     int const m0 = gid.x*tile_size;
@@ -142,7 +146,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
                 // calculate ratio of magnitudes
                 ratio_mag = (alignedMag2[0]+alignedMag2[1]+alignedMag2[2]+alignedMag2[3])/(refMag[0]+refMag[1]+refMag[2]+refMag[3]);
                      
-                // calculate additional normalization factor that increases the merging weight larger magnitudes and decreases weight for lower magnitudes
+                // calculate additional normalization factor that increases the merging weight for larger magnitudes and decreases weight for lower magnitudes
                 magnitude_norm = mismatch_weight*clamp(ratio_mag*ratio_mag*ratio_mag*ratio_mag, 0.5f, 3.0f);
             }
             
@@ -152,7 +156,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             // magnitude_norm is based on ideas from [Delbracio 2015]
             
             weight4 = (refRe-alignedRe2)*(refRe-alignedRe2) + (refIm-alignedIm2)*(refIm-alignedIm2);
-            weight4 = weight4/(weight4 + magnitude_norm*motion_norm*noise_norm);
+            weight4 = weight4/(weight4 + magnitude_norm*motion_norm*noise_norm*highlights_norm);
             
             // use the same weight for all color channels to reduce color artifacts as described in [Liba 2019]
             //weight = clamp(max(weight4[0], max(weight4[1], max(weight4[2], weight4[3]))), 0.0f, 1.0f);
@@ -169,6 +173,49 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             out_texture_ft.write(mergedIm, uint2(m+1, n));
         }
     }
+}
+
+
+kernel void calculate_highlights_norm_rgba(texture2d<float, access::read> aligned_texture [[texture(0)]],
+                                           texture2d<float, access::write> highlights_norm_texture [[texture(1)]],
+                                           constant int& tile_size [[buffer(0)]],
+                                           constant float& exposure_factor [[buffer(1)]],
+                                           constant float& white_level [[buffer(2)]],
+                                           constant float& black_level_mean [[buffer(3)]],
+                                           uint2 gid [[thread_position_in_grid]]) {
+    
+    // set to 1.0, which does not apply any correction
+    float clipped_highlights_norm = 1.0f;
+    
+    // if the frame has no uniform exposure
+    if (exposure_factor > 1.001f) {
+        // compute tile positions from gid
+        int const x0 = gid.x*tile_size;
+        int const y0 = gid.y*tile_size;
+        
+        float pixel_value_max;
+        clipped_highlights_norm = 0.0f;
+        
+        // calculate fraction of highlight pixels brighter than 0.5 of white level
+        for (int dy = 0; dy < tile_size; dy++) {
+            for (int dx = 0; dx < tile_size; dx++) {
+          
+                float4 const pixel_value4 = aligned_texture.read(uint2(x0+dx, y0+dy));
+                
+                pixel_value_max = max(pixel_value4[0], max(pixel_value4[1], max(pixel_value4[2], pixel_value4[3])));
+                pixel_value_max = (pixel_value_max-black_level_mean)*exposure_factor + black_level_mean;
+          
+                // ensure smooth transition of contribution of pixel values between 0.50 and 0.99 of the white level
+                clipped_highlights_norm += clamp((pixel_value_max/white_level-0.50f)/0.49f, 0.0f, 1.0f);
+            }
+        }
+
+        clipped_highlights_norm = clipped_highlights_norm/float(tile_size*tile_size);
+        // transform into a correction for the merging formula
+        clipped_highlights_norm = clamp((1.0f-clipped_highlights_norm)*(1.0f-clipped_highlights_norm), 0.04f/min(exposure_factor, 4.0f), 1.0f);
+    }
+    
+    highlights_norm_texture.write(clipped_highlights_norm, gid);
 }
 
 
