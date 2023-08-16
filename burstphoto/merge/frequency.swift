@@ -232,6 +232,7 @@ func calculate_highlights_norm_rgba(_ aligned_texture: MTLTexture, _ exposure_fa
     let highlights_norm_texture = device.makeTexture(descriptor: highlights_norm_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Highlights Norm"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = calculate_highlights_norm_rgba_state
     command_encoder.setComputePipelineState(state)
