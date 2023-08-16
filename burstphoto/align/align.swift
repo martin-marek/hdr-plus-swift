@@ -221,7 +221,7 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile
     let warped_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
-    command_buffer.label = "Warp Textyre"
+    command_buffer.label = "Warp Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     // The function warp_texture_XTrans corresponds to an old version of the warp function and would also work with images with Bayer pattern
     let state = (downscale_factor==2 ? warp_texture_Bayer_state : warp_texture_XTrans_state)
