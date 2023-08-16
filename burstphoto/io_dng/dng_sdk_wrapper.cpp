@@ -119,6 +119,9 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
                 }
             }
             
+            int num_non_zero_black_levels = 0;
+            int last_black_level = 0;
+            int _black_level;
             for (int row = 0; row < mosaic_width; row++) {
                 for (int col = 0; col < mosaic_width; col++) {
                     double black_level = 0.0;
@@ -128,7 +131,23 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
                     }
                     black_level /= rawIFD.fSamplesPerPixel;
                     
-                    *(black_levels + row + col*mosaic_width) = (int) (black_level + black_level_delta_adjust[row + col*mosaic_width]);
+                    _black_level = (int) (black_level + black_level_delta_adjust[row + col*mosaic_width]);
+                    *(black_levels + row + col*mosaic_width) = _black_level;
+                    
+                    if (_black_level != 0) {
+                        num_non_zero_black_levels++;
+                        last_black_level = _black_level;
+                    }
+                }
+            }
+            
+            // Some cameras report a single black value which is supposed to be used for all channels.
+            // Catch and handle this case here.
+            if (num_non_zero_black_levels == 1) {
+                for (int row = 0; row < mosaic_width; row++) {
+                    for (int col = 0; col < mosaic_width; col++) {
+                        *(black_levels + row + col*mosaic_width) = last_black_level;
+                    }
                 }
             }
         }
