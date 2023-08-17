@@ -133,8 +133,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     if exposure_control == "Off" && uniform_exposure {
         white_level         = Array(repeating: -1, count: white_level.count)
         black_level         = Array(repeating: Array(repeating: -1, count: mosaic_pattern_width*mosaic_pattern_width), count: black_level.count)
-        color_factors       = Array(repeating: Array(repeating: -1, count: color_factors[0].count), count: color_factors.count)
-        ISO_exposure_time   = Array(repeating: -1, count: ISO_exposure_time.count)
+        color_factors       = Array(repeating: Array(repeating: -1.0, count: color_factors[0].count), count: color_factors.count)
+        ISO_exposure_time   = Array(repeating: -1.0, count: ISO_exposure_time.count)
     }
     
     // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
