@@ -114,8 +114,28 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
             ref_idx = comp_idx
         }
         // check if exposure is uniform or bracketed
-        if (exposure_bias[comp_idx] != exposure_bias[0]) {
+        if exposure_bias[comp_idx] != exposure_bias[0] {
             uniform_exposure = false
+        }
+    }
+    
+    // repeat check of uniform exposure, but this time use product of ISO value and exposure time for evaluation
+    if uniform_exposure {
+        for comp_idx in 0..<image_urls.count {
+            // if images have different exposures: use image with lowest exposure as reference to protect highlights
+            if (ISO_exposure_time[ref_idx]-ISO_exposure_time[comp_idx] > 1e-15) {
+                ref_idx = comp_idx
+            }
+            // check if exposure is uniform or bracketed
+            if (abs(ISO_exposure_time[comp_idx]-ISO_exposure_time[0]) > 1e-15) {
+                uniform_exposure = false
+            }
+        }
+        // if exposure bracketing detected, overwrite exposure bias vector and set darkest frame to exposure bias -1EV
+        if !uniform_exposure {
+            for comp_idx in 0..<image_urls.count {
+                exposure_bias[comp_idx] = Int(round((log2(ISO_exposure_time[comp_idx]/ISO_exposure_time[ref_idx])-1.0)*100))
+            }
         }
     }
     
@@ -143,7 +163,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         DispatchQueue.main.async { progress.show_nonbayer_hq_alert = true }
         merging_algorithm = "Fast"
     }
-
 
     // if user has selected the "16Bit" output bit depth but has a non-Bayer sensor, warn them the "Native" output bit depth will be used instead
     var output_bit_depth = output_bit_depth
