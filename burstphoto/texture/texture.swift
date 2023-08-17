@@ -194,7 +194,7 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
         // Sum along columns
         let command_buffer = command_queue.makeCommandBuffer()!
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
-        command_buffer.label = "Black Levels \(i) for \(texture.label)"
+        command_buffer.label = "Black Levels \(i) for \(String(describing: texture.label))"
         command_encoder.setComputePipelineState(sum_rect_columns_state)
         let thread_groups_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
         let max_threads_per_thread_group = sum_rect_columns_state.maxTotalThreadsPerThreadgroup
