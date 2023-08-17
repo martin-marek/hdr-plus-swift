@@ -503,6 +503,41 @@ kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[
     in_texture.write(in_texture.read(gid).r/norm_texture.read(gid).r, gid);
 }
 
+
+kernel void sum_rect_columns(texture2d<uint, access::read> in_texture [[texture(0)]],
+                             texture2d<float, access::write> out_texture [[texture(1)]],
+                             constant int& top [[buffer(1)]],
+                             constant int& left [[buffer(2)]],
+                             constant int& bottom [[buffer(3)]],
+                             constant int& mosaic_pattern_width [[buffer(4)]],
+                             uint2 gid [[thread_position_in_grid]]) {
+    uint x = left + gid.x;
+    uint dy = gid.y;
+    
+    float total = 0;
+    for (int y = top+dy; y < bottom; y += mosaic_pattern_width) {
+        total += in_texture.read(uint2(x, y)).r;
+    }
+
+    out_texture.write(total, gid);
+}
+
+
+kernel void sum_row(texture2d<float, access::read> in_texture [[texture(0)]],
+                    device float *out_buffer [[buffer(0)]],
+                    constant int& width [[buffer(1)]],
+                    constant int& mosaic_pattern_width [[buffer(2)]],
+                    uint2 gid [[thread_position_in_grid]]) {
+    float total = 0.0;
+    
+    for (int x = 0; x < width; x+= mosaic_pattern_width) {
+        total += in_texture.read(uint2(x, gid.y)).r;
+    }
+    
+    out_buffer[gid.x + mosaic_pattern_width*gid.y] = total;
+}
+
+
 /**
   Naming based on https://en.wikipedia.org/wiki/Bilinear_interpolation#/media/File:BilinearInterpolation.svg
   */

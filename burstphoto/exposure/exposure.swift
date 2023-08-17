@@ -13,10 +13,10 @@ let max_y_state = try! device.makeComputePipelineState(function: mfl.makeFunctio
 /// By lifting the shadows they suffer less from quantization errors, this is especially beneficial as the bit-depth of the image decreases.
 ///
 /// Inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ exposure_control: String, _ exposure_bias: [Int], _ uniform_exposure: Bool, _ color_factors: [Double], _ ref_idx: Int) {
+func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [[Int]], _ exposure_control: String, _ exposure_bias: [Int], _ uniform_exposure: Bool, _ color_factors: [[Double]], _ ref_idx: Int) {
               
     // only apply exposure correction if reference image has an exposure, which is lower than the target exposure
-    if (exposure_control != "Off" && white_level != -1 && black_level[0] != -1) {
+    if (exposure_control != "Off" && white_level != -1 && black_level[0][0] != -1) {
           
         var final_texture_blurred = blur(final_texture, with_pattern_width: 2, using_kernel_size: 2)
         let max_texture_buffer = texture_max(final_texture_blurred)
@@ -38,10 +38,10 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         if uniform_exposure {
             
             for comp_idx in 0..<exposure_bias.count {
-                black_level0 += Double(black_level[comp_idx*4+0])
-                black_level1 += Double(black_level[comp_idx*4+1])
-                black_level2 += Double(black_level[comp_idx*4+2])
-                black_level3 += Double(black_level[comp_idx*4+3])
+                black_level0 += Double(black_level[comp_idx][0])
+                black_level1 += Double(black_level[comp_idx][1])
+                black_level2 += Double(black_level[comp_idx][2])
+                black_level3 += Double(black_level[comp_idx][3])
             }
             
             black_level0 /= Double(exposure_bias.count)
@@ -50,13 +50,14 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
             black_level3 /= Double(exposure_bias.count)
             
         } else {
-            black_level0 = Double(black_level[exp_idx*4+0])
-            black_level1 = Double(black_level[exp_idx*4+1])
-            black_level2 = Double(black_level[exp_idx*4+2])
-            black_level3 = Double(black_level[exp_idx*4+3])
+            black_level0 = Double(black_level[exp_idx][0])
+            black_level1 = Double(black_level[exp_idx][1])
+            black_level2 = Double(black_level[exp_idx][2])
+            black_level3 = Double(black_level[exp_idx][3])
         }
         
         let command_buffer = command_queue.makeCommandBuffer()!
+        command_buffer.label = "Correct Exposure"
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
         let state = (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") ? correct_exposure_state : correct_exposure_linear_state
         command_encoder.setComputePipelineState(state)
@@ -64,8 +65,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
        
         if (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") {
-            
-            let color_factor_mean = 0.25*(color_factors[ref_idx*3+0]+2.0*color_factors[ref_idx*3+1]+color_factors[ref_idx*3+2])
+            let color_factor_mean = 0.25*(color_factors[ref_idx][0]+2.0*color_factors[ref_idx][1]+color_factors[ref_idx][2])
             final_texture_blurred = blur(final_texture, with_pattern_width: 1, using_kernel_size: 1)
             
             command_encoder.setTexture(final_texture_blurred, index: 0)
@@ -101,7 +101,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
 /// For example, if the reference image is taken at 0 EV and has a pixel value of 45 and image 2 is taken at 2 EV and has a pixel value of 200, the two values represent vastly different things. The pixel value of image 2 must be decreased by 2^-2 (200 x 2^-2 = 50) in order for the pixel values to be comparable.
 ///
 /// Inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
-func equalize_exposure(_ textures: [MTLTexture], _ black_level: [Int], _ exposure_bias: [Int], _ ref_idx: Int) {
+func equalize_exposure(_ textures: [MTLTexture], _ black_level: [[Int]], _ exposure_bias: [Int], _ ref_idx: Int) {
 
     // iterate over all images and correct exposure in each texture
     for comp_idx in 0..<textures.count {
@@ -109,9 +109,10 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [Int], _ exposur
         let exposure_diff = Int(exposure_bias[ref_idx] - exposure_bias[comp_idx])
         
         // only apply exposure correction if there is a different exposure and if a reasonable black level is available
-        if (exposure_diff != 0 && black_level[0] != -1) {
+        if (exposure_diff != 0 && black_level[0][0] != -1) {
             
             let command_buffer = command_queue.makeCommandBuffer()!
+            command_buffer.label = "Equalize Exposure: \(comp_idx)"
             let command_encoder = command_buffer.makeComputeCommandEncoder()!
             let state = equalize_exposure_state
             command_encoder.setComputePipelineState(state)
@@ -119,10 +120,10 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [Int], _ exposur
             let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
             command_encoder.setTexture(textures[comp_idx], index: 0)
             command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 0)
-            command_encoder.setBytes([Int32(black_level[comp_idx*4+0])], length: MemoryLayout<Int32>.stride, index: 1)
-            command_encoder.setBytes([Int32(black_level[comp_idx*4+1])], length: MemoryLayout<Int32>.stride, index: 2)
-            command_encoder.setBytes([Int32(black_level[comp_idx*4+2])], length: MemoryLayout<Int32>.stride, index: 3)
-            command_encoder.setBytes([Int32(black_level[comp_idx*4+3])], length: MemoryLayout<Int32>.stride, index: 4)
+            command_encoder.setBytes([Int32(black_level[comp_idx][0])], length: MemoryLayout<Int32>.stride, index: 1)
+            command_encoder.setBytes([Int32(black_level[comp_idx][1])], length: MemoryLayout<Int32>.stride, index: 2)
+            command_encoder.setBytes([Int32(black_level[comp_idx][2])], length: MemoryLayout<Int32>.stride, index: 3)
+            command_encoder.setBytes([Int32(black_level[comp_idx][3])], length: MemoryLayout<Int32>.stride, index: 4)
             command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
             command_encoder.endEncoding()
             command_buffer.commit()
@@ -145,6 +146,7 @@ func texture_max(_ in_texture: MTLTexture) -> MTLBuffer {
     
     // average the input texture along the y-axis
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Texture Max"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = max_y_state
     command_encoder.setComputePipelineState(state)

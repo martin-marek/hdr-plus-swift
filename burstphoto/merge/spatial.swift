@@ -10,7 +10,7 @@ let compute_merge_weight_state = try! device.makeComputePipelineState(function: 
 
 
 /// Convenience function for the spatial merging approach
-func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, black_level: [Int], color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, black_level: [[Int]], color_factors: [[Double]], textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
     
@@ -51,11 +51,9 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
       
     // set reference texture
     let ref_texture = extend_texture(textures[ref_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
-            
-    var color_factors3 = [color_factors[ref_idx*3+0], color_factors[ref_idx*3+1], color_factors[ref_idx*3+2]]
     
     // build reference pyramid
-    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, color_factors3)
+    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, color_factors[ref_idx])
     
     // blur reference texure and estimate noise standard deviation
     // -  the computation is done here to avoid repeating the same computation in 'robust_merge()'
@@ -75,11 +73,10 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         // set comparison texture
         let comp_texture = extend_texture(textures[comp_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
      
-        let black_level_mean = 0.25*Double(black_level[comp_idx*4+0] + black_level[comp_idx*4+1] + black_level[comp_idx*4+2] + black_level[comp_idx*4+3])
-        color_factors3 = [color_factors[comp_idx*3+0], color_factors[comp_idx*3+1], color_factors[comp_idx*3+2]]
+        let black_level_mean = 0.25*Double(black_level[comp_idx][0] + black_level[comp_idx][1] + black_level[comp_idx][2] + black_level[comp_idx][3])
         
         // align comparison texture
-        let aligned_texture = crop_texture(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean, color_factors3), pad_align_x, pad_align_x, pad_align_y, pad_align_y)
+        let aligned_texture = crop_texture(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean, color_factors[comp_idx]), pad_align_x, pad_align_x, pad_align_y, pad_align_y)
         
         // robust-merge the texture
         let merged_texture = robust_merge(textures[ref_idx], ref_texture_blurred, aligned_texture, kernel_size, robustness, noise_sd, mosaic_pattern_width)
@@ -103,6 +100,7 @@ func color_difference(between texture1: MTLTexture, and texture2: MTLTexture, mo
     
     // compute pixel pairwise differences
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Color Difference"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = color_difference_state
     command_encoder.setComputePipelineState(state)
@@ -147,6 +145,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     
     // compute merge weight
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Spatial Merge"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = compute_merge_weight_state
     command_encoder.setComputePipelineState(state)

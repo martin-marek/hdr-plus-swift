@@ -20,7 +20,7 @@ void terminate_xmp_sdk() {
 }
 
 
-int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_level0, int* black_level1, int* black_level2, int* black_level3, int* exposure_bias, float* ISO_exposure_time, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
+int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* width, int* height, int* mosaic_pattern_width, int* white_level, int* black_levels, int* masked_areas, int* exposure_bias, float* ISO_exposure_time, float* color_factor_r, float* color_factor_g, float* color_factor_b) {
     
     try {
         
@@ -70,47 +70,102 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
             dng_point mosaic_pattern_size = negative->fMosaicInfo->fCFAPatternSize;
             *mosaic_pattern_width = mosaic_pattern_size.h;
         }
-        
-        // get black level, white level and color factors for exposure correction
-        *white_level = -1;
-        *black_level0 = -1;
-        *black_level1 = -1;
-        *black_level2 = -1;
-        *black_level3 = -1;
-        *color_factor_r = -1.0f;
-        *color_factor_g = -1.0f;
-        *color_factor_b = -1.0f;
-        
-        // currently only working for 2x2 Bayer mosaic pattern
-        if (*mosaic_pattern_width == 2) {
-            const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
-            if (linearization_info == NULL) {
-                printf("ERROR: LinearizationInfo is null.\n");
-                return 1;
-            } else {
-                *white_level = int(negative->fLinearizationInfo->fWhiteLevel[0]);
-                *black_level0 = negative->fLinearizationInfo->fBlackLevel[0][0][0];
-                *black_level1 = negative->fLinearizationInfo->fBlackLevel[0][1][0];
-                *black_level2 = negative->fLinearizationInfo->fBlackLevel[1][0][0];
-                *black_level3 = negative->fLinearizationInfo->fBlackLevel[1][1][0];
-            }
-            
-            // get color factors for neutral colors in camera color space
-            const dng_vector camera_neutral = negative->CameraNeutral();           
-            if (camera_neutral.IsEmpty()) {
-                printf("ERROR: CameraNeutral is null.\n");
-                return 1;
-            } else {
-                *color_factor_r = float(camera_neutral[0]);
-                *color_factor_g = float(camera_neutral[1]);
-                *color_factor_b = float(camera_neutral[2]);
+               
+        // Get masked area
+        if (rawIFD.fMaskedAreaCount > 0) {
+            for (int i = 0; i < rawIFD.fMaskedAreaCount; i++) {
+                // Add masked areas to the array
+                *(masked_areas + i + 0) = rawIFD.fMaskedArea[i].t;
+                *(masked_areas + i + 1) = rawIFD.fMaskedArea[i].l;
+                *(masked_areas + i + 2) = rawIFD.fMaskedArea[i].b;
+                *(masked_areas + i + 3) = rawIFD.fMaskedArea[i].r;
             }
         }
         
-        // get exposure bias for exposure correction and product of ISO value and exposure time for control of hot pixel correction
+        int mosaic_width = *mosaic_pattern_width;
+        // Get black level, white level and color factors for exposure correction
+        const dng_linearization_info* linearization_info = negative->GetLinearizationInfo();
+        if (linearization_info == NULL) {
+            printf("ERROR: LinearizationInfo is null.\n");
+            return 1;
+        } else {
+            *white_level = int(linearization_info->fWhiteLevel[0]);
+            
+            // The following performs basic handling of fBlackDeltaV and fBlackDeltaH
+            // It is not fully correct, and will fail if each row and column have significant differences between black levels.
+            // The current support is added to allow for certain older canon cameras (e.g. Canon 350D) to work correctly since they rely on it.
+            double black_level_delta_adjust[6*6] = { 0 };
+            
+            if (linearization_info->RowBlackCount() > 0) {
+                for (int row = 0; row < linearization_info->RowBlackCount(); row++) {
+                    for (int col = 0; col < mosaic_width; col++) {
+                        black_level_delta_adjust[(row % mosaic_width) + col * mosaic_width] += linearization_info->fBlackDeltaV->Buffer_real64()[row];
+                    }
+                }
+                for (int i = 0; i < mosaic_width*mosaic_width; i++) {
+                    black_level_delta_adjust[i] /= (linearization_info->RowBlackCount() / mosaic_width);
+                }
+            }
+            
+            if (linearization_info->ColumnBlackCount() > 0) {
+                for (int col = 0; col < linearization_info->ColumnBlackCount(); col++) {
+                    for (int row = 0; row < mosaic_width; row++) {
+                        black_level_delta_adjust[(row % mosaic_width) + col * mosaic_width] += linearization_info->fBlackDeltaH->Buffer_real64()[col];
+                    }
+                }
+                
+                for (int i = 0; i < mosaic_width*mosaic_width; i++) {
+                    black_level_delta_adjust[i] /= (linearization_info->ColumnBlackCount() / mosaic_width);
+                }
+            }
+            
+            int num_non_zero_black_levels = 0;
+            int last_black_level = 0;
+            int _black_level;
+            for (int row = 0; row < mosaic_width; row++) {
+                for (int col = 0; col < mosaic_width; col++) {
+                    double black_level = 0.0;
+                    // If there are multiple samples, average them out
+                    for (int sample_num = 0; sample_num < rawIFD.fSamplesPerPixel; sample_num++) {
+                        black_level += linearization_info->fBlackLevel[row][col][sample_num];
+                    }
+                    black_level /= rawIFD.fSamplesPerPixel;
+                    
+                    _black_level = (int) (black_level + black_level_delta_adjust[row + col*mosaic_width]);
+                    *(black_levels + row + col*mosaic_width) = _black_level;
+                    
+                    if (_black_level != 0) {
+                        num_non_zero_black_levels++;
+                        last_black_level = _black_level;
+                    }
+                }
+            }
+            
+            // Some cameras report a single black value which is supposed to be used for all channels.
+            // Catch and handle this case here.
+            if (num_non_zero_black_levels == 1) {
+                for (int row = 0; row < mosaic_width; row++) {
+                    for (int col = 0; col < mosaic_width; col++) {
+                        *(black_levels + row + col*mosaic_width) = last_black_level;
+                    }
+                }
+            }
+        }
+        
+        // get color factors for neutral colors in camera color space
+        const dng_vector camera_neutral = negative->CameraNeutral();
+        if (camera_neutral.IsEmpty()) {
+            printf("ERROR: CameraNeutral is null.\n");
+            return 1;
+        } else {
+            *color_factor_r = float(camera_neutral[0]);
+            *color_factor_g = float(camera_neutral[1]);
+            *color_factor_b = float(camera_neutral[2]);
+        }
+        
+        // Get exposure bias for exposure correction  and product of ISO value and exposure time for control of hot pixel correction
         const dng_exif* exif = negative->GetExif();
         if (exif == NULL) {
-            *exposure_bias = -1;
             printf("ERROR: Exif is null.\n");
             return 1;
         } else {
@@ -123,12 +178,10 @@ int read_dng_from_disk(const char* in_path, void** pixel_bytes_pointer, int* wid
             // calculate product of ISO value and exposure time
             *ISO_exposure_time = ISO_speed_value*exposure_time_value.n/float(exposure_time_value.d);
         }
-        
-    }
-    catch(...) {
+        return 0;
+    } catch(...) {
         return 1;
     }
-    return 0;
 }
 
 int write_dng_to_disk(const char *in_path, const char *out_path, void** pixel_bytes_pointer, const int white_level) {

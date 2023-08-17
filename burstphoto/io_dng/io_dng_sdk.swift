@@ -109,24 +109,31 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     // read image
     var error_code: Int32
     var pixel_bytes: UnsafeMutableRawPointer?
-    var width: Int32 = 0;
-    var height: Int32 = 0;
-    var mosaic_pattern_width: Int32 = 0;
-    var white_level: Int32 = 0;
-    var black_level0: Int32 = 0;
-    var black_level1: Int32 = 0;
-    var black_level2: Int32 = 0;
-    var black_level3: Int32 = 0;
-    var black_level: [Int] = [0, 0, 0, 0];
-    var exposure_bias: Int32 = 0;
+    var width: Int32 = 0
+    var height: Int32 = 0
+    var _mosaic_pattern_width: Int32 = 0
+    var white_level: Int32 = -1
+    // Hardcoding mosaic width of 6, I don't think anything has a mosaic width above 6 (X-Trans sensor)
+    var black_level_from_dng: [Int32]       = [Int32](repeating: -1, count: 6*6)
+    let black_level_from_masked_area: [Int]
+    var black_level: [Int]
+    var exposure_bias: Int32 = -1
     var ISO_exposure_time: Float32 = 0.0;
-    var color_factor_r: Float32 = 0.0;
-    var color_factor_g: Float32 = 0.0;
-    var color_factor_b: Float32 = 0.0;
-    var color_factors: [Double] = [0.0, 0.0, 0.0, 0.0];
+    var color_factor_r: Float32 = -1.0
+    var color_factor_g: Float32 = -1.0
+    var color_factor_b: Float32 = -1.0
+    var color_factors: [Double] = [0.0, 0.0, 0.0, 0.0]
+    // There are at most 4 masked areas. Each one has, in order, the: top, left, bottom, and right edge of the masked area.
+    var masked_areas: [Int32] = [
+        -1, -1, -1, -1,
+        -1, -1, -1, -1,
+        -1, -1, -1, -1,
+        -1, -1, -1, -1]
     
-    error_code = read_dng_from_disk(url.path, &pixel_bytes, &width, &height, &mosaic_pattern_width, &white_level, &black_level0, &black_level1, &black_level2, &black_level3, &exposure_bias, &ISO_exposure_time, &color_factor_r, &color_factor_g, &color_factor_b)
+    error_code = read_dng_from_disk(url.path, &pixel_bytes, &width, &height, &_mosaic_pattern_width, &white_level, &black_level_from_dng, &masked_areas, &exposure_bias, &ISO_exposure_time, &color_factor_r, &color_factor_g, &color_factor_b)
     if (error_code != 0) {throw ImageIOError.load_error}
+    
+    let mosaic_pattern_width = Int(_mosaic_pattern_width)
     
     // convert image bitmap to MTLTexture
     let bytes_per_pixel = 2
@@ -137,24 +144,31 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     let mtl_region = MTLRegionMake2D(0, 0, Int(width), Int(height))
     texture.replace(region: mtl_region, mipmapLevel: 0, withBytes: pixel_bytes!, bytesPerRow: bytes_per_row)
     
-    // free memory
     free(pixel_bytes!)
 
-    // convert four black levels to int16
-    black_level[0] = Int(black_level0)
-    black_level[1] = Int(black_level1)
-    black_level[2] = Int(black_level2)
-    black_level[3] = Int(black_level3)
+    // If any masked areas exist, calculate the black levels from it
+    black_level_from_masked_area = calculate_black_levels(for: texture, from_masked_areas: &masked_areas, mosaic_pattern_width: mosaic_pattern_width)
+    
+    // Load black levels either from the values the DNG reported or from the masked area
+    black_level = [Int](repeating: 0, count: mosaic_pattern_width*mosaic_pattern_width)
+    for i in 0..<black_level.count {
+        // 0 is hardcoded as a suspicious black level value.
+        if black_level_from_dng[i] > 0 {
+            black_level[i] = Int(black_level_from_dng[i])
+        } else {
+            black_level[i] = black_level_from_masked_area[i]
+        }
+    }
     
     color_factors[0] = Double(color_factor_r)
     color_factors[1] = Double(color_factor_g)
     color_factors[2] = Double(color_factor_b)
     
-    return (texture, Int(mosaic_pattern_width), Int(white_level), black_level, Int(exposure_bias), Double(ISO_exposure_time), color_factors)
+    return (texture, mosaic_pattern_width, Int(white_level), black_level, Int(exposure_bias), Double(ISO_exposure_time), color_factors)
 }
 
 
-func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrapper>) throws -> ([MTLTexture], Int, [Int], [Int], [Int], [Double], [Double]) {
+func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrapper>) throws -> ([MTLTexture], Int, [Int], [[Int]], [Int], [Double], [[Double]]) {
     
     var textures_dict: [Int: MTLTexture] = [:]
     let compute_group = DispatchGroup()
@@ -162,10 +176,11 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
     let access_queue = DispatchQueue(label: "") // this is a serial queue to read/save data thread-safely
     var mosaic_pattern_width: Int?
     var white_level = Array(repeating: 0, count: urls.count)
-    var black_level = Array(repeating: 0, count: 4*urls.count)
+    // Setting to
+    var black_levels = Array(repeating: Array(repeating: 0, count: 6*6), count: urls.count)
     var exposure_bias = Array(repeating: 0, count: urls.count)
     var ISO_exposure_time = Array(repeating: 0.0, count: urls.count)
-    var color_factors = Array(repeating: 0.0, count: 3*urls.count)
+    var color_factors = Array(repeating: Array(repeating: 0.0, count: 3), count: urls.count)
 
     for i in 0..<urls.count {
         if let cachedValue = textureCache.object(forKey: NSString(string: urls[i].absoluteString)) {
@@ -174,29 +189,28 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
                 textures_dict[i] = cachedValue.texture
                 mosaic_pattern_width = cachedValue.mosaic_pattern_width
                 white_level[i] = cachedValue.white_level
-                black_level[4*i+0] = cachedValue.black_levels[0]
-                black_level[4*i+1] = cachedValue.black_levels[1]
-                black_level[4*i+2] = cachedValue.black_levels[2]
-                black_level[4*i+3] = cachedValue.black_levels[3]
+                for j in 0..<cachedValue.black_levels.count {
+                    black_levels[i][j] = cachedValue.black_levels[j]
+                }
                 exposure_bias[i] = cachedValue.exposure_bias
                 ISO_exposure_time[i] = cachedValue.ISO_exposure_time
-                color_factors[3*i+0] = cachedValue.color_factors[0]
-                color_factors[3*i+1] = cachedValue.color_factors[1]
-                color_factors[3*i+2] = cachedValue.color_factors[2]
+                for j in 0..<3 {
+                    color_factors[i][j] = cachedValue.color_factors[j]
+                }
             }
         } else {
             print("Loading image " + urls[i].lastPathComponent + " from disk.")
             compute_queue.async(group: compute_group) {
                 
                 // asynchronously load texture
-                if let (texture, _mosaic_pattern_width, _white_level, _black_level, _exposure_bias, _ISO_exposure_time, _color_factors) = try? image_url_to_texture(urls[i], device) {
+                if let (texture, _mosaic_pattern_width, _white_level, _black_levels, _exposure_bias, _ISO_exposure_time, _color_factors) = try? image_url_to_texture(urls[i], device) {
                     
                     // thread-safely save the texture
                     access_queue.sync {
                         textureCache.setObject(ImageCacheWrapper(texture: texture,
                                                                  mosaic_pattern_width: _mosaic_pattern_width,
                                                                  white_level: _white_level,
-                                                                 black_levels: _black_level,
+                                                                 black_levels: _black_levels,
                                                                  exposure_bias: _exposure_bias,
                                                                  ISO_exposure_time: _ISO_exposure_time,
                                                                  color_factors: _color_factors),
@@ -205,15 +219,14 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
                         textures_dict[i] = texture
                         mosaic_pattern_width = _mosaic_pattern_width
                         white_level[i] = _white_level
-                        black_level[4*i+0] = _black_level[0]
-                        black_level[4*i+1] = _black_level[1]
-                        black_level[4*i+2] = _black_level[2]
-                        black_level[4*i+3] = _black_level[3]
+                        for j in 0..<_black_levels.count {
+                            black_levels[i][j] = _black_levels[j]
+                        }
                         exposure_bias[i] = _exposure_bias
                         ISO_exposure_time[i] = _ISO_exposure_time
-                        color_factors[3*i+0] = _color_factors[0]
-                        color_factors[3*i+1] = _color_factors[1]
-                        color_factors[3*i+2] = _color_factors[2]
+                        for j in 0..<3 {
+                            color_factors[i][j] = _color_factors[j]
+                        }
                     }
                 }
             }
@@ -239,13 +252,23 @@ func load_images(_ urls: [URL], textureCache: NSCache<NSString, ImageCacheWrappe
         }
     }
     
+    // Ensure mosaic pattern width is uniform between images.
+    if mosaic_pattern_width != nil {
+        let mosaic_squared = mosaic_pattern_width! * mosaic_pattern_width!
+        for i in 0..<black_levels.count {
+            for _ in mosaic_squared..<black_levels[i].count {
+                _ = black_levels[i].popLast()
+            }
+        }
+    }
+    
     for i in 1..<textures_list.count {
         if (textures_list[0].width != textures_list[i].width) || (textures_list[0].height != textures_list[i].height) {
             throw AlignmentError.inconsistent_resolutions
         }
     }
     
-    return (textures_list, mosaic_pattern_width!, white_level, black_level, exposure_bias, ISO_exposure_time, color_factors)
+    return (textures_list, mosaic_pattern_width!, white_level, black_levels, exposure_bias, ISO_exposure_time, color_factors)
 }
 
 
@@ -290,6 +313,7 @@ func safeShell(_ command: String) throws -> String {
 func texture_to_dng(_ texture: MTLTexture, _ in_url: URL, _ out_url: URL, _ white_level: Int32) throws {
     // synchronize GPU and CPU memory
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Texture to DNG"
     let blit_encoder = command_buffer.makeBlitCommandEncoder()!
     blit_encoder.synchronize(resource: texture)
     blit_encoder.endEncoding()

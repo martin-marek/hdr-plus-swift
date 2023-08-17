@@ -131,10 +131,10 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     
     // if exposure control = "Off" and uniform exposure, set black level and white level to -1
     if exposure_control == "Off" && uniform_exposure {
-        for idx in 0..<white_level.count { white_level[idx] = -1 }
-        for idx in 0..<black_level.count { black_level[idx] = -1 }
-        for idx in 0..<color_factors.count { color_factors[idx] = -1.0 }
-        for idx in 0..<ISO_exposure_time.count { ISO_exposure_time[idx] = -1.0 }
+        white_level         = Array(repeating: -1, count: white_level.count)
+        black_level         = Array(repeating: Array(repeating: -1, count: mosaic_pattern_width*mosaic_pattern_width), count: black_level.count)
+        color_factors       = Array(repeating: Array(repeating: -1.0, count: color_factors[0].count), count: color_factors.count)
+        ISO_exposure_time   = Array(repeating: -1.0, count: ISO_exposure_time.count)
     }
     
     // if user has selected the "higher quality" algorithm but has a non-Bayer sensor, warn them the "Fast" algorithm will be used instead
@@ -216,7 +216,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     let factor_16bit = (scale_to_16bit ? Int(pow(2.0, 16.0-ceil(log2(Double(white_level[ref_idx]))))+0.5) : 1)
 
     // convert final image to 16 bit integer
-    let output_texture_uint16 = convert_float_to_uint16(final_texture, (white_level[ref_idx] == -1 ? 1000000 : factor_16bit*white_level[ref_idx]), black_level, ref_idx, factor_16bit)
+    let output_texture_uint16 = convert_float_to_uint16(final_texture, (white_level[ref_idx] == -1 ? 1000000 : factor_16bit*white_level[ref_idx]), black_level[ref_idx], factor_16bit)
       
     print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
@@ -284,7 +284,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
 
 
 /// Convenience function for temporal averaging.
-func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [Int], uniform_exposure: Bool, color_factors: [Double], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [[Int]], uniform_exposure: Bool, color_factors: [[Double]], textures: [MTLTexture], final_texture: MTLTexture) throws {
     
     // find index of image with shortest exposure
     var exp_idx = 0
@@ -294,7 +294,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         }
     }
     
-    if (!uniform_exposure && white_level != -1 && black_level[0] != -1 && mosaic_pattern_width == 2) {
+    if (!uniform_exposure && white_level != -1 && black_level[0][0] != -1 && mosaic_pattern_width == 2) {
         
         // initialize weight texture used for normalization of the final image
         let norm_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: final_texture.width, height: final_texture.height, mipmapped: false)
@@ -304,19 +304,17 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         
         // temporal averaging with exposure weighting
         for comp_idx in 0..<textures.count {
-            
-            add_texture_exposure(textures[comp_idx], final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], ((comp_idx==exp_idx) ? 1_000_000 : white_level), black_level, comp_idx)
+            add_texture_exposure(textures[comp_idx], final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], ((comp_idx==exp_idx) ? 1_000_000 : white_level), black_level[comp_idx])
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
         
         // normalization of the final image
         normalize_texture(final_texture, norm_texture)
         // If color_factor is NOT available, a negative value will be set.
-    } else if (white_level != -1 && black_level[0] != -1 && color_factors[0] > 0 && mosaic_pattern_width == 2) {
-        
+    } else if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
         // temporal averaging with extrapolation of green channels for very bright pixels
         for comp_idx in 0..<textures.count {
-            add_texture_highlights(textures[comp_idx], final_texture, textures.count, white_level, black_level, color_factors, comp_idx)
+            add_texture_highlights(textures[comp_idx], final_texture, textures.count, white_level, black_level[comp_idx], color_factors[comp_idx])
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
     } else {

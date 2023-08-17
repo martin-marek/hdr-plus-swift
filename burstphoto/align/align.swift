@@ -80,6 +80,7 @@ func avg_pool(_ input_texture: MTLTexture, _ scale: Int, _ normalization: Bool, 
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Avg Pool"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = (normalization ? avg_pool_normalization_state : avg_pool_state)
     command_encoder.setComputePipelineState(state)
@@ -133,6 +134,7 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     
     // compute tile differences
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Compute Tile Diff"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     // either use generic function or highly-optimized function for testing a +/- 2 displacement in both image directions (in total 25 combinations)
     let state = (tile_info.n_pos_2d==25 ? (uniform_exposure ? compute_tile_differences25_state : compute_tile_differences_exposure25_state) : compute_tile_differences_state)
@@ -164,6 +166,7 @@ func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture,
     let prev_alignment_corrected = device.makeTexture(descriptor: prev_alignment_corrected_descriptor)!
         
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Correct Upsampling Error"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = correct_upsampling_error_state
     command_encoder.setComputePipelineState(state)
@@ -191,6 +194,7 @@ func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture,
 func find_best_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLTexture, _ current_alignment: MTLTexture, _ downscale_factor: Int, _ tile_info: TileInfo) {
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Find Best Tile Alignment"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = find_best_tile_alignment_state
     command_encoder.setComputePipelineState(state)
@@ -217,6 +221,7 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile
     let warped_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Warp Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     // The function warp_texture_XTrans corresponds to an old version of the warp function and would also work with images with Bayer pattern
     let state = (downscale_factor==2 ? warp_texture_Bayer_state : warp_texture_XTrans_state)
