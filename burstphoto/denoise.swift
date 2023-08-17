@@ -312,7 +312,6 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         normalize_texture(final_texture, norm_texture)
         // If color_factor is NOT available, a negative value will be set.
     } else if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
-        // TODO: Why `color_factors[0][0] > -0.9`?
         // temporal averaging with extrapolation of green channels for very bright pixels
         for comp_idx in 0..<textures.count {
             add_texture_highlights(textures[comp_idx], final_texture, textures.count, white_level, black_level[comp_idx], color_factors[comp_idx])
