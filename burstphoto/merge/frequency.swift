@@ -24,7 +24,10 @@ let forward_fft_state = try! device.makeComputePipelineState(function: mfl.makeF
 ///
 /// Perform the merging 4 times with a slight displacement between the frame to supress artifacts in the merging process.
 /// The shift is equal to to the tile size used in the merging process, which later translates into tile\_size\_merge/2 when each color channel is processed independently.
+///
+/// Currently only supports Bayer raw files
 func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], white_level: Int, black_level: [[Int]], color_factors: [[Double]], textures: [MTLTexture], final_texture: MTLTexture) throws {
+    print("Merging in the frequency domain...")
     
     // The tile size for merging in frequency domain is set to 8x8 for all tile sizes used for alignment. The smaller tile size leads to a reduction of artifacts at specular highlights at the expense of a slightly reduced suppression of low-frequency noise in the shadows. The fixed value of 8 is supported by the highly-optimized fast Fourier transform (works up to value of <= 16). A slow, but easier to understand discrete Fourier transform is also provided for values larger than 16.
     // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
