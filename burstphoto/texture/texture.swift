@@ -198,7 +198,7 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
         command_encoder.setComputePipelineState(sum_rect_columns_state)
         let thread_groups_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
         let max_threads_per_thread_group = sum_rect_columns_state.maxTotalThreadsPerThreadgroup
-        let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
+        let threads_per_thread_group = get_threads_per_thread_group(sum_rect_columns_state, thread_groups_per_grid)
         
         command_encoder.setTexture(texture, index: 0)
         command_encoder.setTexture(summed_y, index: 1)
