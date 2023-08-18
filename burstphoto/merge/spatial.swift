@@ -12,7 +12,7 @@ let compute_merge_weight_state = try! device.makeComputePipelineState(function: 
 /// Convenience function for the spatial merging approach
 ///
 /// Supports non-Bayer raw files
-func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, black_level: [[Int]], color_factors: [[Double]], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], black_level: [[Int]], color_factors: [[Double]], textures: [MTLTexture], final_texture: MTLTexture) throws {
     print("Merging in the spatial domain...")
     
     let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
@@ -79,7 +79,11 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         let black_level_mean = 0.25*Double(black_level[comp_idx][0] + black_level[comp_idx][1] + black_level[comp_idx][2] + black_level[comp_idx][3])
         
         // align comparison texture
-        let aligned_texture = crop_texture(align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean, color_factors[comp_idx]), pad_align_x, pad_align_x, pad_align_y, pad_align_y)
+        let aligned_texture = crop_texture(
+            align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, (exposure_bias[comp_idx]==exposure_bias[ref_idx]), black_level_mean, color_factors[comp_idx]),
+            pad_align_x, pad_align_x,
+            pad_align_y, pad_align_y
+        )
         
         // robust-merge the texture
         let merged_texture = robust_merge(textures[ref_idx], ref_texture_blurred, aligned_texture, kernel_size, robustness, noise_sd, mosaic_pattern_width)

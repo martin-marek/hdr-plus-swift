@@ -141,18 +141,18 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     if uniform_exposure {
         for comp_idx in 0..<image_urls.count {
             // if images have different exposures: use image with lowest exposure as reference to protect highlights
-            if (ISO_exposure_time[ref_idx]-ISO_exposure_time[comp_idx] > 1e-15) {
+            if (ISO_exposure_time[ref_idx]-ISO_exposure_time[comp_idx] > 1e-12) {
                 ref_idx = comp_idx
             }
             // check if exposure is uniform or bracketed
-            if (abs(ISO_exposure_time[comp_idx]-ISO_exposure_time[0]) > 1e-15) {
+            if (abs(ISO_exposure_time[comp_idx]-ISO_exposure_time[0]) > 1e-12) {
                 uniform_exposure = false
             }
         }
-        // if exposure bracketing detected, overwrite exposure bias vector and set darkest frame to exposure bias -1EV
+        // if exposure bracketing is detected, overwrite exposure bias vector and set darkest frame to exposure bias -2EV
         if !uniform_exposure {
             for comp_idx in 0..<image_urls.count {
-                exposure_bias[comp_idx] = Int(round((log2(ISO_exposure_time[comp_idx]/ISO_exposure_time[ref_idx])-1.0)*100))
+                exposure_bias[comp_idx] = Int(round((log2(ISO_exposure_time[comp_idx]/ISO_exposure_time[ref_idx])-2.0)*100))
             }
         }
     }
@@ -220,7 +220,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         } else if merging_algorithm == "Higher quality" {
             try align_merge_frequency_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_dict[search_distance]!, tile_size: tile_size_dict[tile_size]!, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
         } else {
-            try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_dict[search_distance]!, tile_size: tile_size_dict[tile_size]!, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
+            try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
         }
         last_texture = copy_texture(final_texture)
         last_settings = current_settings
