@@ -43,6 +43,24 @@ let mfl = device.makeDefaultLibrary()!
 // Must use NSString and not String since NSCache needs classes.
 let textureCache = NSCache<NSString, ImageCacheWrapper>()
 
+// These values are used to cache the final texture so that a lot of intermediary work can be skipped if
+// the only things that were changed between runs is the exposure control and the output bit-depth.
+// Both of those things are a post-processing step.
+var last_texture: MTLTexture? = nil
+var last_settings: String = ""
+
+let tile_size_dict = [
+    "Small":  16,
+    "Medium": 32,
+    "Large":  64,
+]
+
+let search_distance_dict = [
+    "Small":  128,
+    "Medium":  64,
+    "Large":   32,
+]
+
 
 /// Main function of the burst photo app.
 func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_algorithm: String = "Fast", tile_size: String = "Medium", search_distance: String = "Medium", noise_reduction: Double = 13.0, exposure_control: String = "LinearFullRange", output_bit_depth: String = "Native", out_dir: String, tmp_dir: String) throws -> URL {
@@ -152,59 +170,41 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
      output_bit_depth = "Native"
     }
 
-    // if user has selected the "16Bit" output bit depth but has a non-Bayer sensor, warn them the "Native" output bit depth will be used instead
+    // if user has selected the "16Bit" output bit depth but exposure control set to "Off", warn them the "Native" output bit depth will be used instead
     if output_bit_depth == "16Bit" && exposure_control == "Off" {
      DispatchQueue.main.async { progress.show_exposure_bit_depth_alert = true }
      output_bit_depth = "Native"
     }
-       
-    // convert images from uint16 to float16
-    textures = textures.map{convert_uint16_to_float($0)}
-
-    // set the tile size for the alignment
-    let tile_size_dict = [
-        "Small": 16,
-        "Medium": 32,
-        "Large": 64,
-    ]
-    let tile_size_int = tile_size_dict[tile_size]!
-    
-    // set the maximum resolution of the smallest pyramid layer
-    let search_distance_dict = [
-        "Small": 128,
-        "Medium": 64,
-        "Large": 32,
-    ]
-    let search_distance_int = search_distance_dict[search_distance]!
-    
-    // use a 32 bit float as final image
-    let final_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[ref_idx].width, height: textures[ref_idx].height, mipmapped: false)
-    final_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let final_texture = device.makeTexture(descriptor: final_texture_descriptor)!
-    fill_with_zeros(final_texture)
-    
-    if mosaic_pattern_width == 2 {
-        correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction)
-        equalize_exposure(textures, black_level, exposure_bias, ref_idx)
-    }
-    
-    // special mode: simple temporal averaging without alignment and robust merging
-    if noise_reduction == 23.0 {
-        print("Special mode: temporal averaging only...")
-        
-        try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, color_factors: color_factors, textures: textures, final_texture: final_texture)
-
-    // alignment and merging of tiles in frequency domain (only 2x2 Bayer pattern)
-    } else if merging_algorithm == "Higher quality" {
-        print("Merging in the frequency domain...")
-        
-        try align_merge_frequency_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
-        
-    // alignment and merging of tiles in the spatial domain (supports non-Bayer sensors)
+      
+    let final_texture: MTLTexture
+    let current_settings = String(exposure_control == "Off" && uniform_exposure) + merging_algorithm + String(noise_reduction) + tile_size + String(search_distance) + image_urls.map({$0.absoluteString}).joined(separator: ".")
+    if last_texture != nil && last_settings == current_settings {
+        final_texture = copy_texture(last_texture!)
+        DispatchQueue.main.async { progress.int += Int(80_000_000) }
     } else {
-        print("Merging in the spatial domain...")
+        // convert images from uint16 to float16
+        textures = textures.map{convert_uint16_to_float($0)}
         
-        try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_int, tile_size: tile_size_int, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
+        // use a 32 bit float as final image
+        let final_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[ref_idx].width, height: textures[ref_idx].height, mipmapped: false)
+        final_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+        final_texture = device.makeTexture(descriptor: final_texture_descriptor)!
+        fill_with_zeros(final_texture)
+        
+        if mosaic_pattern_width == 2 {
+            correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction)
+            equalize_exposure(textures, black_level, exposure_bias, ref_idx)
+        }
+        
+        if noise_reduction == 23.0 {
+            try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, color_factors: color_factors, textures: textures, final_texture: final_texture)
+        } else if merging_algorithm == "Higher quality" {
+            try align_merge_frequency_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_dict[search_distance]!, tile_size: tile_size_dict[tile_size]!, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
+        } else {
+            try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_dict[search_distance]!, tile_size: tile_size_dict[tile_size]!, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
+        }
+        last_texture = copy_texture(final_texture)
+        last_settings = current_settings
     }
     
     if (mosaic_pattern_width == 2 && exposure_control != "Off") {
@@ -285,6 +285,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
 
 /// Convenience function for temporal averaging.
 func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [[Int]], uniform_exposure: Bool, color_factors: [[Double]], textures: [MTLTexture], final_texture: MTLTexture) throws {
+    print("Special mode: temporal averaging only...")
     
     // find index of image with shortest exposure
     var exp_idx = 0
