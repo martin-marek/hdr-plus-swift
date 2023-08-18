@@ -177,7 +177,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     }
       
     let final_texture: MTLTexture
-    let current_settings = merging_algorithm + String(noise_reduction) + tile_size + String(search_distance) + image_urls.map({$0.absoluteString}).joined(separator: ".")
+    let current_settings = String(exposure_control == "Off" && uniform_exposure) + merging_algorithm + String(noise_reduction) + tile_size + String(search_distance) + image_urls.map({$0.absoluteString}).joined(separator: ".")
     if last_texture != nil && last_settings == current_settings {
         final_texture = copy_texture(last_texture!)
         DispatchQueue.main.async { progress.int += Int(80_000_000) }
