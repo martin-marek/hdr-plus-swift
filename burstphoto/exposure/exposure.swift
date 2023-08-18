@@ -4,7 +4,8 @@ import MetalPerformanceShaders
 
 let correct_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure")!)
 let correct_exposure_linear_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure_linear")!)
-let equalize_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure")!)
+let equalize_exposure_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure_bayer")!)
+let equalize_exposure_xtrans_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure_xtrans")!)
 let max_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_x")!)
 let max_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_y")!)
 
@@ -116,9 +117,16 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [[Int]], _ expos
             let command_buffer = command_queue.makeCommandBuffer()!
             command_buffer.label = "Equalize Exposure: \(comp_idx)"
             let command_encoder = command_buffer.makeComputeCommandEncoder()!
-            let state = equalize_exposure_state
+            let state: MTLComputePipelineState
+            let threads_per_grid: MTLSize
+            if mosaic_pattern_width == 2 {
+                state = equalize_exposure_bayer_state
+                threads_per_grid = MTLSize(width: textures[comp_idx].width/2, height: textures[comp_idx].height/2, depth: 1)
+            } else {
+                state = equalize_exposure_xtrans_state
+                threads_per_grid = MTLSize(width: textures[comp_idx].width, height: textures[comp_idx].height, depth: 1)
+            }
             command_encoder.setComputePipelineState(state)
-            let threads_per_grid = MTLSize(width: textures[comp_idx].width/2, height: textures[comp_idx].height/2, depth: 1)
             let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
             command_encoder.setTexture(textures[comp_idx], index: 0)
             command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 0)
