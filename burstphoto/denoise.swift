@@ -211,9 +211,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         fill_with_zeros(final_texture)
         
         correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction, mosaic_pattern_width)
-        if mosaic_pattern_width == 2 {
-            equalize_exposure(textures, black_level, exposure_bias, ref_idx)
-        }
+        equalize_exposure(textures, black_level, exposure_bias, ref_idx, mosaic_pattern_width)
         
         if noise_reduction == 23.0 {
             try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, color_factors: color_factors, textures: textures, final_texture: final_texture)

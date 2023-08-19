@@ -4,7 +4,8 @@ import MetalPerformanceShaders
 
 let correct_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure")!)
 let correct_exposure_linear_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure_linear")!)
-let equalize_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure")!)
+let equalize_exposure_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure_bayer")!)
+let equalize_exposure_xtrans_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure_xtrans")!)
 let max_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_x")!)
 let max_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_y")!)
 
@@ -101,7 +102,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
 /// For example, if the reference image is taken at 0 EV and has a pixel value of 45 and image 2 is taken at 2 EV and has a pixel value of 200, the two values represent vastly different things. The pixel value of image 2 must be decreased by 2^-2 (200 x 2^-2 = 50) in order for the pixel values to be comparable.
 ///
 /// Inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
-func equalize_exposure(_ textures: [MTLTexture], _ black_level: [[Int]], _ exposure_bias: [Int], _ ref_idx: Int) {
+func equalize_exposure(_ textures: [MTLTexture], _ black_level: [[Int]], _ exposure_bias: [Int], _ ref_idx: Int, _ mosaic_pattern_width: Int) {
 
     // iterate over all images and correct exposure in each texture
     for comp_idx in 0..<textures.count {
@@ -110,20 +111,26 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [[Int]], _ expos
         
         // only apply exposure correction if there is a different exposure and if a reasonable black level is available
         if (exposure_diff != 0 && black_level[0][0] != -1) {
+            let black_levels_buffer = device.makeBuffer(bytes: black_level[comp_idx].map {Int32($0)},
+                                                                length: MemoryLayout<Int32>.size * black_level[comp_idx].count)!
             
             let command_buffer = command_queue.makeCommandBuffer()!
             command_buffer.label = "Equalize Exposure: \(comp_idx)"
             let command_encoder = command_buffer.makeComputeCommandEncoder()!
-            let state = equalize_exposure_state
+            let state: MTLComputePipelineState
+            let threads_per_grid: MTLSize
+            if mosaic_pattern_width == 2 {
+                state = equalize_exposure_bayer_state
+                threads_per_grid = MTLSize(width: textures[comp_idx].width/2, height: textures[comp_idx].height/2, depth: 1)
+            } else {
+                state = equalize_exposure_xtrans_state
+                threads_per_grid = MTLSize(width: textures[comp_idx].width, height: textures[comp_idx].height, depth: 1)
+            }
             command_encoder.setComputePipelineState(state)
-            let threads_per_grid = MTLSize(width: textures[comp_idx].width/2, height: textures[comp_idx].height/2, depth: 1)
             let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
             command_encoder.setTexture(textures[comp_idx], index: 0)
             command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 0)
-            command_encoder.setBytes([Int32(black_level[comp_idx][0])], length: MemoryLayout<Int32>.stride, index: 1)
-            command_encoder.setBytes([Int32(black_level[comp_idx][1])], length: MemoryLayout<Int32>.stride, index: 2)
-            command_encoder.setBytes([Int32(black_level[comp_idx][2])], length: MemoryLayout<Int32>.stride, index: 3)
-            command_encoder.setBytes([Int32(black_level[comp_idx][3])], length: MemoryLayout<Int32>.stride, index: 4)
+            command_encoder.setBuffer(black_levels_buffer, offset: 0, index: 1)
             command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
             command_encoder.endEncoding()
             command_buffer.commit()
