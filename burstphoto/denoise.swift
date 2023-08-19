@@ -224,9 +224,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         last_settings = current_settings
     }
     
-    if (mosaic_pattern_width == 2 && exposure_control != "Off") {
-        correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, ref_idx)
-    }
+    correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, mosaic_pattern_width, ref_idx)
     
     // apply scaling to 16 bit
     let scale_to_16bit = (output_bit_depth=="16Bit" && mosaic_pattern_width == 2 && exposure_control != "Off")
