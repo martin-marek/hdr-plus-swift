@@ -10,22 +10,22 @@ using namespace metal;
  */
 kernel void correct_exposure(texture2d<float, access::read> final_texture_blurred [[texture(0)]],
                              texture2d<float, access::read_write> final_texture [[texture(1)]],
-                             constant int& exposure_bias [[buffer(0)]],
-                             constant int& target_exposure [[buffer(1)]],
-                             constant float& white_level [[buffer(2)]],
-                             constant float& black_level0 [[buffer(3)]],
-                             constant float& black_level1 [[buffer(4)]],
-                             constant float& black_level2 [[buffer(5)]],
-                             constant float& black_level3 [[buffer(6)]],
-                             constant float& color_factor_mean [[buffer(7)]],
-                             constant float* max_texture_buffer [[buffer(8)]],
+                             constant int&   exposure_bias        [[buffer(0)]],
+                             constant int&   target_exposure      [[buffer(1)]],
+                             constant int&   mosaic_pattern_width [[buffer(2)]],
+                             constant float& white_level          [[buffer(3)]],
+                             constant float& color_factor_mean    [[buffer(4)]],
+                             constant float* black_levels         [[buffer(5)]],
+                             constant float* max_texture_buffer   [[buffer(6)]],
                              uint2 gid [[thread_position_in_grid]]) {
    
-    // load args
-    float4 const black_level4 = float4(black_level0, black_level1, black_level2, black_level3);
-    float const black_level = black_level4[2*(gid.y%2) + (gid.x%2)];
-    float const black_level_min = min(black_level0, min(black_level1, min(black_level2, black_level3)));
-    float const black_level_mean = 0.25f*(black_level0+black_level1+black_level2+black_level3);
+    float const black_level     = black_levels[(gid.x % mosaic_pattern_width) + mosaic_pattern_width * (gid.y % mosaic_pattern_width)];
+    float black_level_min       = white_level;
+    float black_level_mean      = 0.0;
+    for (int i = 0; i < mosaic_pattern_width * mosaic_pattern_width; i++) {
+        black_level_min = min(black_level_min, black_levels[i]);
+    }
+    black_level_mean /= mosaic_pattern_width * mosaic_pattern_width;
        
     // calculate gain for intensity correction
     float const correction_stops = float((target_exposure-exposure_bias)/100.0f);
@@ -78,19 +78,20 @@ kernel void correct_exposure(texture2d<float, access::read> final_texture_blurre
  Correction of underexposure with simple linear scaling
  */
 kernel void correct_exposure_linear(texture2d<float, access::read_write> final_texture [[texture(0)]],
-                                    constant float& white_level [[buffer(0)]],
-                                    constant float& black_level0 [[buffer(1)]],
-                                    constant float& black_level1 [[buffer(2)]],
-                                    constant float& black_level2 [[buffer(3)]],
-                                    constant float& black_level3 [[buffer(4)]],
-                                    constant float* max_texture_buffer [[buffer(5)]],
-                                    constant float& linear_gain [[buffer(6)]],
+                                    constant int&   mosaic_pattern_width [[buffer(0)]],
+                                    constant float& white_level          [[buffer(1)]],
+                                    constant float& linear_gain          [[buffer(2)]],
+                                    constant float* black_levels         [[buffer(3)]],
+                                    constant float* max_texture_buffer   [[buffer(4)]],
                                     uint2 gid [[thread_position_in_grid]]) {
-   
+    
     // load args
-    float4 const black_level4 = float4(black_level0, black_level1, black_level2, black_level3);
-    float const black_level = black_level4[2*(gid.y%2) + (gid.x%2)];
-    float const black_level_min = min(black_level0, min(black_level1, min(black_level2, black_level3)));
+    float const black_level     = black_levels[(gid.x % mosaic_pattern_width) + mosaic_pattern_width * (gid.y % mosaic_pattern_width)];
+    float black_level_min       = white_level;
+    for (int i = 0; i < mosaic_pattern_width * mosaic_pattern_width; i++) {
+
+        black_level_min = min(black_level_min, black_levels[i]);
+    }
     
     // calculate correction factor to get close to full range of intensity values
     float corr_factor = (white_level-black_level_min)/(max_texture_buffer[0]-black_level_min);
