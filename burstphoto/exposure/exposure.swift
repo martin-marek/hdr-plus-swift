@@ -98,13 +98,13 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [[Int]], _ expos
 
     // iterate over all images and correct exposure in each texture
     for comp_idx in 0..<textures.count {
-        
-        let exposure_diff = Int(exposure_bias[ref_idx] - exposure_bias[comp_idx])
+        let exposure_diff = exposure_bias[ref_idx] - exposure_bias[comp_idx]
         
         // only apply exposure correction if there is a different exposure and if a reasonable black level is available
         if (exposure_diff != 0 && black_level[0][0] != -1) {
+            let corr_factor = Float32(pow(2.0, Float32(exposure_diff) / 100.0))
             let black_levels_buffer = device.makeBuffer(bytes: black_level[comp_idx].map {Int32($0)},
-                                                                length: MemoryLayout<Int32>.size * black_level[comp_idx].count)!
+                                                        length: MemoryLayout<Int32>.size * black_level[comp_idx].count)!
             
             let command_buffer = command_queue.makeCommandBuffer()!
             command_buffer.label = "Equalize Exposure: \(comp_idx)"
@@ -121,7 +121,7 @@ func equalize_exposure(_ textures: [MTLTexture], _ black_level: [[Int]], _ expos
             command_encoder.setComputePipelineState(state)
             let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
             command_encoder.setTexture(textures[comp_idx], index: 0)
-            command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 0)
+            command_encoder.setBytes([corr_factor], length: MemoryLayout<Float32>.stride, index: 0)
             command_encoder.setBuffer(black_levels_buffer, offset: 0, index: 1)
             command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
             command_encoder.endEncoding()

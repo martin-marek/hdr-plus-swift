@@ -113,8 +113,8 @@ kernel void correct_exposure_linear(texture2d<float, access::read_write> final_t
  Exposure correction in case of a burst with exposure bracketing for Bayer Sensor
  */
 kernel void equalize_exposure_bayer(texture2d<float, access::read_write> comp_texture [[texture(0)]],
-                                    constant int& exposure_diff [[buffer(0)]],
-                                    constant int* black_levels [[buffer(1)]],
+                                    constant float& corr_factor  [[buffer(0)]],
+                                    constant int*   black_levels [[buffer(1)]],
                                     uint2 gid [[thread_position_in_grid]]) {
 
     int const x = gid.x*2;
@@ -128,10 +128,7 @@ kernel void equalize_exposure_bayer(texture2d<float, access::read_write> comp_te
                                 comp_texture.read(uint2(x+1, y)).r,
                                 comp_texture.read(uint2(x,   y+1)).r,
                                 comp_texture.read(uint2(x+1, y+1)).r);
-    
-    // calculate exposure correction factor from exposure difference
-    float const corr_factor = pow(2.0f, float(exposure_diff/100.0f));
-    
+       
     // correct exposure
     // TODO: Is this + black_level necessary?
     pixel_value = (pixel_value - black_level)*corr_factor + black_level;
@@ -150,14 +147,11 @@ kernel void equalize_exposure_bayer(texture2d<float, access::read_write> comp_te
  TODO: Benchmark against a float3 implementation and see if that's faster
  */
 kernel void equalize_exposure_xtrans(texture2d<float, access::read_write> comp_texture [[texture(0)]],
-                                     constant int& exposure_diff [[buffer(0)]],
-                                     constant int* black_levels [[buffer(1)]],
+                                     constant float& corr_factor  [[buffer(0)]],
+                                     constant int*   black_levels [[buffer(1)]],
                                      uint2 gid [[thread_position_in_grid]]) {
     
-    float const black_level = float(black_levels[gid.x % 6 + 6*(gid.y % 6)]);
-       
-    // calculate exposure correction factor from exposure difference
-    float const corr_factor = pow(2.0f, float(exposure_diff/100.0f));
+    float const black_level = float(black_levels[(gid.x % 6) + 6*(gid.y % 6)]);
     
     // correct exposure
     // TODO: Is this +black_level necessary?
