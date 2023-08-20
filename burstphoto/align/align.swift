@@ -8,8 +8,8 @@ let compute_tile_differences25_state = try! device.makeComputePipelineState(func
 let compute_tile_differences_exposure25_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences_exposure25")!)
 let correct_upsampling_error_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_upsampling_error")!)
 let find_best_tile_alignment_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "find_best_tile_alignment")!)
-let warp_texture_Bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture_Bayer")!)
-let warp_texture_XTrans_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture_XTrans")!)
+let warp_texture_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture_bayer")!)
+let warp_texture_xtrans_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture_xtrans")!)
 
 func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ downscale_factor_array: Array<Int>, _ tile_size_array: Array<Int>, _ search_dist_array: Array<Int>, _ uniform_exposure: Bool, _ black_level_mean: Double, _ color_factors3: Array<Double>) -> MTLTexture {
         
@@ -223,8 +223,8 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Warp Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    // The function warp_texture_XTrans corresponds to an old version of the warp function and would also work with images with Bayer pattern
-    let state = (downscale_factor==2 ? warp_texture_Bayer_state : warp_texture_XTrans_state)
+    // The function warp_texture_xtrans corresponds to an old version of the warp function and would also work with images with Bayer pattern
+    let state = (downscale_factor==2 ? warp_texture_bayer_state : warp_texture_xtrans_state)
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: texture_to_warp.width, height: texture_to_warp.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)

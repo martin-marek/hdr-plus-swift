@@ -168,7 +168,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             
             // align comparison texture
             let aligned_texture_rgba = convert_to_rgba(
-                align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, uniform_exposure, black_level_mean, color_factors[comp_idx]),
+                align_texture(ref_pyramid, comp_texture, downscale_factor_array, tile_size_array, search_dist_array, (exposure_bias[comp_idx]==exposure_bias[ref_idx]), black_level_mean, color_factors[comp_idx]),
                 crop_merge_x,
                 crop_merge_y
             )
@@ -188,12 +188,6 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
          
             let highlights_norm_texture = calculate_highlights_norm_rgba(aligned_texture_rgba, exposure_factor, tile_info_merge, (white_level == -1 ? 1000000 : white_level), black_level_mean)
             
-            // start debug capture
-            //let capture_manager = MTLCaptureManager.shared()
-            //let capture_descriptor = MTLCaptureDescriptor()
-            //capture_descriptor.captureObject = device
-            //try! capture_manager.startCapture(with: capture_descriptor)
-            
             // transform aligned comparison texture into the frequency domain
             forward_ft(aligned_texture_rgba, aligned_texture_ft, tmp_texture_ft, tile_info_merge)
             
@@ -202,9 +196,6 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             
             // merge aligned comparison texture with reference texture in the frequency domain
             merge_frequency_domain(ref_texture_ft, aligned_texture_ft, final_texture_ft, rms_texture, mismatch_texture, highlights_norm_texture, robustness_norm, read_noise, max_motion_norm_exposure, uniform_exposure, tile_info_merge)
-            
-            // stop debug capture
-            //capture_manager.stopCapture()
             
             // sync GUI progress
             DispatchQueue.main.async { progress.int += Int(80000000/Double(4*(textures.count-1))) }

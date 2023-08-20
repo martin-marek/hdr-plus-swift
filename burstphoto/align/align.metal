@@ -577,7 +577,7 @@ kernel void find_best_tile_alignment(texture3d<float, access::read> tile_diff [[
 }
 
 
-kernel void warp_texture_Bayer(texture2d<half, access::read> in_texture [[texture(0)]],
+kernel void warp_texture_bayer(texture2d<half, access::read> in_texture [[texture(0)]],
                                texture2d<half, access::write> out_texture [[texture(1)]],
                                texture2d<int, access::read> prev_alignment [[texture(2)]],
                                constant int& downscale_factor [[buffer(0)]],
@@ -631,7 +631,7 @@ kernel void warp_texture_Bayer(texture2d<half, access::read> in_texture [[textur
 }
 
 
-kernel void warp_texture_XTrans(texture2d<float, access::read> in_texture [[texture(0)]],
+kernel void warp_texture_xtrans(texture2d<float, access::read> in_texture [[texture(0)]],
                                 texture2d<float, access::read_write> out_texture [[texture(1)]],
                                 texture2d<int, access::read> prev_alignment [[texture(2)]],
                                 constant int& downscale_factor [[buffer(0)]],
