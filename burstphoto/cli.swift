@@ -1,5 +1,4 @@
 import Foundation
-import MetalPerformanceShaders
 
 // this is a command-line interface for Burst Photo, and is not part of the GUI application
 // you can use this for development / automating jobs
