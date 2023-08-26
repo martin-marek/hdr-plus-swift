@@ -164,7 +164,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             // set and extend comparison texture
             let comp_texture = extend_texture(textures[comp_idx], pad_left, pad_right, pad_top, pad_bottom)
             
-            let black_level_mean = 0.25*Double(black_level[comp_idx][0] + black_level[comp_idx][1] + black_level[comp_idx][2] + black_level[comp_idx][3])
+            let black_level_mean = Double(black_level[comp_idx].reduce(0, +)) / Double(black_level[comp_idx].count)
             
             // align comparison texture
             let aligned_texture_rgba = convert_to_rgba(
