@@ -562,7 +562,7 @@ kernel void backward_fft(texture2d<float, access::read> in_texture_ft [[texture(
        
     float coefRe, coefIm;
     float4 Re0, Re1, Re2, Re3, Im0, Im1, Im2, Im3, Re00, Re11, Re22, Re33, Im00, Im11, Im22, Im33, dataRe, dataIm;
-    float4 tmp_data[32];
+    float4 tmp_data[16];
     
     // row-wise one-dimensional fast Fourier transform along x-direction
     for (int dn = 0; dn < tile_size; dn++) {
@@ -846,7 +846,7 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
     
     float coefRe, coefIm, norm_cosine0, norm_cosine1;
     float4 Re0, Re1, Re2, Re3, Re00, Re11, Re22, Re33, Im0, Im1, Im2, Im3, Im00, Im11, Im22, Im33, dataRe, dataIm;
-    float4 tmp_data[32];
+    float4 tmp_data[16];
     
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm+=2) {
