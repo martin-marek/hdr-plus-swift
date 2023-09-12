@@ -276,7 +276,7 @@ struct SettingsView: View {
                 }.padding(.horizontal, 15)
                 Spacer()
                     .navigationTitle("Preferences")
-            }.tabItem {Label("Exposure & Noise   ", systemImage: "camera")}
+            }.tabItem {Label("Exposure & Noise   ", image: "camera_icon")}
             
             VStack(alignment: .leading) {
                 
@@ -321,7 +321,7 @@ struct SettingsView: View {
                 }.padding(.horizontal, 15).padding(.vertical, 11)
                 Spacer()
                     .navigationTitle("Preferences")
-            }.tabItem {Label("Stacking & Output  ", systemImage: "square.3.layers.3d")}
+            }.tabItem {Label("Stacking & Output  ", image: "stack_icon")}
         }
         .frame(width: 390, height: 225)
     }
