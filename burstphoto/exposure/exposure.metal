@@ -108,43 +108,6 @@ kernel void correct_exposure_linear(texture2d<float, access::read_write> final_t
     final_texture.write(pixel_value, gid);
 }
 
-/**
- Exposure correction in case of a burst with exposure bracketing
- */
-kernel void equalize_exposure(texture2d<float, access::read_write> comp_texture [[texture(0)]],
-                             constant int& exposure_diff [[buffer(0)]],
-                             constant int& black_level0 [[buffer(1)]],
-                             constant int& black_level1 [[buffer(2)]],
-                             constant int& black_level2 [[buffer(3)]],
-                             constant int& black_level3 [[buffer(4)]],
-                             uint2 gid [[thread_position_in_grid]]) {
-       
-    int const x = gid.x*2;
-    int const y = gid.y*2;
-    
-    // load args
-    float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
-    
-    // extract pixel values of 2x2 super pixel
-    float4 pixel_value = float4(comp_texture.read(uint2(x,   y)).r,
-                                comp_texture.read(uint2(x+1, y)).r,
-                                comp_texture.read(uint2(x,   y+1)).r,
-                                comp_texture.read(uint2(x+1, y+1)).r);
-    
-    // calculate exposure correction factor from exposure difference
-    float const corr_factor = pow(2.0f, float(exposure_diff/100.0f));
-    
-    // correct exposure
-    pixel_value = (pixel_value - black_level)*corr_factor + black_level;
-    pixel_value = clamp(pixel_value, 0.0f, float(FLOAT16_MAX_VAL));
-
-    // write back into texture
-    comp_texture.write(pixel_value[0], uint2(x,   y));
-    comp_texture.write(pixel_value[1], uint2(x+1, y));
-    comp_texture.write(pixel_value[2], uint2(x,   y+1));
-    comp_texture.write(pixel_value[3], uint2(x+1, y+1));
-}
-
 
 kernel void max_x(texture1d<float, access::read> in_texture [[texture(0)]],
                   device float *out_buffer [[buffer(0)]],

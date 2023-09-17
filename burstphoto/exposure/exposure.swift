@@ -4,7 +4,6 @@ import MetalPerformanceShaders
 
 let correct_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure")!)
 let correct_exposure_linear_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure_linear")!)
-let equalize_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "equalize_exposure")!)
 let max_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_x")!)
 let max_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_y")!)
 
@@ -96,52 +95,17 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
 }
 
 
-/// Images with different exposures are all still mapped to the same bit range by the camera. This means that the raw pixel value is not directly comparable between images with different exposures and must be transformed before they can be merged.
-///
-/// For example, if the reference image is taken at 0 EV and has a pixel value of 45 and image 2 is taken at 2 EV and has a pixel value of 200, the two values represent vastly different things. The pixel value of image 2 must be decreased by 2^-2 (200 x 2^-2 = 50) in order for the pixel values to be comparable.
-///
-/// Inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
-func equalize_exposure(_ textures: [MTLTexture], _ black_level: [[Int]], _ exposure_bias: [Int], _ ref_idx: Int) {
-
-    // iterate over all images and correct exposure in each texture
-    for comp_idx in 0..<textures.count {
-        
-        let exposure_diff = Int(exposure_bias[ref_idx] - exposure_bias[comp_idx])
-        
-        // only apply exposure correction if there is a different exposure and if a reasonable black level is available
-        if (exposure_diff != 0 && black_level[0][0] != -1) {
-            
-            let command_buffer = command_queue.makeCommandBuffer()!
-            command_buffer.label = "Equalize Exposure: \(comp_idx)"
-            let command_encoder = command_buffer.makeComputeCommandEncoder()!
-            let state = equalize_exposure_state
-            command_encoder.setComputePipelineState(state)
-            let threads_per_grid = MTLSize(width: textures[comp_idx].width/2, height: textures[comp_idx].height/2, depth: 1)
-            let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-            command_encoder.setTexture(textures[comp_idx], index: 0)
-            command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 0)
-            command_encoder.setBytes([Int32(black_level[comp_idx][0])], length: MemoryLayout<Int32>.stride, index: 1)
-            command_encoder.setBytes([Int32(black_level[comp_idx][1])], length: MemoryLayout<Int32>.stride, index: 2)
-            command_encoder.setBytes([Int32(black_level[comp_idx][2])], length: MemoryLayout<Int32>.stride, index: 3)
-            command_encoder.setBytes([Int32(black_level[comp_idx][3])], length: MemoryLayout<Int32>.stride, index: 4)
-            command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-            command_encoder.endEncoding()
-            command_buffer.commit()
-        }
-    }
-}
-
-
 /// Calculate the maximum value of the texture.
 /// This is used for adjusting the exposure of the final image in order to prevent channels from being clipped.
 func texture_max(_ in_texture: MTLTexture) -> MTLBuffer {
     
-    // create a 1d texture that will contain the averages of the input texture along the x-axis
+    // create a 1d texture that will contain the maxima of the input texture along the x-axis
     let texture_descriptor = MTLTextureDescriptor()
     texture_descriptor.textureType = .type1D
     texture_descriptor.pixelFormat = in_texture.pixelFormat
     texture_descriptor.width = in_texture.width
     texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    texture_descriptor.storageMode = .private
     let max_y = device.makeTexture(descriptor: texture_descriptor)!
     
     // average the input texture along the y-axis
@@ -151,7 +115,7 @@ func texture_max(_ in_texture: MTLTexture) -> MTLBuffer {
     let state = max_y_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
-    let max_threads_per_thread_group = state.maxTotalThreadsPerThreadgroup
+    let max_threads_per_thread_group = state.threadExecutionWidth
     let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(max_y, index: 1)
