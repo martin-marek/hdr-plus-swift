@@ -266,8 +266,10 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     let out_path = (dng_converter_present ? tmp_dir : out_dir) + out_filename
     var out_url = URL(fileURLWithPath: out_path)
     
-    // Ensure reference texture exists on disk (may not if it existed in memory cache)
-    _ = try convert_raws_to_dngs([image_urls[ref_idx]], dng_converter_path, tmp_dir, NSCache<NSString, ImageCacheWrapper>())
+    if convert_to_dng {
+        // Ensure reference texture exists on disk (may not if it existed in memory cache)
+        _ = try convert_raws_to_dngs([image_urls[ref_idx]], dng_converter_path, tmp_dir, NSCache<NSString, ImageCacheWrapper>())
+    }
     
     // save the output image
     try texture_to_dng(output_texture_uint16, ref_dng_url, out_url, (scale_to_16bit ? Int32(factor_16bit*white_level[ref_idx]) : -1))
