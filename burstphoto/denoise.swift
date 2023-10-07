@@ -192,6 +192,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         let final_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[ref_idx].width, height: textures[ref_idx].height, mipmapped: false)
         final_texture_descriptor.usage = [.shaderRead, .shaderWrite]
         final_texture = device.makeTexture(descriptor: final_texture_descriptor)!
+        final_texture.label = "Final Texture"
         fill_with_zeros(final_texture)
         
         correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction, mosaic_pattern_width)
@@ -300,6 +301,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         let norm_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: final_texture.width, height: final_texture.height, mipmapped: false)
         norm_texture_descriptor.usage = [.shaderRead, .shaderWrite]
         let norm_texture = device.makeTexture(descriptor: norm_texture_descriptor)!
+        norm_texture.label = "Norm Texture"
         fill_with_zeros(norm_texture)
         
         // temporal averaging with exposure weighting
