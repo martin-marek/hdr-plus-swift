@@ -186,7 +186,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
                                                           shift_top/tile_size_merge,
                                                           shift_bottom/tile_size_merge),
                                              per_sub_pixel: false,
-                                             mosaic_patthern_width: mosaic_pattern_width)
+                                             mosaic_pattern_width: mosaic_pattern_width)
             normalize_mismatch(mismatch_texture, mean_mismatch)
             
             // add mismatch texture to the total, accumulated mismatch texture
