@@ -143,8 +143,8 @@ kernel void compute_tile_differences25(texture2d<half, access::read> ref_texture
     int const dy0 = downscale_factor * prev_align.y;
     
     float diff[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    float diff_abs;
-    half tmp_ref;
+    float diff_abs0, diff_abs1;
+    half tmp_ref0, tmp_ref1;
     half tmp_comp[5*68];
     
     // loop over first 4 rows of comp_texture
@@ -189,12 +189,13 @@ kernel void compute_tile_differences25(texture2d<half, access::read> ref_texture
         }
         
         // loop over columns of ref_texture
-        for (int dx = 0; dx < tile_size; dx++) {
+        for (int dx = 0; dx < tile_size; dx+=2) {
             
             ref_tile_x = x0 + dx;
             ref_tile_y = y0 + dy;
             
-            tmp_ref = ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r;
+            tmp_ref0 = ref_texture.read(uint2(ref_tile_x+0, ref_tile_y)).r;
+            tmp_ref1 = ref_texture.read(uint2(ref_tile_x+1, ref_tile_y)).r;
             
             // loop over 25 test displacements
             for (int i = 0; i < 25; i++) {
@@ -205,10 +206,11 @@ kernel void compute_tile_differences25(texture2d<half, access::read> ref_texture
                 // index of corresponding pixel value in tmp_comp
                 tmp_index = ((dy+dy_i)%5)*(tile_size+4) + dx + dx_i;
                 
-                diff_abs = abs(tmp_ref - 2.0f*tmp_comp[tmp_index]);
+                diff_abs0 = abs(tmp_ref0 - 2.0f*tmp_comp[tmp_index+0]);
+                diff_abs1 = abs(tmp_ref1 - 2.0f*tmp_comp[tmp_index+1]);
                 
                 // add difference to corresponding combination
-                diff[i] += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
+                diff[i] += ((1-weight_ssd)*(diff_abs0 + diff_abs1) + weight_ssd*(diff_abs0*diff_abs0 + diff_abs1*diff_abs1));
             }
         }
     }
@@ -252,8 +254,8 @@ kernel void compute_tile_differences_exposure25(texture2d<half, access::read> re
     float sum_v[25] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     float diff[25]  = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     float ratio[25];
-    float diff_abs;
-    half tmp_ref, tmp_comp1;
+    float diff_abs0, diff_abs1;
+    half tmp_ref0, tmp_ref1, tmp_comp_val0, tmp_comp_val1;
     half tmp_comp[5*68];
     
     // loop over first 4 rows of comp_texture
@@ -298,12 +300,13 @@ kernel void compute_tile_differences_exposure25(texture2d<half, access::read> re
         }
         
         // loop over columns of ref_texture
-        for (int dx = 0; dx < tile_size; dx++) {
+        for (int dx = 0; dx < tile_size; dx+=2) {
             
             ref_tile_x = x0 + dx;
             ref_tile_y = y0 + dy;
             
-            tmp_ref = max(FLOAT16_ZERO_VAL, ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r);
+            tmp_ref0 = max(FLOAT16_ZERO_VAL, ref_texture.read(uint2(ref_tile_x+0, ref_tile_y)).r);
+            tmp_ref1 = max(FLOAT16_ZERO_VAL, ref_texture.read(uint2(ref_tile_x+1, ref_tile_y)).r);
               
             // loop over 25 test displacements
             for (int i = 0; i < 25; i++) {
@@ -313,12 +316,20 @@ kernel void compute_tile_differences_exposure25(texture2d<half, access::read> re
                 
                 // index of corresponding pixel value in tmp_comp
                 tmp_index = ((dy+dy_i)%5)*(tile_size+4) + dx + dx_i;
-                tmp_comp1 = tmp_comp[tmp_index];
+                
+                tmp_comp_val0 = tmp_comp[tmp_index+0];
+                tmp_comp_val1 = tmp_comp[tmp_index+1];
          
-                if (tmp_comp1 > -1)
+                if (tmp_comp_val0 > -1)
                 {
-                    sum_u[i] += tmp_ref;
-                    sum_v[i] += 2.0f*tmp_comp1;
+                    sum_u[i] += tmp_ref0;
+                    sum_v[i] += 2.0f*tmp_comp_val0;
+                }
+                
+                if (tmp_comp_val1 > -1)
+                {
+                    sum_u[i] += tmp_ref1;
+                    sum_v[i] += 2.0f*tmp_comp_val1;
                 }
             }
         }
@@ -371,12 +382,13 @@ kernel void compute_tile_differences_exposure25(texture2d<half, access::read> re
         }
         
         // loop over columns of ref_texture
-        for (int dx = 0; dx < tile_size; dx++) {
+        for (int dx = 0; dx < tile_size; dx+=2) {
             
             ref_tile_x = x0 + dx;
             ref_tile_y = y0 + dy;
             
-            tmp_ref = max(FLOAT16_ZERO_VAL, ref_texture.read(uint2(ref_tile_x, ref_tile_y)).r);
+            tmp_ref0 = max(FLOAT16_ZERO_VAL, ref_texture.read(uint2(ref_tile_x+0, ref_tile_y)).r);
+            tmp_ref1 = max(FLOAT16_ZERO_VAL, ref_texture.read(uint2(ref_tile_x+1, ref_tile_y)).r);
               
             // loop over 25 test displacements
             for (int i = 0; i < 25; i++) {
@@ -387,10 +399,11 @@ kernel void compute_tile_differences_exposure25(texture2d<half, access::read> re
                 // index of corresponding pixel value in tmp_comp
                 tmp_index = ((dy+dy_i)%5)*(tile_size+4) + dx + dx_i;
                 
-                diff_abs = abs(tmp_ref - 2.0f*ratio[i]*tmp_comp[tmp_index]);
+                diff_abs0 = abs(tmp_ref0 - 2.0f*ratio[i]*tmp_comp[tmp_index+0]);
+                diff_abs1 = abs(tmp_ref1 - 2.0f*ratio[i]*tmp_comp[tmp_index+1]);
                 
                 // add difference to corresponding combination
-                diff[i] += (1-weight_ssd)*diff_abs + weight_ssd*diff_abs*diff_abs;
+                diff[i] += ((1-weight_ssd)*(diff_abs0 + diff_abs1) + weight_ssd*(diff_abs0*diff_abs0 + diff_abs1*diff_abs1));
             }
         }
     }
