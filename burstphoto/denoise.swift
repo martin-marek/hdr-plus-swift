@@ -157,16 +157,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         }
     }
     
-    // check for non-Bayer sensors that the exposure of images is uniform
-    if (!uniform_exposure && mosaic_pattern_width != 2) {throw AlignmentError.non_bayer_exposure_bracketing}
-    
-    // if user has selected a value different than "Off" for exposure control but has a non-Bayer sensor, warn them that exposure control = "Off" will be used instead
-    var exposure_control = exposure_control
-    if uniform_exposure && exposure_control != "Off" && mosaic_pattern_width != 2 {
-        DispatchQueue.main.async { progress.show_nonbayer_exposure_alert = true }
-        exposure_control = "Off"
-    }
-    
     // if exposure control = "Off" and uniform exposure, set black level and white level to -1
     if exposure_control == "Off" && uniform_exposure {
         white_level         = Array(repeating: -1, count: white_level.count)
@@ -182,14 +172,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         merging_algorithm = "Fast"
     }
 
-    // if user has selected the "16Bit" output bit depth but has a non-Bayer sensor, warn them the "Native" output bit depth will be used instead
-    var output_bit_depth = output_bit_depth
-    if output_bit_depth == "16Bit" && mosaic_pattern_width != 2 {
-     DispatchQueue.main.async { progress.show_nonbayer_bit_depth_alert = true }
-     output_bit_depth = "Native"
-    }
-
     // if user has selected the "16Bit" output bit depth but exposure control set to "Off", warn them the "Native" output bit depth will be used instead
+    var output_bit_depth = output_bit_depth
     if output_bit_depth == "16Bit" && exposure_control == "Off" {
      DispatchQueue.main.async { progress.show_exposure_bit_depth_alert = true }
      output_bit_depth = "Native"
@@ -208,12 +192,11 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         let final_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[ref_idx].width, height: textures[ref_idx].height, mipmapped: false)
         final_texture_descriptor.usage = [.shaderRead, .shaderWrite]
         final_texture = device.makeTexture(descriptor: final_texture_descriptor)!
+        final_texture.label = "Final Texture"
         fill_with_zeros(final_texture)
         
-        if mosaic_pattern_width == 2 {
-            correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction)
-            equalize_exposure(textures, black_level, exposure_bias, ref_idx)
-        }
+        correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction, mosaic_pattern_width)
+        equalize_exposure(textures, black_level, exposure_bias, ref_idx, mosaic_pattern_width)
         
         if noise_reduction == 23.0 {
             try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, color_factors: color_factors, textures: textures, final_texture: final_texture)
@@ -226,16 +209,14 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         last_settings = current_settings
     }
     
-    if (mosaic_pattern_width == 2 && exposure_control != "Off") {
-        correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, ref_idx)
-    }
+    correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, mosaic_pattern_width, ref_idx)
     
     // apply scaling to 16 bit
-    let scale_to_16bit = (output_bit_depth=="16Bit" && mosaic_pattern_width == 2 && exposure_control != "Off")
+    let scale_to_16bit = (output_bit_depth=="16Bit" && exposure_control != "Off")
     let factor_16bit = (scale_to_16bit ? Int(pow(2.0, 16.0-ceil(log2(Double(white_level[ref_idx]))))+0.5) : 1)
 
     // convert final image to 16 bit integer
-    let output_texture_uint16 = convert_float_to_uint16(final_texture, (white_level[ref_idx] == -1 ? 1000000 : factor_16bit*white_level[ref_idx]), black_level[ref_idx], factor_16bit)
+    let output_texture_uint16 = convert_float_to_uint16(final_texture, (white_level[ref_idx] == -1 ? 1000000 : factor_16bit*white_level[ref_idx]), black_level[ref_idx], factor_16bit, mosaic_pattern_width)
       
     print("Time to align+merge all images: ", Float(DispatchTime.now().uptimeNanoseconds - t) / 1_000_000_000)
     t = DispatchTime.now().uptimeNanoseconds
@@ -320,6 +301,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         let norm_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: final_texture.width, height: final_texture.height, mipmapped: false)
         norm_texture_descriptor.usage = [.shaderRead, .shaderWrite]
         let norm_texture = device.makeTexture(descriptor: norm_texture_descriptor)!
+        norm_texture.label = "Norm Texture"
         fill_with_zeros(norm_texture)
         
         // temporal averaging with exposure weighting

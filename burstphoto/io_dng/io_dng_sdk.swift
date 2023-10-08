@@ -141,8 +141,10 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     let texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: Int(width), height: Int(height), mipmapped: false)
     texture_descriptor.usage = [.shaderRead, .shaderWrite]
     guard let texture = device.makeTexture(descriptor: texture_descriptor) else {throw ImageIOError.metal_error}
-    let mtl_region = MTLRegionMake2D(0, 0, Int(width), Int(height))
-    texture.replace(region: mtl_region, mipmapLevel: 0, withBytes: pixel_bytes!, bytesPerRow: bytes_per_row)
+    texture.label = url.lastPathComponent
+    
+    texture.replace(region: MTLRegionMake2D(0, 0, Int(width), Int(height)), mipmapLevel: 0, withBytes: pixel_bytes!, bytesPerRow: bytes_per_row)
+    
     
     free(pixel_bytes!)
 
@@ -390,10 +392,9 @@ func size_of_and_chronological_contents_of(directory: URL) -> ([URL], [Double]) 
         dates.append(fileResourceValue.addedToDirectoryDate ?? Date(timeIntervalSince1970: 0)) // If it's missing default it to being the oldest file in the directory
         sizes.append(Double(fileResourceValue.fileSize ?? 0) / 1000 / 1000 / 1000)
     }
-    // Sort the dates and
+    // Sort the dates and sizes
     let sorted_indicies = dates.enumerated().sorted{$0.element < $1.element}.map{$0.offset}
     // Sort based on date and return only the sorted URLs.
-//    let sorted_data = zip(dates, contents, sizes).sorted{ $0.0 < $1.0 }
     return (
         sorted_indicies.map{contents[$0]},
         sorted_indicies.map{sizes[$0]}

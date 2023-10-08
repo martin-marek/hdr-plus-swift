@@ -76,7 +76,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         // set comparison texture
         let comp_texture = extend_texture(textures[comp_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
      
-        let black_level_mean = 0.25*Double(black_level[comp_idx][0] + black_level[comp_idx][1] + black_level[comp_idx][2] + black_level[comp_idx][3])
+        let black_level_mean = Double(black_level[comp_idx].reduce(0, +)) / Double(black_level[comp_idx].count)
         
         // align comparison texture
         let aligned_texture = crop_texture(
@@ -103,7 +103,8 @@ func color_difference(between texture1: MTLTexture, and texture2: MTLTexture, mo
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width/mosaic_pattern_width, height: texture1.height/mosaic_pattern_width, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let output_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    out_texture.label = "\(texture1.label!.components(separatedBy: ":")[0]): Color Difference"
     
     // compute pixel pairwise differences
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -115,13 +116,13 @@ func color_difference(between texture1: MTLTexture, and texture2: MTLTexture, mo
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(texture1, index: 0)
     command_encoder.setTexture(texture2, index: 1)
-    command_encoder.setTexture(output_texture, index: 2)
+    command_encoder.setTexture(out_texture, index: 2)
     command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
     
-    return output_texture
+    return out_texture
 }
 
 
@@ -131,7 +132,7 @@ func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, 
     let texture_diff = color_difference(between: texture, and: texture_blurred, mosaic_pattern_width: mosaic_pattern_width)
     
     // compute the average of the difference between the original and the blurred texture
-    let mean_diff = texture_mean(texture_diff, .r)
+    let mean_diff = texture_mean(texture_diff, per_sub_pixel: false, mosaic_pattern_width: mosaic_pattern_width)
     
     return mean_diff
 }
@@ -149,6 +150,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     let weight_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: texture_diff.width, height: texture_diff.height, mipmapped: false)
     weight_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let weight_texture = device.makeTexture(descriptor: weight_texture_descriptor)!
+    weight_texture.label = "\(comp_texture.label!.components(separatedBy: ":")[0]): Weight Texture"
     
     // compute merge weight
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -170,8 +172,8 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     let weight_texture_upsampled = upsample(weight_texture, to_width: ref_texture.width, to_height: ref_texture.height, using: .Bilinear)
     
     // average the input textures based on the weight
-    let output_texture = add_texture_weighted(ref_texture, comp_texture, weight_texture_upsampled)
+    let merged_texture = add_texture_weighted(ref_texture, comp_texture, weight_texture_upsampled)
     
-    return output_texture
+    return merged_texture
 }
 

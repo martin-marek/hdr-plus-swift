@@ -193,73 +193,6 @@ kernel void add_texture_weighted(texture2d<float, access::read> texture1 [[textu
 }
 
 
-kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
-                      device float *out_buffer [[buffer(0)]],
-                      constant int& width [[buffer(1)]],
-                      uint gid [[thread_position_in_grid]]) {
-    float total = 0;
-    
-    for (int x = 0; x < width; x++) {
-        total += in_texture.read(uint(x)).r;
-    }
-    
-    float avg = total / width;
-    out_buffer[0] = avg;
-}
-
-
-kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
-                      texture1d<float, access::write> out_texture [[texture(1)]],
-                      uint gid [[thread_position_in_grid]]) {
-    uint x = gid;
-    int texture_height = in_texture.get_height();
-    float total = 0;
-    
-    for (int y = 0; y < texture_height; y++) {
-        total += in_texture.read(uint2(x, y)).r;
-    }
-    
-    float avg = total / texture_height;
-    out_texture.write(avg, x);
-}
-
-
-kernel void average_x_rgba(texture1d<float, access::read> in_texture [[texture(0)]],
-                           device float *out_buffer [[buffer(0)]],
-                           constant int& width [[buffer(1)]],
-                           uint gid [[thread_position_in_grid]]) {
-    
-    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    
-    for (int x = 0; x < width; x++) {
-        total += in_texture.read(uint(x));
-    }
-    
-    float4 avg = total / width;
-    out_buffer[0] = avg[0];
-    out_buffer[1] = avg[1];
-    out_buffer[2] = avg[2];
-    out_buffer[3] = avg[3];
-}
-
-
-kernel void average_y_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
-                           texture1d<float, access::write> out_texture [[texture(1)]],
-                           uint gid [[thread_position_in_grid]]) {
-    uint x = gid;
-    
-    int texture_height = in_texture.get_height();
-    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    
-    for (int y = 0; y < texture_height; y++) {
-        total += in_texture.read(uint2(x, y));
-    }
-    
-    float4 avg = total / texture_height;
-    out_texture.write(avg, x);
-}
-
-
 kernel void blur_mosaic_texture(texture2d<float, access::read> in_texture [[texture(0)]],
                                 texture2d<float, access::write> out_texture [[texture(1)]],
                                 constant int& kernel_size [[buffer(0)]],
@@ -310,36 +243,22 @@ kernel void blur_mosaic_texture(texture2d<float, access::read> in_texture [[text
 }
 
 
-kernel void convert_float_to_uint16(texture2d<float, access::read> in_texture [[texture(0)]],
-                                    texture2d<uint, access::write> out_texture [[texture(1)]],
-                                    constant int& white_level [[buffer(0)]],
-                                    constant int& black_level0 [[buffer(1)]],
-                                    constant int& black_level1 [[buffer(2)]],
-                                    constant int& black_level2 [[buffer(3)]],
-                                    constant int& black_level3 [[buffer(4)]],
-                                    constant int& factor_16bit [[buffer(5)]],
+kernel void convert_float_to_uint16(texture2d<float, access::read>  in_texture  [[texture(0)]],
+                                    texture2d<uint,  access::write> out_texture [[texture(1)]],
+                                    constant int& white_level          [[buffer(0)]],
+                                    constant int& factor_16bit         [[buffer(1)]],
+                                    constant int& mosaic_pattern_width [[buffer(2)]],
+                                    constant int* black_levels         [[buffer(3)]],
                                     uint2 gid [[thread_position_in_grid]]) {
-    int const x = gid.x*2;
-    int const y = gid.y*2;
-    
     // load args
-    float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
-    
-    // extract pixel values of 2x2 super pixel
-    float4 pixel_value = float4(in_texture.read(uint2(x,   y)).r,
-                                in_texture.read(uint2(x+1, y)).r,
-                                in_texture.read(uint2(x,   y+1)).r,
-                                in_texture.read(uint2(x+1, y+1)).r);
-    
+    float const black_level = black_levels[(gid.x % mosaic_pattern_width) + mosaic_pattern_width * (gid.y % mosaic_pattern_width)];
+
     // apply potential scaling to 16 bit and convert to integer
-    int4 out_value = int4(round((pixel_value - black_level)*factor_16bit + black_level));
-    out_value = clamp(out_value, 0, min(white_level, int(UINT16_MAX_VAL)));
+    int out_value = int(round((in_texture.read(gid).r - black_level)*factor_16bit + black_level));
+    out_value     = clamp(out_value, 0, min(white_level, int(UINT16_MAX_VAL)));
     
     // write back into texture
-    out_texture.write(uint(out_value[0]), uint2(x,   y));
-    out_texture.write(uint(out_value[1]), uint2(x+1, y));
-    out_texture.write(uint(out_value[2]), uint2(x,   y+1));
-    out_texture.write(uint(out_value[3]), uint2(x+1, y+1));
+    out_texture.write(uint(out_value), gid);
 }
 
 
@@ -394,43 +313,32 @@ kernel void copy_texture(texture2d<float, access::read> in_texture [[texture(0)]
 
 
 /**
- Hot pixel correction based on the idea that hot pixels appear at the same pixel location in all images
+ Hotpixel correction for Bayer images.
  */
-kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[texture(0)]],
-                              texture2d<float, access::read> in_texture [[texture(1)]],
-                              texture2d<float, access::write> out_texture [[texture(2)]],
-                              constant float* mean_texture_buffer [[buffer(0)]],
-                              constant int& black_level0 [[buffer(1)]],
-                              constant int& black_level1 [[buffer(2)]],
-                              constant int& black_level2 [[buffer(3)]],
-                              constant int& black_level3 [[buffer(4)]],
-                              constant float& hot_pixel_threshold [[buffer(5)]],
-                              constant float& hot_pixel_multiplicator [[buffer(6)]],
-                              constant float& correction_strength [[buffer(7)]],
-                              uint2 gid [[thread_position_in_grid]]) {
-       
-    int const x = gid.x+2;
-    int const y = gid.y+2;
-    
-    // load args
-    float mean_texture = 0.0f;
-    float black_level = 0.0f;
+kernel void correct_hotpixels_bayer(texture2d<float, access::read>  average_texture [[texture(0)]],
+                                    texture2d<float, access::read>  in_texture      [[texture(1)]],
+                                    texture2d<float, access::write> out_texture     [[texture(2)]],
+                                    constant float* mean_texture_buffer     [[buffer(0)]],
+                                    constant int*   black_levels            [[buffer(1)]],
+                                    constant float& hot_pixel_threshold     [[buffer(2)]],
+                                    constant float& hot_pixel_multiplicator [[buffer(3)]],
+                                    constant float& correction_strength     [[buffer(4)]],
+                                    uint2 gid [[thread_position_in_grid]]) {
+    // +2 to offset from top-left edge
+    int const x = gid.x + 2;
+    int const y = gid.y + 2;
     
     // extract color channel-dependent mean value of the average texture of all images and the black level
-    if (x%2 == 0 & y%2 == 0) {
-        mean_texture = mean_texture_buffer[0] - black_level0;
-        black_level = float(black_level0);
-    } else if (x%2 == 1 & y%2 == 0) {
-        mean_texture = mean_texture_buffer[1] - black_level1;
-        black_level = float(black_level1);
-    } else if (x%2 == 0 & y%2 == 1) {
-        mean_texture = mean_texture_buffer[2] - black_level2;
-        black_level = float(black_level2);
-    } else if (x%2 == 1 & y%2 == 1) {
-        mean_texture = mean_texture_buffer[3] - black_level3;
-        black_level = float(black_level3);
-    }
+    int const ix = x % 2;
+    int const iy = 2 * (y % 2);
+    float const mean_texture = mean_texture_buffer[ix + iy] - black_levels[ix + iy];
+    float const black_level  = float(black_levels[ix + iy]);
+    
+    if (ix + iy == 2 || ix + iy == 3) {  // Green pixel
         
+    } else {  //
+        
+    }
     // calculate weighted sum of 8 pixels surrounding the potential hot pixel based on the average texture
     float sum =   average_texture.read(uint2(x-2, y-2)).r;
     sum      +=   average_texture.read(uint2(x+2, y-2)).r;
@@ -441,12 +349,17 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
     sum      += 2*average_texture.read(uint2(x+0, y-2)).r;
     sum      += 2*average_texture.read(uint2(x+0, y+2)).r;
     
+    sum /= 12.0;
+    
     // extract value of potential hot pixel from the average texture and divide by sum of surrounding pixels
     float const pixel_value = average_texture.read(uint2(x, y)).r;
-    float const pixel_ratio = max(pixel_value-black_level, 1.0f)/max(sum/12.0f-black_level, 1.0f);
+    float const pixel_ratio = max(1.0, pixel_value - black_level) / max(1.0, sum - black_level);
     
-    // if hot pixel is detected
-    if (pixel_ratio >= hot_pixel_threshold & pixel_value >= 2.0f*mean_texture) {
+    if (pixel_ratio >= hot_pixel_threshold
+        & pixel_value >= 2 * mean_texture) {
+        // calculate weight for blending to have a smooth transition for not so obvious hot pixels
+        float const weight = 0.5 * correction_strength * min(2.0,
+                                                             hot_pixel_multiplicator * (pixel_ratio - hot_pixel_threshold));
         
         // calculate mean value of 4 surrounding values
         float sum2 = in_texture.read(uint2(x-2, y+0)).r;
@@ -454,11 +367,136 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
         sum2      += in_texture.read(uint2(x+0, y-2)).r;
         sum2      += in_texture.read(uint2(x+0, y+2)).r;
         
-        // calculate weight for blending to have a smooth transition for not so obvious hot pixels
-        float const weight = correction_strength*0.5f*min(hot_pixel_multiplicator*(pixel_ratio-hot_pixel_threshold), 2.0f);
+        sum2 /= 4.0;
         
         // blend values and replace hot pixel value
-        out_texture.write(weight*0.25f*sum2 + (1.0f-weight)*in_texture.read(uint2(x, y)).r, uint2(x, y));
+        out_texture.write(weight * sum2 + (1.0 - weight) * in_texture.read(uint2(x, y)).r,
+                          uint2(x, y));
+    }
+}
+
+
+/**
+ Similar idea to Bayer correction except that it requires extra work since the mosaic pattern is so large.
+ The same approach used for the Bayer images would leave to made color artifacts in small regions with high contrast (e.g. white lines on a black surface would gain a strong purple color).
+ 
+ 
+ Inspired by : https://github.com/darktable-org/darktable/blob/1aca07c62d1c8de7129c93f653bfbf8b4f6a1874/src/iop/hotpixels.c#L231-L343
+ */
+kernel void correct_hotpixels_xtrans(texture2d<float, access::read>  average_texture [[texture(0)]],
+                                     texture2d<float, access::read>  in_texture      [[texture(1)]],
+                                     texture2d<float, access::write> out_texture     [[texture(2)]],
+                                     constant float* mean_texture_buffer     [[buffer(0)]],
+                                     constant int*   black_levels            [[buffer(1)]],
+                                     constant float& hot_pixel_threshold     [[buffer(2)]],
+                                     constant float& hot_pixel_multiplicator [[buffer(3)]],
+                                     constant float& correction_strength     [[buffer(4)]],
+                                     uint2 gid [[thread_position_in_grid]]) {
+    // A more accurate approach for the R and B would be to average out the two knight positions that have 1 distance between them, but that seems more computationally expensive.
+    // Lookup table for the relative positions of the closest 4 pixels of the same color (🐷 approach)
+    int offset[6][6][4][2] = {
+        { // Row 0
+            {{ 0, -1}, { 1, -1}, { 1,  0}, {-1,  1}}, // G
+            {{ 0, -1}, { 1,  1}, {-1,  0}, {-1, -1}}, // G
+            {{ 1, -2}, { 2,  1}, { 0,  2}, {-2,  1}}, // B
+            {{ 0, -1}, { 1, -1}, { 1,  0}, {-1,  1}}, // G
+            {{ 0, -1}, { 1,  1}, {-1,  0}, {-1, -1}}, // G
+            {{ 1, -2}, { 2,  1}, { 0,  2}, {-2,  1}}  // R
+        },
+        { // Row 1
+            {{-1,  2}, {-2,  0}, {-1, -2}, { 2, -1}}, // B
+            {{ 1, -2}, { 2,  0}, { 1,  2}, {-2,  1}}, // R
+            {{ 1, -1}, { 1,  1}, {-1,  1}, {-1, -1}}, // G
+            {{ 2, -1}, { 2,  1}, {-1,  2}, {-2,  0}}, // R
+            {{ 1, -2}, { 2,  0}, { 1,  2}, {-2,  1}}, // B
+            {{ 1, -1}, { 1,  1}, {-1,  1}, {-1, -1}}  // G
+        },
+        { // Row 2
+            {{ 1,  0}, { 1,  1}, { 0,  1}, {-1,  1}}, // G
+            {{ 1, -1}, { 0,  1}, {-1,  1}, {-1,  0}}, // G
+            {{-2, -1}, { 0, -2}, { 2, -1}, { 1, -2}}, // B
+            {{ 1,  0}, { 1,  1}, { 0,  1}, {-1,  1}}, // G
+            {{ 1, -1}, { 0,  1}, {-1,  1}, {-1,  0}}, // G
+            {{-2, -1}, { 0, -2}, { 2, -1}, { 1, -2}}  // R
+        },
+        { // Row 3
+            {{ 0, -1}, { 1, -1}, { 1,  0}, {-1,  1}}, // G
+            {{ 0, -1}, { 1,  1}, {-1,  0}, {-1, -1}}, // G
+            {{ 1, -2}, { 2,  1}, { 0,  2}, {-2,  1}}, // R
+            {{ 0, -1}, { 1, -1}, { 1,  0}, {-1,  1}}, // G
+            {{ 0, -1}, { 1,  1}, {-1,  0}, {-1, -1}}, // G
+            {{ 1, -2}, { 2,  1}, { 0,  2}, {-2,  1}}  // B
+        },
+        { // Row 4
+            {{-1,  2}, {-2,  0}, {-1, -2}, { 2, -1}}, // R
+            {{ 1, -2}, { 2,  0}, { 1,  2}, {-2,  1}}, // B
+            {{ 1, -1}, { 1,  1}, {-1,  1}, {-1, -1}}, // G
+            {{ 2, -1}, { 2,  1}, {-1,  2}, {-2,  0}}, // B
+            {{ 1, -2}, { 2,  0}, { 1,  2}, {-2,  1}}, // R
+            {{ 1, -1}, { 1,  1}, {-1,  1}, {-1, -1}}  // G
+        },
+        { // Row 5
+            {{ 1,  0}, { 1,  1}, { 0,  1}, {-1,  1}}, // G
+            {{ 1, -1}, { 0,  1}, {-1,  1}, {-1,  0}}, // G
+            {{-2, -1}, { 0, -2}, { 2, -1}, { 1, -2}}, // R
+            {{ 1,  0}, { 1,  1}, { 0,  1}, {-1,  1}}, // G
+            {{ 1, -1}, { 0,  1}, {-1,  1}, {-1,  0}}, // G
+            {{-2, -1}, { 0, -2}, { 2, -1}, { 1, -2}}  // B
+        }
+    };
+    
+    // +2 to offset from top-left edge
+    int const x = gid.x + 2;
+    int const y = gid.y + 2;
+    
+    // extract color channel-dependent mean value of the average texture of all images and the black level
+    int const ix = x % 6;
+    int const iy = y % 6;
+    float const mean_texture = mean_texture_buffer[ix + 6*iy] - black_levels[ix + 6*iy];
+    float const black_level  = float(black_levels[ix + 6*iy]);
+    
+    // Weighed average of the 4 nearest pixels of the same color based on the average texture
+    float sum    = 0.0;
+    float total  = 0.0;
+    float weight = 0.0;
+    int dx       = 0;
+    int dy       = 0;
+    for (int off = 0; off < 4; off++) {
+        dx     = offset[iy][ix][off][0];
+        dy     = offset[iy][ix][off][1];
+        weight = 1.0/sqrt(pow(float(dx), 2) + pow(float(dy), 2));
+        
+        total += weight;
+        float val = average_texture.read(uint2(x+dx, y+dy)).r; // TODO: This is reading in garbage
+        sum   += weight * val;
+    }
+    sum /= total;
+    
+    // extract value of potential hot pixel from the average texture and divide by sum of surrounding pixels
+    float const pixel_value = average_texture.read(uint2(x, y)).r;
+    float const pixel_ratio = max(1.0,
+                                  pixel_value - black_level) / max(1.0,
+                                                                   sum - black_level);
+    
+    if (pixel_ratio >= hot_pixel_threshold
+        & pixel_value >= 2 * mean_texture) {
+        // calculate weight for blending to have a smooth transition for not so obvious hot pixels
+        float const weight = 0.5 * correction_strength * min(2.0,
+                                                             hot_pixel_multiplicator * (pixel_ratio - hot_pixel_threshold));
+        
+        // Mean of the 4 nearest pixels of the same color
+        float sum2 = 0.0;
+        for (int off = 0; off < 4; off++) {
+            dx = offset[iy][ix][off][0];
+            dy = offset[iy][ix][off][1];
+            
+            sum2 += in_texture.read(uint2(x+dx, y+dy)).r;
+        }
+        sum2 /= 4.0;
+        
+        // blend values and replace hot pixel value
+        out_texture.write(weight * sum2 + (1.0 - weight) * in_texture.read(uint2(x, y)).r,
+                          uint2(x, y));
     }
 }
 
@@ -474,6 +512,26 @@ kernel void crop_texture(texture2d<float, access::read> in_texture [[texture(0)]
   
     float color_value = in_texture.read(uint2(x, y)).r;
     out_texture.write(color_value, gid);
+}
+
+
+kernel void divide_buffer(device   float  *in_buffer   [[buffer(0)]],
+                          device   float  *out_buffer  [[buffer(1)]],
+                          constant float& divisor      [[buffer(2)]],
+                          constant int&   buffer_size  [[buffer(3)]],  // Unused. Here to keep signature consistent with sum_divide_buffer
+                          uint2 gid [[thread_position_in_grid]]) {
+    out_buffer[gid.x] = in_buffer[gid.x] / divisor;
+}
+
+kernel void sum_divide_buffer(device   float  *in_buffer   [[buffer(0)]],
+                              device   float  *out_buffer  [[buffer(1)]],
+                              constant float& divisor      [[buffer(2)]],
+                              constant int&   buffer_size  [[buffer(3)]],
+                              uint2 gid [[thread_position_in_grid]]) {
+    for (int i = 0; i < buffer_size; i++) {
+        out_buffer[0] += in_buffer[i];
+    }
+    out_buffer[0] /= divisor;
 }
 
 
@@ -504,13 +562,32 @@ kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[
 }
 
 
-kernel void sum_rect_columns(texture2d<uint, access::read> in_texture [[texture(0)]],
-                             texture2d<float, access::write> out_texture [[texture(1)]],
-                             constant int& top [[buffer(1)]],
-                             constant int& left [[buffer(2)]],
-                             constant int& bottom [[buffer(3)]],
-                             constant int& mosaic_pattern_width [[buffer(4)]],
-                             uint2 gid [[thread_position_in_grid]]) {
+kernel void sum_rect_columns_float(texture2d<float, access::read> in_texture [[texture(0)]],
+                                   texture2d<float, access::write> out_texture [[texture(1)]],
+                                   constant int& top [[buffer(1)]],
+                                   constant int& left [[buffer(2)]],
+                                   constant int& bottom [[buffer(3)]],
+                                   constant int& mosaic_pattern_width [[buffer(4)]],
+                                   uint2 gid [[thread_position_in_grid]]) {
+    uint x = left + gid.x;
+    uint dy = gid.y;
+    
+    float total = 0;
+    for (int y = top+dy; y < bottom; y += mosaic_pattern_width) {
+        total += in_texture.read(uint2(x, y)).r;
+    }
+
+    out_texture.write(total, gid);
+}
+
+
+kernel void sum_rect_columns_uint(texture2d<uint, access::read> in_texture [[texture(0)]],
+                                  texture2d<float, access::write> out_texture [[texture(1)]],
+                                  constant int& top [[buffer(1)]],
+                                  constant int& left [[buffer(2)]],
+                                  constant int& bottom [[buffer(3)]],
+                                  constant int& mosaic_pattern_width [[buffer(4)]],
+                                  uint2 gid [[thread_position_in_grid]]) {
     uint x = left + gid.x;
     uint dy = gid.y;
     
