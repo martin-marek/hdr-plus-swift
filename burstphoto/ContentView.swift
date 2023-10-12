@@ -540,16 +540,31 @@ struct SettingsButton: View {
     }
     
     var body: some View {
-        Button(action: action, label: {
-            ZStack {
-                Circle()
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
-                    .background(Circle().foregroundColor(Color(NSColor.controlColor)))
-                    .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
-                    .frame(width: 25, height: 25)
-                Image(systemName: "gearshape").resizable().frame(width: 15, height: 15).opacity(0.8)
-            }
-        })
-        .buttonStyle(PlainButtonStyle())
+        // https://stackoverflow.com/questions/65355696
+        if #available(macOS 14, *) {
+            SettingsLink(label: {
+                ZStack {
+                    Circle()
+                        .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
+                        .background(Circle().foregroundColor(Color(NSColor.controlColor)))
+                        .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
+                        .frame(width: 25, height: 25)
+                    Image(systemName: "gearshape").resizable().frame(width: 15, height: 15).opacity(0.8)
+                }
+            })
+            .buttonStyle(PlainButtonStyle())
+        } else {
+            Button(action: action, label: {
+                ZStack {
+                    Circle()
+                        .strokeBorder(Color(NSColor.separatorColor), lineWidth: 0.5)
+                        .background(Circle().foregroundColor(Color(NSColor.controlColor)))
+                        .shadow(color: Color(NSColor.separatorColor).opacity(0.3), radius: 1)
+                        .frame(width: 25, height: 25)
+                    Image(systemName: "gearshape").resizable().frame(width: 15, height: 15).opacity(0.8)
+                }
+            })
+            .buttonStyle(PlainButtonStyle())
+        }
     }
 }
