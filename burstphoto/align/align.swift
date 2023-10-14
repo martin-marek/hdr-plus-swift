@@ -58,6 +58,9 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
         // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
         prev_alignment = correct_upsampling_error(ref_layer, comp_layer, prev_alignment, downscale_factor, uniform_exposure, (i != 0), tile_info)
           
+        // The parameter 'use_ssd' employed in correct_upsamling_error() and comute_tile_diff() specifies if the calculated cost term shall be based on the absolute difference (L1 norm -> use_ssd = false) or on the sum of squared difference (L2 norm -> use_ssd = true). The alignment is done differently depending on the pyramid scale: for levels with reduced resolution, the L2 norm is calculated while for the highest resolution level, the L1 norm is calculated. This choice is identical to the original publication.
+        // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
+        
         // compute tile differences
         let tile_diff = compute_tile_diff(ref_layer, comp_layer, prev_alignment, downscale_factor, uniform_exposure, (i != 0), tile_info)
       

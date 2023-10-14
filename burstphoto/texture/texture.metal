@@ -523,7 +523,7 @@ kernel void prepare_texture(texture2d<uint, access::read> in_texture [[texture(0
     
     // correct exposure
     pixel_value = (pixel_value - black_level)*corr_factor + black_level;
-    pixel_value = clamp(pixel_value, 0.0f, float(FLOAT16_MAX_VAL));
+    pixel_value = max(pixel_value, 0.0f);
     
     out_texture.write(pixel_value, uint2(gid.x+pad_left, gid.y+pad_top));
 }
