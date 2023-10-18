@@ -328,15 +328,23 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         let norm_texture = device.makeTexture(descriptor: norm_texture_descriptor)!
         fill_with_zeros(norm_texture)
         
+        var norm_counter = 0
+        
         // temporal averaging with exposure weighting
         for comp_idx in 0..<textures.count {
             let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level, comp_idx)
-            add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], ((comp_idx==exp_idx) ? 1_000_000 : white_level), black_level[comp_idx])
+                       
+            if exposure_bias[comp_idx] == exposure_bias[exp_idx] {
+                add_texture_highlights(comp_texture, final_texture, 1, white_level, black_level[comp_idx], color_factors[comp_idx])
+                norm_counter += 1
+            } else {
+                add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], white_level, black_level[comp_idx], color_factors[comp_idx])
+            }
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
         
         // normalization of the final image
-        normalize_texture(final_texture, norm_texture)
+        normalize_texture(final_texture, norm_texture, norm_counter)
         // If color_factor is NOT available, a negative value will be set.
     } else if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
         // temporal averaging with extrapolation of green channels for very bright pixels

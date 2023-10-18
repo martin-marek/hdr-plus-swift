@@ -12,6 +12,7 @@ let average_y_state = try! device.makeComputePipelineState(function: mfl.makeFun
 let average_x_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x_rgba")!)
 let average_y_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y_rgba")!)
 let blur_mosaic_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_mosaic_texture")!)
+let calculate_weight_highlights_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_weight_highlights")!)
 let convert_float_to_uint16_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_float_to_uint16")!)
 let convert_to_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_to_bayer")!)
 let convert_to_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_to_rgba")!)
@@ -78,9 +79,15 @@ func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture,
 }
 
 
-func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ norm_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level: [Int]) {
+func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ norm_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double]) {
     
     let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
+    
+    let color_factor_mean = 0.25*(color_factors[0]+2.0*color_factors[1]+color_factors[2])
+    
+    let in_texture_blurred = blur(in_texture, with_pattern_width: 1, using_kernel_size: 1)
+    
+    let weight_highlights_texture_blurred = calculate_weight_highlights(in_texture, exposure_bias, white_level, black_level_mean)
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Add Texture (Exposure)"
@@ -90,15 +97,19 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(out_texture, index: 1)
-    command_encoder.setTexture(norm_texture, index: 2)
+    command_encoder.setTexture(in_texture_blurred, index: 1)
+    command_encoder.setTexture(weight_highlights_texture_blurred, index: 2)
+    command_encoder.setTexture(out_texture, index: 3)
+    command_encoder.setTexture(norm_texture, index: 4)
     command_encoder.setBytes([Int32(exposure_bias)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 1)
     command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 2)
+    command_encoder.setBytes([Float32(color_factor_mean)], length: MemoryLayout<Float32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
 }
+
 
 /// Calculate the weighted average of `texture1` and `texture2` using the spatially varying weights specified in `weight_texture`.
 /// Larger weights bias towards `texture1`.
@@ -238,6 +249,38 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
     }
     
     return black_level_from_masked_area.map { Int(round($0)) }
+}
+
+
+func calculate_weight_highlights(_ in_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level_mean: Double) -> MTLTexture {
+    
+    let weight_highlights_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: in_texture.width, height: in_texture.height, mipmapped: false)
+    weight_highlights_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    weight_highlights_texture_descriptor.storageMode = .private
+    let weight_highlights_texture = device.makeTexture(descriptor: weight_highlights_texture_descriptor)!
+  
+    let kernel_size = 4
+    
+    let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Calculate highlights weight"
+    let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    let state = calculate_weight_highlights_state
+    command_encoder.setComputePipelineState(state)
+    let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(weight_highlights_texture, index: 1)
+    command_encoder.setBytes([Int32(exposure_bias)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 1)
+    command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 2)
+    command_encoder.setBytes([Int32(kernel_size)], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.endEncoding()
+    command_buffer.commit()
+    
+    let weight_highlights_texture_blurred = blur(weight_highlights_texture, with_pattern_width: 1, using_kernel_size: 5)
+    
+    return weight_highlights_texture_blurred
 }
 
 
@@ -510,7 +553,7 @@ func get_threads_per_thread_group(_ state: MTLComputePipelineState, _ threads_pe
 }
 
 
-func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture) {
+func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture, _ norm_counter: Int) {
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Normalize Texture"
@@ -521,6 +564,7 @@ func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture) {
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(norm_texture, index: 1)
+    command_encoder.setBytes([Float32(norm_counter)], length: MemoryLayout<Float32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()

@@ -59,6 +59,6 @@ Some example configurations and potential applications are shown in the table be
 |:-------------:|:---------------:|:-----------------:|:--------:|
 | uniform exposure; NR: 1 to 22          | +    | +++ | night scene, astro photography |
 | bracketed exposure; NR: 1 to 22        | ++   | ++  | daylight HDR scene |
-| uniform exposure; NR: simple average   | +++  | -   | static scene with tripod, virtual long exposure |
-| bracketed exposure; NR: simple average | ++++ | --  | static HDR scene with tripod |
+| uniform exposure; NR: simple average   | +++  | &minus; | static scene with tripod, virtual long exposure |
+| bracketed exposure; NR: simple average | ++++ | &minus; &minus; | static HDR scene with tripod |
 
