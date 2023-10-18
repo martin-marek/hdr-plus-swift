@@ -176,6 +176,18 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
 }
 
 
+kernel void calculate_abs_diff_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
+                                    texture2d<float, access::read> aligned_texture [[texture(1)]],
+                                    texture2d<float, access::write> abs_diff_texture [[texture(2)]],
+                                    constant int& tile_size [[buffer(0)]],
+                                    uint2 gid [[thread_position_in_grid]]) {
+    
+    float4 const abs_diff = abs(ref_texture.read(gid) - aligned_texture.read(gid));
+    
+    abs_diff_texture.write(abs_diff, gid);
+}
+
+
 kernel void calculate_highlights_norm_rgba(texture2d<float, access::read> aligned_texture [[texture(0)]],
                                            texture2d<float, access::write> highlights_norm_texture [[texture(1)]],
                                            constant int& tile_size [[buffer(0)]],
@@ -219,17 +231,16 @@ kernel void calculate_highlights_norm_rgba(texture2d<float, access::read> aligne
 }
 
 
-kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [[texture(0)]],
-                                    texture2d<float, access::read> aligned_texture [[texture(1)]],
-                                    texture2d<float, access::read> rms_texture [[texture(2)]],
-                                    texture2d<float, access::write> mismatch_texture [[texture(3)]],
+kernel void calculate_mismatch_rgba(texture2d<float, access::read> abs_diff_texture [[texture(0)]],
+                                    texture2d<float, access::read> rms_texture [[texture(1)]],
+                                    texture2d<float, access::write> mismatch_texture [[texture(2)]],
                                     constant int& tile_size [[buffer(0)]],
                                     constant float& exposure_factor [[buffer(1)]],
                                     uint2 gid [[thread_position_in_grid]]) {
         
     // compute tile positions from gid
-    int const m0 = gid.x*tile_size;
-    int const n0 = gid.y*tile_size;
+    int const x0 = gid.x*tile_size;
+    int const y0 = gid.y*tile_size;
     
     // use only estimated shot noise here
     float4 const noise_est = rms_texture.read(gid);
@@ -239,16 +250,16 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
     // use a spatial support twice of the tile size used for merging
     
     // clamp at top/left border of image frame
-    int const x_start = max(0, m0 - tile_size/2);
-    int const y_start = max(0, n0 - tile_size/2);
+    int const x_start = max(0, x0 - tile_size/2);
+    int const y_start = max(0, y0 - tile_size/2);
     
     // clamp at bottom/right border of image frame
-    int const x_end = min(int(ref_texture.get_width()-1),  m0 + tile_size*3/2);
-    int const y_end = min(int(ref_texture.get_height()-1), n0 + tile_size*3/2);
+    int const x_end = min(int(abs_diff_texture.get_width()-1),  x0 + tile_size*3/2);
+    int const y_end = min(int(abs_diff_texture.get_height()-1), y0 + tile_size*3/2);
     
     // calculate shift for cosine window to shift to range 0 - (tile_size-1)
-    int const x_shift = -(m0 - tile_size/2);
-    int const y_shift = -(n0 - tile_size/2);
+    int const x_shift = -(x0 - tile_size/2);
+    int const y_shift = -(y0 - tile_size/2);
     
     // pre-calculate factors for sine and cosine calculation
     float const angle = -2*PI/float(tile_size);
@@ -263,7 +274,7 @@ kernel void calculate_mismatch_rgba(texture2d<float, access::read> ref_texture [
             // use modified raised cosine window to apply lower weights at outer regions of the patch
             norm_cosine = (0.5f-0.17f*cos(-angle*((dx+x_shift)+0.5f)))*(0.5f-0.17f*cos(-angle*((dy+y_shift)+0.5f)));
             
-            tile_diff += norm_cosine * abs(ref_texture.read(uint2(dx, dy)) - aligned_texture.read(uint2(dx, dy)));
+            tile_diff += norm_cosine * abs_diff_texture.read(uint2(dx, dy));
              
             n_total += norm_cosine;
         }
@@ -539,8 +550,7 @@ kernel void backward_dft(texture2d<float, access::read> in_texture_ft [[texture(
  - the one-dimensional transformation along x-direction employs the fast Fourier transform algorithm: At first, 4 small DFTs are calculated and then final results are obtained by two steps of cross-combination of values (based on a so-called butterfly diagram). This approach reduces the total number of memory reads and computational steps considerably.
  */
 kernel void backward_fft(texture2d<float, access::read> in_texture_ft [[texture(0)]],
-                         texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
-                         texture2d<float, access::write> out_texture [[texture(2)]],
+                         texture2d<float, access::write> out_texture [[texture(1)]],
                          constant int& tile_size [[buffer(0)]],
                          constant int& n_textures [[buffer(1)]],
                          uint2 gid [[thread_position_in_grid]]) {
@@ -562,24 +572,23 @@ kernel void backward_fft(texture2d<float, access::read> in_texture_ft [[texture(
        
     float coefRe, coefIm;
     float4 Re0, Re1, Re2, Re3, Im0, Im1, Im2, Im3, Re00, Re11, Re22, Re33, Im00, Im11, Im22, Im33, dataRe, dataIm;
-    float4 tmp_data[32];
+    float4 tmp_data[16];
+    float4 tmp_tile[128];
     
     // row-wise one-dimensional fast Fourier transform along x-direction
     for (int dn = 0; dn < tile_size; dn++) {
         
-        int const n = n0 + dn;
+        int const n_tmp = dn*2*tile_size;
         
         // copy data to temp vector
         for (int dm = 0; dm < tile_size; dm++) {
-            tmp_data[2*dm+0] = in_texture_ft.read(uint2(2*(m0+dm)+0, n));
-            tmp_data[2*dm+1] = in_texture_ft.read(uint2(2*(m0+dm)+1, n));
+            tmp_data[2*dm+0] = in_texture_ft.read(uint2(2*(m0+dm)+0, n0+dn));
+            tmp_data[2*dm+1] = in_texture_ft.read(uint2(2*(m0+dm)+1, n0+dn));
         }
         
         // calculate 4 small discrete Fourier transforms
         for (int dm = 0; dm < tile_size/4; dm++) {
-             
-            int const m = 2*(m0 + dm);
-            
+                
             // fill with zeros
             Re0 = Im0 = Re1 = Im1 = Re2 = Im2 = Re3 = Im3 = zeros;
             
@@ -635,16 +644,16 @@ kernel void backward_fft(texture2d<float, access::read> in_texture_ft [[texture(
             Im1 = Im11 + sin(angle*(dm+tile_size_14))*Re33 + cos(angle*(dm+tile_size_14))*Im33;
             Re3 = Re11 + cos(angle*(dm+tile_size_34))*Re33 - sin(angle*(dm+tile_size_34))*Im33;
             Im3 = Im11 + sin(angle*(dm+tile_size_34))*Re33 + cos(angle*(dm+tile_size_34))*Im33;
-               
-            // write into temporary textures
-            tmp_texture_ft.write( Re0, uint2(m+0, n));
-            tmp_texture_ft.write(-Im0, uint2(m+1, n));
-            tmp_texture_ft.write( Re1, uint2(m+tile_size_24+0, n));
-            tmp_texture_ft.write(-Im1, uint2(m+tile_size_24+1, n));
-            tmp_texture_ft.write( Re2, uint2(m+tile_size+0, n));
-            tmp_texture_ft.write(-Im2, uint2(m+tile_size+1, n));
-            tmp_texture_ft.write( Re3, uint2(m+tile_size_24*3+0, n));
-            tmp_texture_ft.write(-Im3, uint2(m+tile_size_24*3+1, n));
+            
+            // write into temporary tile storage
+            tmp_tile[n_tmp+2*dm+0]                =  Re0;
+            tmp_tile[n_tmp+2*dm+1]                = -Im0;
+            tmp_tile[n_tmp+2*dm+tile_size_24+0]   =  Re1;
+            tmp_tile[n_tmp+2*dm+tile_size_24+1]   = -Im1;
+            tmp_tile[n_tmp+2*dm+tile_size+0]      =  Re2;
+            tmp_tile[n_tmp+2*dm+tile_size+1]      = -Im2;
+            tmp_tile[n_tmp+2*dm+tile_size_24*3+0] =  Re3;
+            tmp_tile[n_tmp+2*dm+tile_size_24*3+1] = -Im3;
         }
     }
   
@@ -655,8 +664,8 @@ kernel void backward_fft(texture2d<float, access::read> in_texture_ft [[texture(
         
         // copy data to temp vector
         for (int dn = 0; dn < tile_size; dn++) {
-            tmp_data[2*dn+0] = tmp_texture_ft.read(uint2(2*m+0, n0+dn));
-            tmp_data[2*dn+1] = tmp_texture_ft.read(uint2(2*m+1, n0+dn));
+            tmp_data[2*dn+0] = tmp_tile[dn*2*tile_size+2*dm+0];
+            tmp_data[2*dn+1] = tmp_tile[dn*2*tile_size+2*dm+1];
         }
         
         // calculate 4 small discrete Fourier transforms
@@ -824,9 +833,9 @@ kernel void forward_dft(texture2d<float, access::read> in_texture [[texture(0)]]
  - the one-dimensional transformation along x-direction employs the fast Fourier transform algorithm: At first, 4 small DFTs are calculated and then final results are obtained by two steps of cross-combination of values (based on a so-called butterfly diagram). This approach reduces the total number of memory reads and computational steps considerably.
  - due to the symmetry mentioned earlier, only N/2+1 rows have to be transformed and the remaining N/2-1 rows can be directly inferred.
  */
+
 kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]],
-                        texture2d<float, access::read_write> tmp_texture_ft [[texture(1)]],
-                        texture2d<float, access::write> out_texture_ft [[texture(2)]],
+                        texture2d<float, access::write> out_texture_ft [[texture(1)]],
                         constant int& tile_size [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]]) {
     
@@ -846,7 +855,8 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
     
     float coefRe, coefIm, norm_cosine0, norm_cosine1;
     float4 Re0, Re1, Re2, Re3, Re00, Re11, Re22, Re33, Im0, Im1, Im2, Im3, Im00, Im11, Im22, Im33, dataRe, dataIm;
-    float4 tmp_data[32];
+    float4 tmp_data[16];
+    float4 tmp_tile[80];
     
     // column-wise one-dimensional discrete Fourier transform along y-direction
     for (int dm = 0; dm < tile_size; dm+=2) {
@@ -862,13 +872,10 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
         // exploit symmetry of real dft and calculate reduced number of rows
         for (int dn = 0; dn <= tile_size/2; dn++) {
                         
-            int const n = n0 + dn;
+            int const n_tmp = dn*2*tile_size;
             
             // fill with zeros
-            Re0 = zeros;
-            Im0 = zeros;
-            Re1 = zeros;
-            Im1 = zeros;
+            Re0 = Im0 = Re1 = Im1 = zeros;
             
             for (int dy = 0; dy < tile_size; dy++) {
       
@@ -890,11 +897,11 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
                 Im1 += (coefIm * dataRe);
             }
             
-            // write into temporary textures
-            tmp_texture_ft.write(Re0, uint2(2*m+0, n));
-            tmp_texture_ft.write(Im0, uint2(2*m+1, n));
-            tmp_texture_ft.write(Re1, uint2(2*m+2, n));
-            tmp_texture_ft.write(Im1, uint2(2*m+3, n));
+            // write into temporary tile storage
+            tmp_tile[n_tmp+2*dm+0] = Re0;
+            tmp_tile[n_tmp+2*dm+1] = Im0;
+            tmp_tile[n_tmp+2*dm+2] = Re1;
+            tmp_tile[n_tmp+2*dm+3] = Im1;
         }
     }
         
@@ -906,8 +913,8 @@ kernel void forward_fft(texture2d<float, access::read> in_texture [[texture(0)]]
         
         // copy data to temp vector
         for (int dm = 0; dm < tile_size; dm++) {
-            tmp_data[2*dm+0] = tmp_texture_ft.read(uint2(2*(m0+dm)+0, n));
-            tmp_data[2*dm+1] = tmp_texture_ft.read(uint2(2*(m0+dm)+1, n));
+            tmp_data[2*dm+0] = tmp_tile[dn*2*tile_size+2*dm+0];
+            tmp_data[2*dm+1] = tmp_tile[dn*2*tile_size+2*dm+1];
         }
         
         // calculate 4 small discrete Fourier transforms

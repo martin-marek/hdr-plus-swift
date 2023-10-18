@@ -8,7 +8,7 @@ kernel void add_texture(texture2d<float, access::read> in_texture [[texture(0)]]
                         constant float& n_textures [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]]) {
     
-    float color_value = out_texture.read(gid).r + in_texture.read(gid).r/n_textures;
+    float const color_value = out_texture.read(gid).r + in_texture.read(gid).r/n_textures;
     
     out_texture.write(color_value, gid);
 }
@@ -178,17 +178,28 @@ kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[t
 }
 
 
+kernel void add_texture_uint16(texture2d<uint, access::read> in_texture [[texture(0)]],
+                               texture2d<float, access::read_write> out_texture [[texture(1)]],
+                               constant float& n_textures [[buffer(0)]],
+                               uint2 gid [[thread_position_in_grid]]) {
+    
+    float const color_value = out_texture.read(gid).r + float(in_texture.read(gid).r)/n_textures;
+    
+    out_texture.write(color_value, gid);
+}
+
+
 kernel void add_texture_weighted(texture2d<float, access::read> texture1 [[texture(0)]],
                                  texture2d<float, access::read> texture2 [[texture(1)]],
                                  texture2d<float, access::read> weight_texture [[texture(2)]],
                                  texture2d<float, access::write> out_texture [[texture(3)]],
                                  uint2 gid [[thread_position_in_grid]]) {
     
-    float intensity1 = texture1.read(gid).r;
-    float intensity2 = texture2.read(gid).r;
-    float weight = weight_texture.read(gid).r;
+    float const intensity1 = texture1.read(gid).r;
+    float const intensity2 = texture2.read(gid).r;
+    float const weight = weight_texture.read(gid).r;
     
-    float out_intensity = weight * intensity2 + (1 - weight) * intensity1;
+    float const out_intensity = weight * intensity2 + (1 - weight) * intensity1;
     out_texture.write(out_intensity, gid);
 }
 
@@ -203,7 +214,7 @@ kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
         total += in_texture.read(uint(x)).r;
     }
     
-    float avg = total / width;
+    float const avg = total / width;
     out_buffer[0] = avg;
 }
 
@@ -219,7 +230,7 @@ kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
         total += in_texture.read(uint2(x, y)).r;
     }
     
-    float avg = total / texture_height;
+    float const avg = total / texture_height;
     out_texture.write(avg, x);
 }
 
@@ -235,7 +246,7 @@ kernel void average_x_rgba(texture1d<float, access::read> in_texture [[texture(0
         total += in_texture.read(uint(x));
     }
     
-    float4 avg = total / width;
+    float4 const avg = total / width;
     out_buffer[0] = avg[0];
     out_buffer[1] = avg[1];
     out_buffer[2] = avg[2];
@@ -255,7 +266,7 @@ kernel void average_y_rgba(texture2d<float, access::read> in_texture [[texture(0
         total += in_texture.read(uint2(x, y));
     }
     
-    float4 avg = total / texture_height;
+    float4 const avg = total / texture_height;
     out_texture.write(avg, x);
 }
 
@@ -305,7 +316,7 @@ kernel void blur_mosaic_texture(texture2d<float, access::read> in_texture [[text
     }
     
     // write output pixel
-    float out_intensity = total_intensity / total_weight;
+    float const out_intensity = total_intensity / total_weight;
     out_texture.write(out_intensity, gid);
 }
 
@@ -326,10 +337,10 @@ kernel void convert_float_to_uint16(texture2d<float, access::read> in_texture [[
     float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
     
     // extract pixel values of 2x2 super pixel
-    float4 pixel_value = float4(in_texture.read(uint2(x,   y)).r,
-                                in_texture.read(uint2(x+1, y)).r,
-                                in_texture.read(uint2(x,   y+1)).r,
-                                in_texture.read(uint2(x+1, y+1)).r);
+    float4 const pixel_value = float4(in_texture.read(uint2(x,   y)).r,
+                                      in_texture.read(uint2(x+1, y)).r,
+                                      in_texture.read(uint2(x,   y+1)).r,
+                                      in_texture.read(uint2(x+1, y+1)).r);
     
     // apply potential scaling to 16 bit and convert to integer
     int4 out_value = int4(round((pixel_value - black_level)*factor_16bit + black_level));
@@ -343,44 +354,35 @@ kernel void convert_float_to_uint16(texture2d<float, access::read> in_texture [[
 }
 
 
-kernel void convert_uint16_to_float(texture2d<uint, access::read> in_texture [[texture(0)]],
-                                    texture2d<float, access::write> out_texture [[texture(1)]],
-                                    uint2 gid [[thread_position_in_grid]]) {
-    
-    uint4 val_unint = in_texture.read(gid);
-    
-    float4 val_float = clamp(float4(val_unint), 0.0f, FLOAT16_MAX_VAL);
-    out_texture.write(val_float, gid);
-}
-
-
 kernel void convert_to_bayer(texture2d<float, access::read> in_texture [[texture(0)]],
                              texture2d<float, access::write> out_texture [[texture(1)]],
+                             constant int& pad_left [[buffer(0)]],
+                             constant int& pad_top [[buffer(1)]],
                              uint2 gid [[thread_position_in_grid]]) {
     
-    int const m = gid.x*2;
-    int const n = gid.y*2;
+    int const x = gid.x*2;
+    int const y = gid.y*2;
     
-    float4 color_value = float4(in_texture.read(gid));
+    float4 const color_value = in_texture.read(uint2(gid.x+pad_left, gid.y+pad_top));
      
-    out_texture.write(color_value[0], uint2(m,   n));
-    out_texture.write(color_value[1], uint2(m+1, n));
-    out_texture.write(color_value[2], uint2(m,   n+1));
-    out_texture.write(color_value[3], uint2(m+1, n+1));
+    out_texture.write(color_value[0], uint2(x,   y));
+    out_texture.write(color_value[1], uint2(x+1, y));
+    out_texture.write(color_value[2], uint2(x,   y+1));
+    out_texture.write(color_value[3], uint2(x+1, y+1));
 }
 
 
 kernel void convert_to_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
                             texture2d<float, access::write> out_texture [[texture(1)]],
-                            constant int& crop_merge_x [[buffer(0)]],
-                            constant int& crop_merge_y [[buffer(1)]],
+                            constant int& pad_left [[buffer(0)]],
+                            constant int& pad_top [[buffer(1)]],
                             uint2 gid [[thread_position_in_grid]]) {
     
-    int const m = gid.x*2 + crop_merge_x;
-    int const n = gid.y*2 + crop_merge_y;
+    int const x = gid.x*2 + pad_left;
+    int const y = gid.y*2 + pad_top;
     
-    float4 color_value = float4(in_texture.read(uint2(m, n)).r,   in_texture.read(uint2(m+1, n)).r,
-                                in_texture.read(uint2(m, n+1)).r, in_texture.read(uint2(m+1, n+1)).r);
+    float4 const color_value = float4(in_texture.read(uint2(x, y)).r,   in_texture.read(uint2(x+1, y)).r,
+                                      in_texture.read(uint2(x, y+1)).r, in_texture.read(uint2(x+1, y+1)).r);
     
     out_texture.write(color_value, gid);
 }
@@ -393,21 +395,40 @@ kernel void copy_texture(texture2d<float, access::read> in_texture [[texture(0)]
 }
 
 
+kernel void crop_texture(texture2d<float, access::read> in_texture [[texture(0)]],
+                         texture2d<float, access::write> out_texture [[texture(1)]],
+                         constant int& pad_left [[buffer(0)]],
+                         constant int& pad_top [[buffer(1)]],
+                         uint2 gid [[thread_position_in_grid]]) {
+      
+    int x = gid.x + pad_left;
+    int y = gid.y + pad_top;
+  
+    float const color_value = in_texture.read(uint2(x, y)).r;
+    out_texture.write(color_value, gid);
+}
+
+
+kernel void fill_with_zeros(texture2d<float, access::write> texture [[texture(0)]],
+                            uint2 gid [[thread_position_in_grid]]) {
+    texture.write(0, gid);
+}
+
+
 /**
  Hot pixel correction based on the idea that hot pixels appear at the same pixel location in all images
  */
-kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[texture(0)]],
-                              texture2d<float, access::read> in_texture [[texture(1)]],
-                              texture2d<float, access::write> out_texture [[texture(2)]],
-                              constant float* mean_texture_buffer [[buffer(0)]],
-                              constant int& black_level0 [[buffer(1)]],
-                              constant int& black_level1 [[buffer(2)]],
-                              constant int& black_level2 [[buffer(3)]],
-                              constant int& black_level3 [[buffer(4)]],
-                              constant float& hot_pixel_threshold [[buffer(5)]],
-                              constant float& hot_pixel_multiplicator [[buffer(6)]],
-                              constant float& correction_strength [[buffer(7)]],
-                              uint2 gid [[thread_position_in_grid]]) {
+kernel void find_hotpixels(texture2d<float, access::read> average_texture [[texture(0)]],
+                           texture2d<float, access::write> hotpixel_weight_texture [[texture(1)]],
+                           constant float* mean_texture_buffer [[buffer(0)]],
+                           constant float& black_level0 [[buffer(1)]],
+                           constant float& black_level1 [[buffer(2)]],
+                           constant float& black_level2 [[buffer(3)]],
+                           constant float& black_level3 [[buffer(4)]],
+                           constant float& hot_pixel_threshold [[buffer(5)]],
+                           constant float& hot_pixel_multiplicator [[buffer(6)]],
+                           constant float& correction_strength [[buffer(7)]],
+                           uint2 gid [[thread_position_in_grid]]) {
        
     int const x = gid.x+2;
     int const y = gid.y+2;
@@ -448,52 +469,63 @@ kernel void correct_hotpixels(texture2d<float, access::read> average_texture [[t
     // if hot pixel is detected
     if (pixel_ratio >= hot_pixel_threshold & pixel_value >= 2.0f*mean_texture) {
         
-        // calculate mean value of 4 surrounding values
-        float sum2 = in_texture.read(uint2(x-2, y+0)).r;
-        sum2      += in_texture.read(uint2(x+2, y+0)).r;
-        sum2      += in_texture.read(uint2(x+0, y-2)).r;
-        sum2      += in_texture.read(uint2(x+0, y+2)).r;
-        
         // calculate weight for blending to have a smooth transition for not so obvious hot pixels
         float const weight = correction_strength*0.5f*min(hot_pixel_multiplicator*(pixel_ratio-hot_pixel_threshold), 2.0f);
         
-        // blend values and replace hot pixel value
-        out_texture.write(weight*0.25f*sum2 + (1.0f-weight)*in_texture.read(uint2(x, y)).r, uint2(x, y));
+        // save weight in texture
+        hotpixel_weight_texture.write(weight, uint2(x, y));
     }
 }
 
-
-kernel void crop_texture(texture2d<float, access::read> in_texture [[texture(0)]],
-                         texture2d<float, access::write> out_texture [[texture(1)]],
-                         constant int& pad_left [[buffer(0)]],
-                         constant int& pad_top [[buffer(1)]],
-                         uint2 gid [[thread_position_in_grid]]) {
-      
-    int x = gid.x + pad_left;
-    int y = gid.y + pad_top;
-  
-    float color_value = in_texture.read(uint2(x, y)).r;
-    out_texture.write(color_value, gid);
-}
-
-
-kernel void extend_texture(texture2d<float, access::read> in_texture [[texture(0)]],
-                           texture2d<float, access::write> out_texture [[texture(1)]],
-                           constant int& pad_left [[buffer(0)]],
-                           constant int& pad_top [[buffer(1)]],
-                           uint2 gid [[thread_position_in_grid]]) {
-        
-    int x = gid.x + pad_left;
-    int y = gid.y + pad_top;
- 
-    float color_value = in_texture.read(gid).r;
-    out_texture.write(color_value, uint2(x, y));
-}
-
-
-kernel void fill_with_zeros(texture2d<float, access::write> texture [[texture(0)]],
+/**
+ This function is intended to convert the source input texture from integer to 32 bit float while correcting hot pixels, equalizing exposure and extending the texture to the size needed for alignment
+ */
+kernel void prepare_texture(texture2d<uint, access::read> in_texture [[texture(0)]],
+                            texture2d<float, access::read> hotpixel_weight_texture [[texture(1)]],
+                            texture2d<float, access::write> out_texture [[texture(2)]],
+                            constant int& pad_left [[buffer(0)]],
+                            constant int& pad_top [[buffer(1)]],
+                            constant int& exposure_diff [[buffer(2)]],
+                            constant int& black_level0 [[buffer(3)]],
+                            constant int& black_level1 [[buffer(4)]],
+                            constant int& black_level2 [[buffer(5)]],
+                            constant int& black_level3 [[buffer(6)]],
                             uint2 gid [[thread_position_in_grid]]) {
-    texture.write(0, gid);
+        
+    // load args
+    int x = gid.x;
+    int y = gid.y;
+    
+    int const texture_width = in_texture.get_width();
+    int const texture_height = in_texture.get_height();
+ 
+    float pixel_value = float(in_texture.read(gid).r);
+    
+    float const hotpixel_weight = hotpixel_weight_texture.read(gid).r;
+    
+    if (hotpixel_weight > 0.001f && x>=2 && x<texture_width-2 && y>=2 && y<texture_height-2) {
+        
+        // calculate mean value of 4 surrounding values
+        float sum = in_texture.read(uint2(x-2, y+0)).r;
+        sum      += in_texture.read(uint2(x+2, y+0)).r;
+        sum      += in_texture.read(uint2(x+0, y-2)).r;
+        sum      += in_texture.read(uint2(x+0, y+2)).r;
+        
+        // blend values and replace hot pixel value
+        pixel_value = hotpixel_weight*0.25f*sum + (1.0f-hotpixel_weight)*pixel_value;
+    }
+    
+    float4 const black_level4 = float4(black_level0, black_level1, black_level2, black_level3);
+    
+    // calculate exposure correction factor from exposure difference
+    float const corr_factor = pow(2.0f, float(exposure_diff/100.0f));        
+    float const black_level = black_level4[(gid.y%2)*2 + (gid.x%2)];
+    
+    // correct exposure
+    pixel_value = (pixel_value - black_level)*corr_factor + black_level;
+    pixel_value = max(pixel_value, 0.0f);
+    
+    out_texture.write(pixel_value, uint2(gid.x+pad_left, gid.y+pad_top));
 }
 
 

@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-import MetalPerformanceShaders
 
 
 // possible error types during the alignment
@@ -201,26 +200,30 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         final_texture = copy_texture(last_texture!)
         DispatchQueue.main.async { progress.int += Int(80_000_000) }
     } else {
-        // convert images from uint16 to float16
-        textures = textures.map{convert_uint16_to_float($0)}
         
         // use a 32 bit float as final image
         let final_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: textures[ref_idx].width, height: textures[ref_idx].height, mipmapped: false)
         final_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+        final_texture_descriptor.storageMode = .private
         final_texture = device.makeTexture(descriptor: final_texture_descriptor)!
         fill_with_zeros(final_texture)
         
+        let hotpixel_weight_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: textures[ref_idx].width, height: textures[ref_idx].height, mipmapped: false)
+        hotpixel_weight_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+        hotpixel_weight_texture_descriptor.storageMode = .private
+        let hotpixel_weight_texture = device.makeTexture(descriptor: hotpixel_weight_texture_descriptor)!
+        fill_with_zeros(hotpixel_weight_texture)
+                
         if mosaic_pattern_width == 2 {
-            correct_hotpixels(textures, black_level, ISO_exposure_time, noise_reduction)
-            equalize_exposure(textures, black_level, exposure_bias, ref_idx)
+            find_hotpixels(textures, hotpixel_weight_texture, black_level, ISO_exposure_time, noise_reduction)
         }
         
         if noise_reduction == 23.0 {
-            try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, color_factors: color_factors, textures: textures, final_texture: final_texture)
+            try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, color_factors: color_factors, textures: textures, hotpixel_weight_texture: hotpixel_weight_texture, final_texture: final_texture)
         } else if merging_algorithm == "Higher quality" {
-            try align_merge_frequency_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_dict[search_distance]!, tile_size: tile_size_dict[tile_size]!, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
+            try align_merge_frequency_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_dict[search_distance]!, tile_size: tile_size_dict[tile_size]!, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, color_factors: color_factors, textures: textures, hotpixel_weight_texture: hotpixel_weight_texture, final_texture: final_texture)
         } else {
-            try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_dict[search_distance]!, tile_size: tile_size_dict[tile_size]!, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, color_factors: color_factors, textures: textures, final_texture: final_texture)
+            try align_merge_spatial_domain(progress: progress, ref_idx: ref_idx, mosaic_pattern_width: mosaic_pattern_width, search_distance: search_distance_dict[search_distance]!, tile_size: tile_size_dict[tile_size]!, noise_reduction: noise_reduction, uniform_exposure: uniform_exposure, exposure_bias: exposure_bias, black_level: black_level, color_factors: color_factors, textures: textures, hotpixel_weight_texture: hotpixel_weight_texture, final_texture: final_texture)
         }
         last_texture = copy_texture(final_texture)
         last_settings = current_settings
@@ -263,8 +266,10 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     let out_path = (dng_converter_present ? tmp_dir : out_dir) + out_filename
     var out_url = URL(fileURLWithPath: out_path)
     
-    // Ensure reference texture exists on disk (may not if it existed in memory cache)
-    _ = try convert_raws_to_dngs([image_urls[ref_idx]], dng_converter_path, tmp_dir, NSCache<NSString, ImageCacheWrapper>())
+    if convert_to_dng {
+        // Ensure reference texture exists on disk (may not if it existed in memory cache)
+        _ = try convert_raws_to_dngs([image_urls[ref_idx]], dng_converter_path, tmp_dir, NSCache<NSString, ImageCacheWrapper>())
+    }
     
     // save the output image
     try texture_to_dng(output_texture_uint16, ref_dng_url, out_url, (scale_to_16bit ? Int32(factor_16bit*white_level[ref_idx]) : -1))
@@ -303,9 +308,9 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
 
 
 /// Convenience function for temporal averaging.
-func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [[Int]], uniform_exposure: Bool, color_factors: [[Double]], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [[Int]], uniform_exposure: Bool, color_factors: [[Double]], textures: [MTLTexture], hotpixel_weight_texture: MTLTexture, final_texture: MTLTexture) throws {
     print("Special mode: temporal averaging only...")
-    
+       
     // find index of image with shortest exposure
     var exp_idx = 0
     for comp_idx in 0..<exposure_bias.count {
@@ -319,12 +324,14 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         // initialize weight texture used for normalization of the final image
         let norm_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: final_texture.width, height: final_texture.height, mipmapped: false)
         norm_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+        norm_texture_descriptor.storageMode = .private
         let norm_texture = device.makeTexture(descriptor: norm_texture_descriptor)!
         fill_with_zeros(norm_texture)
         
         // temporal averaging with exposure weighting
         for comp_idx in 0..<textures.count {
-            add_texture_exposure(textures[comp_idx], final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], ((comp_idx==exp_idx) ? 1_000_000 : white_level), black_level[comp_idx])
+            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level, comp_idx)
+            add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], ((comp_idx==exp_idx) ? 1_000_000 : white_level), black_level[comp_idx])
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
         
@@ -334,14 +341,16 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
     } else if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
         // temporal averaging with extrapolation of green channels for very bright pixels
         for comp_idx in 0..<textures.count {
-            add_texture_highlights(textures[comp_idx], final_texture, textures.count, white_level, black_level[comp_idx], color_factors[comp_idx])
+            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level, comp_idx)
+            add_texture_highlights(comp_texture, final_texture, textures.count, white_level, black_level[comp_idx], color_factors[comp_idx])
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
     } else {
         
         // simple temporal averaging
         for comp_idx in 0..<textures.count {
-            add_texture(textures[comp_idx], final_texture, textures.count)
+            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, 0, black_level, comp_idx)
+            add_texture(comp_texture, final_texture, textures.count)
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
     }

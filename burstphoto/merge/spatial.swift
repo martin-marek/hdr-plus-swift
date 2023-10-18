@@ -12,7 +12,7 @@ let compute_merge_weight_state = try! device.makeComputePipelineState(function: 
 /// Convenience function for the spatial merging approach
 ///
 /// Supports non-Bayer raw files
-func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], black_level: [[Int]], color_factors: [[Double]], textures: [MTLTexture], final_texture: MTLTexture) throws {
+func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], black_level: [[Int]], color_factors: [[Double]], textures: [MTLTexture], hotpixel_weight_texture: MTLTexture, final_texture: MTLTexture) throws {
     print("Merging in the spatial domain...")
     
     let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
@@ -51,32 +51,35 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
     
     var pad_align_y = Int(ceil(Float(texture_height_orig)/Float(tile_factor)))
     pad_align_y = (pad_align_y*Int(tile_factor) - texture_height_orig)/2
-      
-    // set reference texture
-    let ref_texture = extend_texture(textures[ref_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
+    
+    // prepare reference texture by correcting hot pixels, equalizing exposure and extending the texture
+    let ref_texture = prepare_texture(textures[ref_idx], hotpixel_weight_texture, pad_align_x, pad_align_x, pad_align_y, pad_align_y, 0, black_level, ref_idx)
+    let ref_texture_cropped = crop_texture(ref_texture, pad_align_x, pad_align_x, pad_align_y, pad_align_y)
+    
+    var black_level_mean = 0.25*Double(black_level[ref_idx][0] + black_level[ref_idx][1] + black_level[ref_idx][2] + black_level[ref_idx][3])
     
     // build reference pyramid
-    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, color_factors[ref_idx])
+    let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, black_level_mean, color_factors[ref_idx])
     
     // blur reference texure and estimate noise standard deviation
     // -  the computation is done here to avoid repeating the same computation in 'robust_merge()'
-    let ref_texture_blurred = blur(textures[ref_idx], with_pattern_width: mosaic_pattern_width, using_kernel_size: kernel_size)
-    let noise_sd = estimate_color_noise(textures[ref_idx], ref_texture_blurred, mosaic_pattern_width)
+    let ref_texture_blurred = blur(ref_texture_cropped, with_pattern_width: mosaic_pattern_width, using_kernel_size: kernel_size)
+    let noise_sd = estimate_color_noise(ref_texture_cropped, ref_texture_blurred, mosaic_pattern_width)
 
     // iterate over comparison images
     for comp_idx in 0..<textures.count {
         
         // add the reference texture to the output
         if comp_idx == ref_idx {
-            add_texture(textures[comp_idx], final_texture, textures.count)
+            add_texture(ref_texture_cropped, final_texture, textures.count)
             DispatchQueue.main.async { progress.int += Int(80000000/Double(textures.count)) }
             continue
         }
             
-        // set comparison texture
-        let comp_texture = extend_texture(textures[comp_idx], pad_align_x, pad_align_x, pad_align_y, pad_align_y)
-     
-        let black_level_mean = 0.25*Double(black_level[comp_idx][0] + black_level[comp_idx][1] + black_level[comp_idx][2] + black_level[comp_idx][3])
+        // prepare comparison texture by correcting hot pixels, equalizing exposure and extending the texture
+        let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, pad_align_x, pad_align_x, pad_align_y, pad_align_y, (exposure_bias[ref_idx]-exposure_bias[comp_idx]), black_level, comp_idx)
+         
+        black_level_mean = 0.25*Double(black_level[comp_idx][0] + black_level[comp_idx][1] + black_level[comp_idx][2] + black_level[comp_idx][3])
         
         // align comparison texture
         let aligned_texture = crop_texture(
@@ -86,7 +89,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         )
         
         // robust-merge the texture
-        let merged_texture = robust_merge(textures[ref_idx], ref_texture_blurred, aligned_texture, kernel_size, robustness, noise_sd, mosaic_pattern_width)
+        let merged_texture = robust_merge(ref_texture_cropped, ref_texture_blurred, aligned_texture, kernel_size, robustness, noise_sd, mosaic_pattern_width)
         
         // add robust-merged texture to the output image
         add_texture(merged_texture, final_texture, textures.count)
@@ -103,6 +106,7 @@ func color_difference(between texture1: MTLTexture, and texture2: MTLTexture, mo
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture1.pixelFormat, width: texture1.width/mosaic_pattern_width, height: texture1.height/mosaic_pattern_width, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    out_texture_descriptor.storageMode = .private
     let output_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     // compute pixel pairwise differences
@@ -148,6 +152,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     // create a weight texture
     let weight_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: texture_diff.width, height: texture_diff.height, mipmapped: false)
     weight_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    weight_texture_descriptor.storageMode = .private
     let weight_texture = device.makeTexture(descriptor: weight_texture_descriptor)!
     
     // compute merge weight

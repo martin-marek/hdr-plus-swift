@@ -16,12 +16,13 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
     // initialize tile alignments
     let alignment_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg16Sint, width: 1, height: 1, mipmapped: false)
     alignment_descriptor.usage = [.shaderRead, .shaderWrite]
+    alignment_descriptor.storageMode = .private
     var prev_alignment = device.makeTexture(descriptor: alignment_descriptor)!
     var current_alignment = device.makeTexture(descriptor: alignment_descriptor)!
     var tile_info = TileInfo(tile_size: 0, tile_size_merge: 0, search_dist: 0, n_tiles_x: 0, n_tiles_y: 0, n_pos_1d: 0, n_pos_2d: 0)
     
     // build comparison pyramid
-    let comp_pyramid = build_pyramid(comp_texture, downscale_factor_array, color_factors3)
+    let comp_pyramid = build_pyramid(comp_texture, downscale_factor_array, black_level_mean, color_factors3)
     
     // align tiles
     for i in (0 ... downscale_factor_array.count-1).reversed() {
@@ -55,10 +56,13 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
         
         // compare three alignment vector candidates, which improves alignment at borders of moving object
         // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
-        prev_alignment = correct_upsampling_error(ref_layer, comp_layer, prev_alignment, downscale_factor, uniform_exposure, black_level_mean, (i != 0), tile_info)
+        prev_alignment = correct_upsampling_error(ref_layer, comp_layer, prev_alignment, downscale_factor, uniform_exposure, (i != 0), tile_info)
           
+        // The parameter 'use_ssd' employed in correct_upsamling_error() and comute_tile_diff() specifies if the calculated cost term shall be based on the absolute difference (L1 norm -> use_ssd = false) or on the sum of squared difference (L2 norm -> use_ssd = true). The alignment is done differently depending on the pyramid scale: for levels with reduced resolution, the L2 norm is calculated while for the highest resolution level, the L1 norm is calculated. This choice is identical to the original publication.
+        // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
+        
         // compute tile differences
-        let tile_diff = compute_tile_diff(ref_layer, comp_layer, prev_alignment, downscale_factor, uniform_exposure, black_level_mean, (i != 0), tile_info)
+        let tile_diff = compute_tile_diff(ref_layer, comp_layer, prev_alignment, downscale_factor, uniform_exposure, (i != 0), tile_info)
       
         current_alignment = texture_like(prev_alignment)
         
@@ -73,10 +77,12 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
 }
 
 
-func avg_pool(_ input_texture: MTLTexture, _ scale: Int, _ normalization: Bool, _ color_factors3: Array<Double>) -> MTLTexture {
+func avg_pool(_ input_texture: MTLTexture, _ scale: Int, _ black_level_mean: Double, _ normalization: Bool, _ color_factors3: Array<Double>) -> MTLTexture {
 
-    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: input_texture.pixelFormat, width: input_texture.width/scale, height: input_texture.height/scale, mipmapped: false)
+    // always set pixel format to float16 with reduced bit depth to make alignment as fast as possible
+    let output_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: input_texture.width/scale, height: input_texture.height/scale, mipmapped: false)
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    output_texture_descriptor.storageMode = .private
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -89,11 +95,12 @@ func avg_pool(_ input_texture: MTLTexture, _ scale: Int, _ normalization: Bool, 
     command_encoder.setTexture(input_texture, index: 0)
     command_encoder.setTexture(output_texture, index: 1)
     command_encoder.setBytes([Int32(scale)], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 1)
     
     if normalization {
-        command_encoder.setBytes([Float32(color_factors3[0])], length: MemoryLayout<Float32>.stride, index: 1)
-        command_encoder.setBytes([Float32(color_factors3[1])], length: MemoryLayout<Float32>.stride, index: 2)
-        command_encoder.setBytes([Float32(color_factors3[2])], length: MemoryLayout<Float32>.stride, index: 3)
+        command_encoder.setBytes([Float32(color_factors3[0])], length: MemoryLayout<Float32>.stride, index: 2)
+        command_encoder.setBytes([Float32(color_factors3[1])], length: MemoryLayout<Float32>.stride, index: 3)
+        command_encoder.setBytes([Float32(color_factors3[2])], length: MemoryLayout<Float32>.stride, index: 4)
     }
     
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
@@ -104,34 +111,35 @@ func avg_pool(_ input_texture: MTLTexture, _ scale: Int, _ normalization: Bool, 
 }
 
 
-func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<Int>, _ color_factors3: Array<Double>) -> Array<MTLTexture> {
+func build_pyramid(_ input_texture: MTLTexture, _ downscale_factor_list: Array<Int>, _ black_level_mean: Double, _ color_factors3: Array<Double>) -> Array<MTLTexture> {
     
     // iteratively resize the current layer in the pyramid
     var pyramid: Array<MTLTexture> = []
     for (i, downscale_factor) in downscale_factor_list.enumerated() {
         if i == 0 {
-            // If color_factor is NOT available, a negative value will be set.
-            pyramid.append(avg_pool(input_texture, downscale_factor, color_factors3[0] > 0, color_factors3))
+            // If color_factor is NOT available, a negative value will be set and normalization is deactivated.
+            pyramid.append(avg_pool(input_texture, downscale_factor, max(0.0, black_level_mean), (color_factors3[0] > 0), color_factors3))
         } else {
-            pyramid.append(avg_pool(blur(pyramid.last!, with_pattern_width: 1, using_kernel_size: 2), downscale_factor, false, color_factors3))
+            pyramid.append(avg_pool(blur(pyramid.last!, with_pattern_width: 1, using_kernel_size: 2), downscale_factor, 0.0, false, color_factors3))
         }
     }
     return pyramid
 }
 
 
-func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev_alignment: MTLTexture, _ downscale_factor: Int, _ uniform_exposure: Bool, _ black_level_mean: Double, _ use_ssd: Bool, _ tile_info: TileInfo) -> MTLTexture {
+func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev_alignment: MTLTexture, _ downscale_factor: Int, _ uniform_exposure: Bool, _ use_ssd: Bool, _ tile_info: TileInfo) -> MTLTexture {
     
     // create a 'tile difference' texture
     let texture_descriptor = MTLTextureDescriptor()
     texture_descriptor.textureType = .type3D
     texture_descriptor.pixelFormat = .r32Float
-    texture_descriptor.width = tile_info.n_tiles_x
-    texture_descriptor.height = tile_info.n_tiles_y
-    texture_descriptor.depth = tile_info.n_pos_2d
+    texture_descriptor.width = tile_info.n_pos_2d
+    texture_descriptor.height = tile_info.n_tiles_x
+    texture_descriptor.depth = tile_info.n_tiles_y   
     texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    texture_descriptor.storageMode = .private
     let tile_diff = device.makeTexture(descriptor: texture_descriptor)!
-    
+
     // compute tile differences
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Compute Tile Diff"
@@ -148,8 +156,7 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     command_encoder.setBytes([Int32(downscale_factor)], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.setBytes([Int32(tile_info.search_dist)], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([Float32(uniform_exposure ? 0.0 : black_level_mean)], length: MemoryLayout<Float32>.stride, index: 3)
-    command_encoder.setBytes([Int32(use_ssd ? 1 : 0)], length: MemoryLayout<Int32>.stride, index: 4)
+    command_encoder.setBytes([Int32(use_ssd ? 1 : 0)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -158,13 +165,14 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
 }
 
 
-func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev_alignment: MTLTexture, _ downscale_factor: Int, _ uniform_exposure: Bool, _ black_level_mean: Double, _ use_ssd: Bool, _ tile_info: TileInfo) -> MTLTexture {
+func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev_alignment: MTLTexture, _ downscale_factor: Int, _ uniform_exposure: Bool, _ use_ssd: Bool, _ tile_info: TileInfo) -> MTLTexture {
     
     // create texture for corrected alignment
     let prev_alignment_corrected_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: prev_alignment.pixelFormat, width: prev_alignment.width, height: prev_alignment.height, mipmapped: false)
     prev_alignment_corrected_descriptor.usage = [.shaderRead, .shaderWrite]
+    prev_alignment_corrected_descriptor.storageMode = .private
     let prev_alignment_corrected = device.makeTexture(descriptor: prev_alignment_corrected_descriptor)!
-        
+  
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Correct Upsampling Error"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -180,9 +188,8 @@ func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture,
     command_encoder.setBytes([Int32(tile_info.tile_size)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.setBytes([Int32(tile_info.n_tiles_x)], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([Int32(tile_info.n_tiles_y)], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.setBytes([Float32(uniform_exposure ? 0.0 : black_level_mean)], length: MemoryLayout<Float32>.stride, index: 4)
-    command_encoder.setBytes([Int32(uniform_exposure ? 1 : 0)], length: MemoryLayout<Float32>.stride, index: 5)
-    command_encoder.setBytes([Int32(use_ssd ? 1 : 0)], length: MemoryLayout<Int32>.stride, index: 6)
+    command_encoder.setBytes([Int32(uniform_exposure ? 1 : 0)], length: MemoryLayout<Float32>.stride, index: 4)
+    command_encoder.setBytes([Int32(use_ssd ? 1 : 0)], length: MemoryLayout<Int32>.stride, index: 5)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -213,12 +220,10 @@ func find_best_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLText
 
 func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile_info: TileInfo, _ downscale_factor: Int) -> MTLTexture {
     
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture_to_warp.pixelFormat,
-                                                                          width: texture_to_warp.width,
-                                                                          height: texture_to_warp.height,
-                                                                          mipmapped: false)
-    out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
-    let warped_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    let warped_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture_to_warp.pixelFormat, width: texture_to_warp.width, height: texture_to_warp.height, mipmapped: false)
+    warped_texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    warped_texture_descriptor.storageMode = .private
+    let warped_texture = device.makeTexture(descriptor: warped_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Warp Texture"

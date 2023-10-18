@@ -139,7 +139,7 @@ func image_url_to_texture(_ url: URL, _ device: MTLDevice) throws -> (MTLTexture
     let bytes_per_pixel = 2
     let bytes_per_row = bytes_per_pixel * Int(width)
     let texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: Int(width), height: Int(height), mipmapped: false)
-    texture_descriptor.usage = [.shaderRead, .shaderWrite]
+    texture_descriptor.usage = .shaderRead
     guard let texture = device.makeTexture(descriptor: texture_descriptor) else {throw ImageIOError.metal_error}
     let mtl_region = MTLRegionMake2D(0, 0, Int(width), Int(height))
     texture.replace(region: mtl_region, mipmapLevel: 0, withBytes: pixel_bytes!, bytesPerRow: bytes_per_row)
