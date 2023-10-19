@@ -306,7 +306,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
 }
 
 
-
 /// Convenience function for temporal averaging.
 func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [[Int]], uniform_exposure: Bool, color_factors: [[Double]], textures: [MTLTexture], hotpixel_weight_texture: MTLTexture, final_texture: MTLTexture) throws {
     print("Special mode: temporal averaging only...")
@@ -319,7 +318,8 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         }
     }
     
-    if (!uniform_exposure && white_level != -1 && black_level[0][0] != -1 && mosaic_pattern_width == 2) {
+    // if color_factor is NOT available, it is set to a negative value earlier in the pipeline
+    if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
         
         // initialize weight texture used for normalization of the final image
         let norm_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: final_texture.width, height: final_texture.height, mipmapped: false)
@@ -330,29 +330,24 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         
         var norm_counter = 0
         
-        // temporal averaging with exposure weighting
+        // temporal averaging with extrapolation of highlights or exposure weighting
         for comp_idx in 0..<textures.count {
             let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level, comp_idx)
                        
             if exposure_bias[comp_idx] == exposure_bias[exp_idx] {
+                // for uniform exposure or for the darkest frame in an exposure bracketed burst: temporal averaging with extrapolation of green channels for very bright pixels
                 add_texture_highlights(comp_texture, final_texture, 1, white_level, black_level[comp_idx], color_factors[comp_idx])
                 norm_counter += 1
             } else {
+                // for all frames of a bracketed expsoure besides the darkest frame: exposure-weighted temporal averaging
                 add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], white_level, black_level[comp_idx], color_factors[comp_idx])
             }
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
         
-        // normalization of the final image
+        // normalization of the final image with pixel-specific norm_texture and constant value stored in norm_counter
         normalize_texture(final_texture, norm_texture, norm_counter)
-        // If color_factor is NOT available, a negative value will be set.
-    } else if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
-        // temporal averaging with extrapolation of green channels for very bright pixels
-        for comp_idx in 0..<textures.count {
-            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level, comp_idx)
-            add_texture_highlights(comp_texture, final_texture, textures.count, white_level, black_level[comp_idx], color_factors[comp_idx])
-            DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
-        }
+    
     } else {
         
         // simple temporal averaging
