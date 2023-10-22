@@ -206,6 +206,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         final_texture_descriptor.usage = [.shaderRead, .shaderWrite]
         final_texture_descriptor.storageMode = .private
         final_texture = device.makeTexture(descriptor: final_texture_descriptor)!
+        final_texture.label = "Final Texture"
         fill_with_zeros(final_texture)
         
         let hotpixel_weight_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: textures[ref_idx].width, height: textures[ref_idx].height, mipmapped: false)
@@ -337,6 +338,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         norm_texture_descriptor.usage = [.shaderRead, .shaderWrite]
         norm_texture_descriptor.storageMode = .private
         let norm_texture = device.makeTexture(descriptor: norm_texture_descriptor)!
+        norm_texture.label = "Norm Texture"
         fill_with_zeros(norm_texture)
 
         var norm_scalar = 0

@@ -109,6 +109,7 @@ func texture_max(_ in_texture: MTLTexture) -> MTLBuffer {
     texture_descriptor.usage = [.shaderRead, .shaderWrite]
     texture_descriptor.storageMode = .private
     let max_y = device.makeTexture(descriptor: texture_descriptor)!
+    max_y.label = "\(in_texture.label!.components(separatedBy: ":")[0]): Max y"
     
     // average the input texture along the y-axis
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -127,6 +128,7 @@ func texture_max(_ in_texture: MTLTexture) -> MTLBuffer {
     let state2 = max_x_state
     command_encoder.setComputePipelineState(state2)
     let max_buffer = device.makeBuffer(length: MemoryLayout<Float32>.size, options: .storageModeShared)!
+    max_buffer.label = "\(in_texture.label!.components(separatedBy: ":")[0]): Max"
     command_encoder.setTexture(max_y, index: 0)
     command_encoder.setBuffer(max_buffer, offset: 0, index: 0)
     command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
