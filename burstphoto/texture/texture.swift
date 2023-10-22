@@ -56,7 +56,7 @@ func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textur
 
 func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textures: Int, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double]) {
     
-    let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
+    let black_level_mean = Double(black_level.reduce(0, +)) / Double(black_level.count)
 
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Add Texture (Highlights)"
@@ -80,7 +80,7 @@ func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture,
 
 func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ norm_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level: [Int]) {
     
-    let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
+    let black_level_mean = Double(black_level.reduce(0, +)) / Double(black_level.count)
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Add Texture (Exposure)"
