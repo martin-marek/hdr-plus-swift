@@ -12,7 +12,7 @@ let max_y_state = try! device.makeComputePipelineState(function: mfl.makeFunctio
 /// By lifting the shadows they suffer less from quantization errors, this is especially beneficial as the bit-depth of the image decreases.
 ///
 /// Inspired by https://www-old.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
-func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [[Int]], _ exposure_control: String, _ exposure_bias: [Int], _ uniform_exposure: Bool, _ color_factors: [[Double]], _ ref_idx: Int) {
+func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_level: [[Int]], _ exposure_control: String, _ exposure_bias: [Int], _ uniform_exposure: Bool, _ color_factors: [[Double]], _ ref_idx: Int, _ mosaic_pattern_width: Int) {
               
     // only apply exposure correction if reference image has an exposure, which is lower than the target exposure
     if (exposure_control != "Off" && white_level != -1 && black_level[0][0] != -1) {
@@ -64,7 +64,14 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
        
         if (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") {
-            let color_factor_mean = 0.25*(color_factors[ref_idx][0]+2.0*color_factors[ref_idx][1]+color_factors[ref_idx][2])
+            let color_factor_mean: Double
+            if (mosaic_pattern_width == 6) {
+                color_factor_mean = (8.0*color_factors[ref_idx][0] + 20.0*color_factors[ref_idx][1] + 8.0*color_factors[ref_idx][2]) / 36.0
+            } else if (mosaic_pattern_width == 2) {
+                color_factor_mean = (    color_factors[ref_idx][0] +  2.0*color_factors[ref_idx][1] +     color_factors[ref_idx][2]) /  4.0
+            } else {
+                color_factor_mean = (    color_factors[ref_idx][0] +      color_factors[ref_idx][1] +     color_factors[ref_idx][2]) /  3.0
+            }
             
             // the blurred texture serves as an approximation of local luminance
             final_texture_blurred = blur(final_texture, with_pattern_width: 1, using_kernel_size: 1)
