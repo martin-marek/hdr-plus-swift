@@ -28,42 +28,35 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
             }
         }
         
-        var black_level0 = 0.0
-        var black_level1 = 0.0
-        var black_level2 = 0.0
-        var black_level3 = 0.0
-        
+        var black_levels_mean = Array(black_level[exp_idx].map{Double($0)})
+
         // if exposure levels are uniform, calculate mean value of all exposures
         if uniform_exposure {
-            
-            for comp_idx in 0..<exposure_bias.count {
-                black_level0 += Double(black_level[comp_idx][0])
-                black_level1 += Double(black_level[comp_idx][1])
-                black_level2 += Double(black_level[comp_idx][2])
-                black_level3 += Double(black_level[comp_idx][3])
+            for i in 0..<black_level.count {
+                for j in 0..<black_levels_mean.count {
+                    black_levels_mean[j] += Double(black_level[i][j])
+                }
             }
             
-            black_level0 /= Double(exposure_bias.count)
-            black_level1 /= Double(exposure_bias.count)
-            black_level2 /= Double(exposure_bias.count)
-            black_level3 /= Double(exposure_bias.count)
-            
-        } else {
-            black_level0 = Double(black_level[exp_idx][0])
-            black_level1 = Double(black_level[exp_idx][1])
-            black_level2 = Double(black_level[exp_idx][2])
-            black_level3 = Double(black_level[exp_idx][3])
+            let count = Double(black_level.count)
+            for i in 0..<black_levels_mean.count {
+                black_levels_mean[i] /= count
+            }
         }
+        
+        let black_level_min = black_levels_mean.min()!
+        let black_levels_mean_buffer = device.makeBuffer(bytes: black_levels_mean.map{Float32($0)},
+                                                         length: MemoryLayout<Float32>.size * black_levels_mean.count)!
         
         let command_buffer = command_queue.makeCommandBuffer()!
         command_buffer.label = "Correct Exposure"
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
-        let state = (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") ? correct_exposure_state : correct_exposure_linear_state
-        command_encoder.setComputePipelineState(state)
-        let threads_per_grid = MTLSize(width: final_texture.width, height: final_texture.height, depth: 1)
-        let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+        let state: MTLComputePipelineState
        
         if (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") {
+            state = correct_exposure_state
+            
+            let black_level_mean = Double(black_levels_mean.reduce(0, +)) / Double(black_levels_mean.count)
             let color_factor_mean: Double
             if (mosaic_pattern_width == 6) {
                 color_factor_mean = (8.0*color_factors[ref_idx][0] + 20.0*color_factors[ref_idx][1] + 8.0*color_factors[ref_idx][2]) / 36.0
@@ -78,25 +71,34 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
             
             command_encoder.setTexture(final_texture_blurred, index: 0)
             command_encoder.setTexture(final_texture, index: 1)
+            
             command_encoder.setBytes([Int32(exposure_bias[ref_idx])], length: MemoryLayout<Int32>.stride, index: 0)
             command_encoder.setBytes([Int32(exposure_control=="Curve0EV" ? 0 : 100)], length: MemoryLayout<Int32>.stride, index: 1)
-            command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 2)
-            command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 3)
-            command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 4)
-            command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 5)
-            command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 6)
-            command_encoder.setBytes([Float32(color_factor_mean)], length: MemoryLayout<Float32>.stride, index: 7)
+            command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride,   index: 2)
+            command_encoder.setBytes([Float32(white_level)],        length: MemoryLayout<Float32>.stride, index: 3)
+            command_encoder.setBytes([Float32(color_factor_mean)],  length: MemoryLayout<Float32>.stride, index: 4)
+            command_encoder.setBytes([Float32(black_level_mean)],   length: MemoryLayout<Float32>.stride, index: 5)
+            command_encoder.setBytes([Float32(black_level_min)],    length: MemoryLayout<Float32>.stride, index: 6)
+            
+            command_encoder.setBuffer(black_levels_mean_buffer, offset: 0, index: 7)
             command_encoder.setBuffer(max_texture_buffer, offset: 0, index: 8)
         } else {
+            state = correct_exposure_linear_state
+            
             command_encoder.setTexture(final_texture, index: 0)
+            
             command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 0)
-            command_encoder.setBytes([Float32(black_level0)], length: MemoryLayout<Float32>.stride, index: 1)
-            command_encoder.setBytes([Float32(black_level1)], length: MemoryLayout<Float32>.stride, index: 2)
-            command_encoder.setBytes([Float32(black_level2)], length: MemoryLayout<Float32>.stride, index: 3)
-            command_encoder.setBytes([Float32(black_level3)], length: MemoryLayout<Float32>.stride, index: 4)
+            command_encoder.setBytes([Float32(exposure_control=="LinearFullRange" ? -1.0 : 2.0)], length: MemoryLayout<Float32>.stride, index: 1)
+            command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 2)
+            command_encoder.setBytes([Float32(black_level_min)],    length: MemoryLayout<Float32>.stride, index: 3)
+            
+            command_encoder.setBuffer(black_levels_mean_buffer, offset: 0, index: 4)
             command_encoder.setBuffer(max_texture_buffer, offset: 0, index: 5)
-            command_encoder.setBytes([Float32(exposure_control=="LinearFullRange" ? -1.0 : 2.0)], length: MemoryLayout<Float32>.stride, index: 6)
         }
+        let threads_per_grid = MTLSize(width: final_texture.width, height: final_texture.height, depth: 1)
+        let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+        command_encoder.setComputePipelineState(state)
+        
         command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
         command_encoder.endEncoding()
         command_buffer.commit()

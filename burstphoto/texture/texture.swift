@@ -80,11 +80,18 @@ func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture,
 
 
 /// This function is intended for adding up all frames of a bracketed expsoure besides the darkest frame: add frame with exposure-weighting and exclude regions with clipped highlights. Due to the exposure weighting, frames typically have weights > 1. Inside the function, pixel weights are further adapted based on their brightness: in the shadows, weights are linear with exposure. In the midtones/highlights, this converges towards weights being linear with the square-root of exposure. For clipped highlight pixels, the weight becomes zero. As the weights are pixel-specific, a texture for normalization is employed storing the sum of pixel-specific weights.
-func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ norm_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double]) {
+func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ norm_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double], _ mosaic_pattern_width: Int) {
     
     let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
     
-    let color_factor_mean = 0.25*(color_factors[0]+2.0*color_factors[1]+color_factors[2])
+    let color_factor_mean: Double
+    if (mosaic_pattern_width == 6) {
+        color_factor_mean = (8.0*color_factors[0] + 20.0*color_factors[1] + 8.0*color_factors[2]) / 36.0
+    } else if (mosaic_pattern_width == 2) {
+        color_factor_mean = (    color_factors[0] +  2.0*color_factors[1] +     color_factors[2]) /  4.0
+    } else {
+        color_factor_mean = (    color_factors[0] +      color_factors[1] +     color_factors[2]) /  3.0
+    }
     
     // the blurred texture serves as an approximation of local luminance
     let in_texture_blurred = blur(in_texture, with_pattern_width: 1, using_kernel_size: 1)

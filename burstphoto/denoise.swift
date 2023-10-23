@@ -349,7 +349,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
                 add_texture_highlights(comp_texture, final_texture, white_level, black_level[comp_idx], color_factors[comp_idx])
                 norm_scalar += 1
             } else {
-                add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], white_level, black_level[comp_idx], color_factors[comp_idx])
+                add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], white_level, black_level[comp_idx], color_factors[comp_idx], mosaic_pattern_width)
             }
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
