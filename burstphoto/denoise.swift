@@ -327,26 +327,26 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         norm_texture_descriptor.storageMode = .private
         let norm_texture = device.makeTexture(descriptor: norm_texture_descriptor)!
         fill_with_zeros(norm_texture)
-        
-        var norm_counter = 0
+        // initialize scalar weight used for normalization of the final image
+        var norm_scalar = 0
         
         // temporal averaging with extrapolation of highlights or exposure weighting
         for comp_idx in 0..<textures.count {
             let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level, comp_idx)
                        
             if exposure_bias[comp_idx] == exposure_bias[exp_idx] {
-                // for uniform exposure or for the darkest frame in an exposure bracketed burst: temporal averaging with extrapolation of green channels for very bright pixels
+                // for uniform exposure or for the darkest frame in an exposure bracketed burst: add frame and apply extrapolation of green channels for very bright pixels. All pixels in the frame get the same global weight of 1. Therefore a scalar value for normalization storing the sum of accumulated frames is sufficient.
                 add_texture_highlights(comp_texture, final_texture, 1, white_level, black_level[comp_idx], color_factors[comp_idx])
-                norm_counter += 1
+                norm_scalar += 1
             } else {
-                // for all frames of a bracketed expsoure besides the darkest frame: exposure-weighted temporal averaging
+                // for all frames of a bracketed expsoure besides the darkest frame: add frame with exposure-weighting and exclude regions with clipped highlights. Due to the exposure weighting, frames typically have weights > 1. Inside the function, pixel weights are further adapted based on their brightness: in the shadows, weights are linear with exposure. In the midtones/highlights, this converges towards weights being linear with the square-root of exposure. For clipped highlight pixels, the weight becomes zero. As the weights are pixel-specific, a texture for normalization is employed storing the sum of pixel-specific weights.
                 add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], white_level, black_level[comp_idx], color_factors[comp_idx])
             }
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
         
-        // normalization of the final image with pixel-specific norm_texture and constant value stored in norm_counter
-        normalize_texture(final_texture, norm_texture, norm_counter)
+        // normalization of the final image with pixel-specific norm_texture and scalar value stored in norm_scalar. The sum of pixel-specific weights and the scalar sum of accumulated frames is then used for normalization of the final texture.
+        normalize_texture(final_texture, norm_texture, norm_scalar)
     
     } else {
         

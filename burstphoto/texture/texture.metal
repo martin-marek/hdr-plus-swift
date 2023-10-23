@@ -553,10 +553,10 @@ kernel void prepare_texture(texture2d<uint, access::read> in_texture [[texture(0
 
 kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[texture(0)]],
                               texture2d<float, access::read> norm_texture [[texture(1)]],
-                              constant float& norm_counter [[buffer(0)]],
+                              constant float& norm_scalar [[buffer(0)]],
                               uint2 gid [[thread_position_in_grid]]) {
     
-    in_texture.write(in_texture.read(gid).r/(norm_texture.read(gid).r + norm_counter), gid);
+    in_texture.write(in_texture.read(gid).r/(norm_texture.read(gid).r + norm_scalar), gid);
 }
 
 

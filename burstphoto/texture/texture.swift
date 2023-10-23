@@ -553,7 +553,7 @@ func get_threads_per_thread_group(_ state: MTLComputePipelineState, _ threads_pe
 }
 
 
-func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture, _ norm_counter: Int) {
+func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture, _ norm_scalar: Int) {
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Normalize Texture"
@@ -564,7 +564,7 @@ func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture, _ n
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(norm_texture, index: 1)
-    command_encoder.setBytes([Float32(norm_counter)], length: MemoryLayout<Float32>.stride, index: 0)
+    command_encoder.setBytes([Float32(norm_scalar)], length: MemoryLayout<Float32>.stride, index: 0)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
