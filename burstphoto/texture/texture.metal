@@ -31,11 +31,13 @@ kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[tex
     // extract pixel value
     float pixel_value = in_texture.read(gid).r;
     
-    // adapt exposure weight based on the luminosity of each pixel
+    // adapt exposure weight based on the luminosity of each pixel relative to the white level
+    float luminance = min(white_level, in_texture_blurred.read(gid).r/color_factor_mean);
+    luminance = (luminance-black_level_mean)/white_level;
+    
     // shadows get the exposure-dependent weight for optimal noise reduction while midtones and highlights have a reduced weight for better motion robustness
-    // between 0.25 and 1.00 of the white level (based on pixel values after exposure correction), the weight becomes 1.0
-    float const luminance = min(white_level, in_texture_blurred.read(gid).r/color_factor_mean);
-    weight_exposure = max(sqrt(weight_exposure), weight_exposure * pow(weight_exposure, -0.5f/(0.25f-black_level_mean/white_level)*(luminance-black_level_mean)/white_level));
+    // between 0.25 and 1.00 of the white level (based on pixel values after exposure correction), the weight becomes 1.0    
+    weight_exposure = max(sqrt(weight_exposure), weight_exposure * pow(weight_exposure, -0.5f/(0.25f-black_level_mean/white_level)*luminance));
    
     // ensure smooth blending for pixel values between 0.25 and 0.99 of the white level (based on pixel values before exposure correction)
     float const weight_highlights = weight_highlights_texture.read(gid).r;
@@ -51,11 +53,10 @@ kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[tex
 
 kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[texture(0)]],
                                    texture2d<float, access::read_write> out_texture [[texture(1)]],
-                                   constant float& n_textures [[buffer(0)]],
-                                   constant float& white_level [[buffer(1)]],
-                                   constant float& black_level_mean [[buffer(2)]],
-                                   constant float& factor_red [[buffer(3)]],
-                                   constant float& factor_blue [[buffer(4)]],
+                                   constant float& white_level [[buffer(0)]],
+                                   constant float& black_level_mean [[buffer(1)]],
+                                   constant float& factor_red [[buffer(2)]],
+                                   constant float& factor_blue [[buffer(3)]],
                                    uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -147,10 +148,10 @@ kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[t
         }
     }
     
-    pixel_value0 = out_texture.read(uint2(x  , y)).r   + pixel_value0/n_textures;
-    pixel_value1 = out_texture.read(uint2(x+1, y)).r   + pixel_value1/n_textures;
-    pixel_value2 = out_texture.read(uint2(x  , y+1)).r + pixel_value2/n_textures;
-    pixel_value3 = out_texture.read(uint2(x+1, y+1)).r + pixel_value3/n_textures;
+    pixel_value0 = out_texture.read(uint2(x  , y)).r   + pixel_value0;
+    pixel_value1 = out_texture.read(uint2(x+1, y)).r   + pixel_value1;
+    pixel_value2 = out_texture.read(uint2(x  , y+1)).r + pixel_value2;
+    pixel_value3 = out_texture.read(uint2(x+1, y+1)).r + pixel_value3;
     
     out_texture.write(pixel_value0, uint2(x  , y));
     out_texture.write(pixel_value1, uint2(x+1, y));

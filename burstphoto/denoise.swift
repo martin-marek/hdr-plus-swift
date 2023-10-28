@@ -336,7 +336,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
                        
             if exposure_bias[comp_idx] == exposure_bias[exp_idx] {
                 // for uniform exposure or for the darkest frame in an exposure bracketed burst: add frame and apply extrapolation of green channels for very bright pixels. All pixels in the frame get the same global weight of 1. Therefore a scalar value for normalization storing the sum of accumulated frames is sufficient.
-                add_texture_highlights(comp_texture, final_texture, 1, white_level, black_level[comp_idx], color_factors[comp_idx])
+                add_texture_highlights(comp_texture, final_texture, white_level, black_level[comp_idx], color_factors[comp_idx])
                 norm_scalar += 1
             } else {
                 // for all frames of a bracketed expsoure besides the darkest frame: add frame with exposure-weighting and exclude regions with clipped highlights. Due to the exposure weighting, frames typically have weights > 1. Inside the function, pixel weights are further adapted based on their brightness: in the shadows, weights are linear with exposure. In the midtones/highlights, this converges towards weights being linear with the square-root of exposure. For clipped highlight pixels, the weight becomes zero. As the weights are pixel-specific, a texture for normalization is employed storing the sum of pixel-specific weights.

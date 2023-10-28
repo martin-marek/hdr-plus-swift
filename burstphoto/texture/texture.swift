@@ -55,7 +55,7 @@ func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textur
 }
 
 
-func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textures: Int, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double]) {
+func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double]) {
     
     let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
 
@@ -68,11 +68,10 @@ func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture,
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(out_texture, index: 1)
-    command_encoder.setBytes([Float32(n_textures)], length: MemoryLayout<Float32>.stride, index: 0)
-    command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 1)
-    command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 2)
-    command_encoder.setBytes([Float32(color_factors[0]/color_factors[1])], length: MemoryLayout<Float32>.stride, index: 3)
-    command_encoder.setBytes([Float32(color_factors[2]/color_factors[1])], length: MemoryLayout<Float32>.stride, index: 4)
+    command_encoder.setBytes([Float32(white_level)], length: MemoryLayout<Float32>.stride, index: 0)
+    command_encoder.setBytes([Float32(black_level_mean)], length: MemoryLayout<Float32>.stride, index: 1)
+    command_encoder.setBytes([Float32(color_factors[0]/color_factors[1])], length: MemoryLayout<Float32>.stride, index: 2)
+    command_encoder.setBytes([Float32(color_factors[2]/color_factors[1])], length: MemoryLayout<Float32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
@@ -85,8 +84,9 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     
     let color_factor_mean = 0.25*(color_factors[0]+2.0*color_factors[1]+color_factors[2])
     
+    // the blurred texture serves as an approximation of local luminance
     let in_texture_blurred = blur(in_texture, with_pattern_width: 1, using_kernel_size: 1)
-    
+    // blurring of the weight texture ensures a smooth blending of frames, especially at regions where clipped highlight pixels are excluded
     let weight_highlights_texture_blurred = calculate_weight_highlights(in_texture, exposure_bias, white_level, black_level_mean)
     
     let command_buffer = command_queue.makeCommandBuffer()!

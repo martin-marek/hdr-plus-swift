@@ -65,6 +65,8 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
        
         if (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") {
             let color_factor_mean = 0.25*(color_factors[ref_idx][0]+2.0*color_factors[ref_idx][1]+color_factors[ref_idx][2])
+            
+            // the blurred texture serves as an approximation of local luminance
             final_texture_blurred = blur(final_texture, with_pattern_width: 1, using_kernel_size: 1)
             
             command_encoder.setTexture(final_texture_blurred, index: 0)
