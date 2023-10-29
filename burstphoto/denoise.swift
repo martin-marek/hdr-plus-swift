@@ -306,7 +306,6 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
 }
 
 
-
 /// Convenience function for temporal averaging.
 func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_width: Int, exposure_bias: [Int], white_level: Int, black_level: [[Int]], uniform_exposure: Bool, color_factors: [[Double]], textures: [MTLTexture], hotpixel_weight_texture: MTLTexture, final_texture: MTLTexture) throws {
     print("Special mode: temporal averaging only...")
@@ -319,32 +318,45 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         }
     }
     
-    if (!uniform_exposure && white_level != -1 && black_level[0][0] != -1 && mosaic_pattern_width == 2) {
+    // if color_factor is NOT available, it is set to a negative value earlier in the pipeline
+    if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
         
-        // initialize weight texture used for normalization of the final image
+        // Temporal averaging with extrapolation of highlights or exposure weighting
+        
+        // The averaging is performed in two steps:
+        // 1. add all frames of the burst
+        // 2. divide the resulting sum of frames by a pixel-specific norm to get the final image
+        
+        // The pixel-specific norm has two contributions: norm(x, y) = norm_texture(x, y) + norm_scalar
+        // - pixel-specific values calculated by add_texture_exposure() accounting for the different weight given to each pixel based on its brightness
+        // - a global scalar if a given frame has the same exposure as the reference frame, which has the darkest exposure
+        //
+        // For the latter, a single scalar is used as it is more efficient than adding a single, uniform value to each individual pixel in norm_texture 
+        
         let norm_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: final_texture.width, height: final_texture.height, mipmapped: false)
         norm_texture_descriptor.usage = [.shaderRead, .shaderWrite]
         norm_texture_descriptor.storageMode = .private
         let norm_texture = device.makeTexture(descriptor: norm_texture_descriptor)!
         fill_with_zeros(norm_texture)
+
+        var norm_scalar = 0
         
-        // temporal averaging with exposure weighting
+        // 1. add up all frames of the burst
         for comp_idx in 0..<textures.count {
             let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level, comp_idx)
-            add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], ((comp_idx==exp_idx) ? 1_000_000 : white_level), black_level[comp_idx])
+                       
+            if exposure_bias[comp_idx] == exposure_bias[exp_idx] {
+                add_texture_highlights(comp_texture, final_texture, white_level, black_level[comp_idx], color_factors[comp_idx])
+                norm_scalar += 1
+            } else {
+                add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], white_level, black_level[comp_idx], color_factors[comp_idx])
+            }
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
-        
-        // normalization of the final image
-        normalize_texture(final_texture, norm_texture)
-        // If color_factor is NOT available, a negative value will be set.
-    } else if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
-        // temporal averaging with extrapolation of green channels for very bright pixels
-        for comp_idx in 0..<textures.count {
-            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level, comp_idx)
-            add_texture_highlights(comp_texture, final_texture, textures.count, white_level, black_level[comp_idx], color_factors[comp_idx])
-            DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
-        }
+     
+        // 2. divide the sum of frames by a per-pixel norm to get the final image
+        normalize_texture(final_texture, norm_texture, norm_scalar)
+    
     } else {
         
         // simple temporal averaging

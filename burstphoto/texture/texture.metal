@@ -15,66 +15,48 @@ kernel void add_texture(texture2d<float, access::read> in_texture [[texture(0)]]
 
 
 kernel void add_texture_exposure(texture2d<float, access::read> in_texture [[texture(0)]],
-                                 texture2d<float, access::read_write> out_texture [[texture(1)]],
-                                 texture2d<float, access::read_write> norm_texture [[texture(2)]],
+                                 texture2d<float, access::read> in_texture_blurred [[texture(1)]],
+                                 texture2d<float, access::read> weight_highlights_texture [[texture(2)]],
+                                 texture2d<float, access::read_write> out_texture [[texture(3)]],
+                                 texture2d<float, access::read_write> norm_texture [[texture(4)]],
                                  constant int& exposure_bias [[buffer(0)]],
                                  constant float& white_level [[buffer(1)]],
                                  constant float& black_level_mean [[buffer(2)]],
+                                 constant float& color_factor_mean [[buffer(3)]],
                                  uint2 gid [[thread_position_in_grid]]) {
        
-    // load args
-    int texture_width  = in_texture.get_width();
-    int texture_height = in_texture.get_height();
-    
     // calculate weight based on exposure bias
-    float const weight_exposure = pow(2.0f, float(exposure_bias/100.0f));
+    float weight_exposure = pow(2.0f, float(exposure_bias/100.0f));
     
     // extract pixel value
     float pixel_value = in_texture.read(gid).r;
     
-    // find the maximum intensity in a 5x5 window around the main pixel
-    float pixel_value_max = 0.0f;
-      
-    for (int dy = -2; dy <= 2; dy++) {
-        int y = gid.y + dy;
-        
-        if (0 <= y && y < texture_height) {
-            for (int dx = -2; dx <= 2; dx++) {
-                int x = gid.x + dx;
-                
-                if (0 <= x && x < texture_width) {
-                    pixel_value_max = max(pixel_value_max, in_texture.read(uint2(x, y)).r);
-                }
-            }
-        }
-    }
+    // adapt exposure weight based on the luminosity of each pixel relative to the white level
+    float luminance = min(white_level, in_texture_blurred.read(gid).r/color_factor_mean);
+    luminance = (luminance-black_level_mean)/white_level;
     
-    pixel_value_max = (pixel_value_max-black_level_mean)*weight_exposure + black_level_mean;
-    
-    float weight_pixel_value = 1.0f;
-    
-    // this ensures that pixels of the image with lowest exposure are always added
-    if (white_level < 999999.0f) {
-        // ensure smooth blending for pixel values between 0.25 and 0.99 of the white level
-        weight_pixel_value = clamp(0.99f/0.74f-1.0f/0.74f*pixel_value_max/white_level, 0.0f, 1.0f);
-    }
+    // shadows get the exposure-dependent weight for optimal noise reduction while midtones and highlights have a reduced weight for better motion robustness
+    // between 0.25 and 1.00 of the white level (based on pixel values after exposure correction), the weight becomes 1.0    
+    weight_exposure = max(sqrt(weight_exposure), weight_exposure * pow(weight_exposure, -0.5f/(0.25f-black_level_mean/white_level)*luminance));
    
+    // ensure smooth blending for pixel values between 0.25 and 0.99 of the white level (based on pixel values before exposure correction)
+    float const weight_highlights = weight_highlights_texture.read(gid).r;
+       
     // apply optimal weight based on exposure of pixel and take into account weight based on the pixel intensity
-    pixel_value = weight_exposure*weight_pixel_value * pixel_value;
+    pixel_value = weight_exposure*weight_highlights * pixel_value;
     
     out_texture.write(out_texture.read(gid).r + pixel_value, gid);
     
-    norm_texture.write(norm_texture.read(gid).r + weight_exposure*weight_pixel_value, gid);
+    norm_texture.write(norm_texture.read(gid).r + weight_exposure*weight_highlights, gid);
 }
 
 
 kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[texture(0)]],
                                    texture2d<float, access::read_write> out_texture [[texture(1)]],
-                                   constant float& n_textures [[buffer(0)]],
-                                   constant float& white_level [[buffer(1)]],
-                                   constant float& black_level_mean [[buffer(2)]],
-                                   constant float& factor_red [[buffer(3)]],
-                                   constant float& factor_blue [[buffer(4)]],
+                                   constant float& white_level [[buffer(0)]],
+                                   constant float& black_level_mean [[buffer(1)]],
+                                   constant float& factor_red [[buffer(2)]],
+                                   constant float& factor_blue [[buffer(3)]],
                                    uint2 gid [[thread_position_in_grid]]) {
     
     // load args
@@ -166,10 +148,10 @@ kernel void add_texture_highlights(texture2d<float, access::read> in_texture [[t
         }
     }
     
-    pixel_value0 = out_texture.read(uint2(x  , y)).r   + pixel_value0/n_textures;
-    pixel_value1 = out_texture.read(uint2(x+1, y)).r   + pixel_value1/n_textures;
-    pixel_value2 = out_texture.read(uint2(x  , y+1)).r + pixel_value2/n_textures;
-    pixel_value3 = out_texture.read(uint2(x+1, y+1)).r + pixel_value3/n_textures;
+    pixel_value0 = out_texture.read(uint2(x  , y)).r   + pixel_value0;
+    pixel_value1 = out_texture.read(uint2(x+1, y)).r   + pixel_value1;
+    pixel_value2 = out_texture.read(uint2(x  , y+1)).r + pixel_value2;
+    pixel_value3 = out_texture.read(uint2(x+1, y+1)).r + pixel_value3;
     
     out_texture.write(pixel_value0, uint2(x  , y));
     out_texture.write(pixel_value1, uint2(x+1, y));
@@ -318,6 +300,47 @@ kernel void blur_mosaic_texture(texture2d<float, access::read> in_texture [[text
     // write output pixel
     float const out_intensity = total_intensity / total_weight;
     out_texture.write(out_intensity, gid);
+}
+
+
+kernel void calculate_weight_highlights(texture2d<float, access::read> in_texture [[texture(0)]],
+                                        texture2d<float, access::write> weight_highlights_texture [[texture(1)]],
+                                        constant int& exposure_bias [[buffer(0)]],
+                                        constant float& white_level [[buffer(1)]],
+                                        constant float& black_level_mean [[buffer(2)]],
+                                        constant int& kernel_size [[buffer(3)]],
+                                        uint2 gid [[thread_position_in_grid]]) {
+       
+    // load args
+    int texture_width  = in_texture.get_width();
+    int texture_height = in_texture.get_height();
+    
+    // calculate weight based on exposure bias
+    float const weight_exposure = pow(2.0f, float(exposure_bias/100.0f));
+    
+    // find the maximum intensity in a 5x5 window around the main pixel
+    float pixel_value_max = 0.0f;
+      
+    for (int dy = -kernel_size; dy <= kernel_size; dy++) {
+        int y = gid.y + dy;
+        
+        if (0 <= y && y < texture_height) {
+            for (int dx = -kernel_size; dx <= kernel_size; dx++) {
+                int x = gid.x + dx;
+                
+                if (0 <= x && x < texture_width) {
+                    pixel_value_max = max(pixel_value_max, in_texture.read(uint2(x, y)).r);
+                }
+            }
+        }
+    }
+    
+    pixel_value_max = (pixel_value_max-black_level_mean)*weight_exposure + black_level_mean;
+
+    // ensure smooth blending for pixel values between 0.25 and 0.99 of the white level (based on pixel values before exposure correction)
+    float const weight_highlights = clamp(0.99f/0.74f-1.0f/0.74f*pixel_value_max/white_level, 0.0f, 1.0f);
+      
+    weight_highlights_texture.write(weight_highlights, gid);
 }
 
 
@@ -531,8 +554,10 @@ kernel void prepare_texture(texture2d<uint, access::read> in_texture [[texture(0
 
 kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[texture(0)]],
                               texture2d<float, access::read> norm_texture [[texture(1)]],
+                              constant float& norm_scalar [[buffer(0)]],
                               uint2 gid [[thread_position_in_grid]]) {
-    in_texture.write(in_texture.read(gid).r/norm_texture.read(gid).r, gid);
+    
+    in_texture.write(in_texture.read(gid).r/(norm_texture.read(gid).r + norm_scalar), gid);
 }
 
 
