@@ -1939,7 +1939,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 24;
+				CURRENT_PROJECT_VERSION = 26;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";
 				DEVELOPMENT_TEAM = "";
@@ -1958,7 +1958,7 @@
 					"$(PROJECT_DIR)/dng_sdk/xmp_lib/Debug",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
 				PRODUCT_NAME = "Burst Photo";
 				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/io_dng/bridging_header.h;
@@ -1976,7 +1976,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 24;
+				CURRENT_PROJECT_VERSION = 26;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"burstphoto/Preview Content\"";
 				DEVELOPMENT_TEAM = H3NRAX7BS4;
@@ -1995,7 +1995,7 @@
 					"$(PROJECT_DIR)/dng_sdk/xmp_lib/Debug",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = martinmarek.burstphoto;
 				PRODUCT_NAME = "Burst Photo";
 				SWIFT_OBJC_BRIDGING_HEADER = burstphoto/io_dng/bridging_header.h;
