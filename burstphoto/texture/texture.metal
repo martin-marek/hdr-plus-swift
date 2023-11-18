@@ -355,7 +355,7 @@ kernel void convert_float_to_uint16(texture2d<float, access::read>  in_texture  
     float const black_level = black_levels[(gid.x % mosaic_pattern_width) + mosaic_pattern_width * (gid.y % mosaic_pattern_width)];
 
     // apply potential scaling to 16 bit and convert to integer
-    int out_value = int(factor_16bit*round((in_texture.read(gid).r - black_level) + black_level));
+    int out_value = int(round(factor_16bit*(in_texture.read(gid).r - black_level) + black_level));
     out_value     = clamp(out_value, 0, min(white_level, int(UINT16_MAX_VAL)));
     
     // write back into texture
