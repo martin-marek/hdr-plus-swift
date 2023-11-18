@@ -331,7 +331,7 @@ func convert_to_rgba(_ in_texture: MTLTexture, _ crop_x: Int, _ crop_y: Int) -> 
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     out_texture_descriptor.storageMode = .private
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): RGBA from Bayer"
+    out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): Bayer to RGBA"
         
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "To RGBA"
@@ -358,7 +358,7 @@ func convert_to_bayer(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: In
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     out_texture_descriptor.storageMode = .private
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): RGBA from Bayer"
+    out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): RGBA to Bayer"
         
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "To Bayer"
@@ -595,14 +595,11 @@ func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture, _ n
 func prepare_texture(_ in_texture: MTLTexture, _ hotpixel_weight_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _ pad_top: Int, _ pad_bottom: Int, _ exposure_diff: Int, _ black_level: [[Int]], _ comp_idx: Int) -> MTLTexture {
 
     // always use pixel format float32 with increased precision that merging is performed with best possible precision    
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float,
-                                                                          width: in_texture.width+pad_left+pad_right,
-                                                                          height: in_texture.height+pad_top+pad_bottom,
-                                                                          mipmapped: false)
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: in_texture.width+pad_left+pad_right, height: in_texture.height+pad_top+pad_bottom, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     out_texture_descriptor.storageMode = .private
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): Extended"
+    out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): Prepared"
     
     fill_with_zeros(out_texture)
         

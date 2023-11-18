@@ -213,6 +213,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         hotpixel_weight_texture_descriptor.usage = [.shaderRead, .shaderWrite]
         hotpixel_weight_texture_descriptor.storageMode = .private
         let hotpixel_weight_texture = device.makeTexture(descriptor: hotpixel_weight_texture_descriptor)!
+        hotpixel_weight_texture.label = "Hotpixel weight texture"
         fill_with_zeros(hotpixel_weight_texture)
                 
         if mosaic_pattern_width == 2 {

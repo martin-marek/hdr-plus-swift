@@ -343,7 +343,7 @@ func backward_ft(_ in_texture_ft: MTLTexture, _ tile_info: TileInfo, _ n_texture
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     out_texture_descriptor.storageMode = .private
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
-    out_texture.label = "\(in_texture_ft.label!.components(separatedBy: ":")[0]): BT"
+    out_texture.label = "\(in_texture_ft.label!.components(separatedBy: ":")[0]): BT Image"
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Backward FT"
@@ -371,7 +371,7 @@ func forward_ft(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLTexture {
     out_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
     out_texture_ft_descriptor.storageMode = .private
     let out_texture_ft = device.makeTexture(descriptor: out_texture_ft_descriptor)!
-    out_texture_ft.label = "\(in_texture.label!.components(separatedBy: ":")[0]): FT"
+    out_texture_ft.label = "\(in_texture.label!.components(separatedBy: ":")[0]): FT Image"
 
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Forward FT"

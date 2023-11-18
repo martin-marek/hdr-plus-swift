@@ -20,7 +20,7 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
     var prev_alignment = device.makeTexture(descriptor: alignment_descriptor)!
     
     var current_alignment = device.makeTexture(descriptor: alignment_descriptor)!
-    current_alignment.label = "\(comp_texture.label!.components(separatedBy: ":")[0]): Current alignment 0"
+    current_alignment.label = "\(comp_texture.label!.components(separatedBy: ":")[0]): Current alignment Start"
     var tile_info = TileInfo(tile_size: 0, tile_size_merge: 0, search_dist: 0, n_tiles_x: 0, n_tiles_y: 0, n_pos_1d: 0, n_pos_2d: 0)
     
     // build comparison pyramid
@@ -227,10 +227,7 @@ func find_best_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLText
 
 func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile_info: TileInfo, _ downscale_factor: Int) -> MTLTexture {
     
-    let warped_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture_to_warp.pixelFormat,
-                                                                             width: texture_to_warp.width,
-                                                                             height: texture_to_warp.height,
-                                                                             mipmapped: false)
+    let warped_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture_to_warp.pixelFormat, width: texture_to_warp.width, height: texture_to_warp.height, mipmapped: false)
     warped_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     warped_texture_descriptor.storageMode = .private
     let warped_texture = device.makeTexture(descriptor: warped_texture_descriptor)!
