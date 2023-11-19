@@ -239,6 +239,7 @@ func calculate_highlights_norm_rgba(_ aligned_texture: MTLTexture, _ exposure_fa
     highlights_norm_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     highlights_norm_texture_descriptor.storageMode = .private
     let highlights_norm_texture = device.makeTexture(descriptor: highlights_norm_texture_descriptor)!
+    highlights_norm_texture.label = "\(aligned_texture.label!.components(separatedBy: ":")[0]): Highlight Norm"
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Highlights Norm"
@@ -268,6 +269,7 @@ func calculate_mismatch_rgba(_ aligned_texture: MTLTexture, _ ref_texture: MTLTe
     mismatch_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     mismatch_texture_descriptor.storageMode = .private
     let mismatch_texture = device.makeTexture(descriptor: mismatch_texture_descriptor)!
+    mismatch_texture.label = "\(aligned_texture.label!.components(separatedBy: ":")[0]): Mismatch"
     
     let abs_diff_texture = calculate_abs_diff_rgba(ref_texture, aligned_texture)
     
@@ -297,6 +299,7 @@ func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLT
     rms_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     rms_texture_descriptor.storageMode = .private
     let rms_texture = device.makeTexture(descriptor: rms_texture_descriptor)!
+    rms_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): RMS"
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "RMS RGBA"
@@ -340,6 +343,7 @@ func backward_ft(_ in_texture_ft: MTLTexture, _ tile_info: TileInfo, _ n_texture
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     out_texture_descriptor.storageMode = .private
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    out_texture.label = "\(in_texture_ft.label!.components(separatedBy: ":")[0]): BT Image"
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Backward FT"
@@ -367,6 +371,7 @@ func forward_ft(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLTexture {
     out_texture_ft_descriptor.usage = [.shaderRead, .shaderWrite]
     out_texture_ft_descriptor.storageMode = .private
     let out_texture_ft = device.makeTexture(descriptor: out_texture_ft_descriptor)!
+    out_texture_ft.label = "\(in_texture.label!.components(separatedBy: ":")[0]): FT Image"
 
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Forward FT"
@@ -429,10 +434,9 @@ func normalize_mismatch(_ mismatch_texture: MTLTexture, _ mean_mismatch_buffer: 
 }
 
 
-func reduce_artifacts_tile_border(_ output_texture: MTLTexture, _ ref_texture: MTLTexture, _ tile_info: TileInfo, _ black_level: [Int]) {
+func reduce_artifacts_tile_border(_ out_texture: MTLTexture, _ ref_texture: MTLTexture, _ tile_info: TileInfo, _ black_level: [Int]) {
         
     if (black_level[0] != -1) {
-        
         let command_buffer = command_queue.makeCommandBuffer()!
         command_buffer.label = "Reduce Artifacts at Tile Border"
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -440,7 +444,7 @@ func reduce_artifacts_tile_border(_ output_texture: MTLTexture, _ ref_texture: M
         command_encoder.setComputePipelineState(state)
         let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
         let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-        command_encoder.setTexture(output_texture, index: 0)
+        command_encoder.setTexture(out_texture, index: 0)
         command_encoder.setTexture(ref_texture, index: 1)
         command_encoder.setBytes([Int32(tile_info.tile_size_merge)], length: MemoryLayout<Int32>.stride, index: 0)
         command_encoder.setBytes([Int32(black_level[0])], length: MemoryLayout<Int32>.stride, index: 1)

@@ -405,7 +405,7 @@ kernel void normalize_mismatch(texture2d<float, access::read_write> mismatch_tex
 }
 
 
-kernel void reduce_artifacts_tile_border(texture2d<float, access::read_write> output_texture [[texture(0)]],
+kernel void reduce_artifacts_tile_border(texture2d<float, access::read_write> out_texture [[texture(0)]],
                                          texture2d<float, access::read> ref_texture [[texture(1)]],
                                          constant int& tile_size [[buffer(0)]],
                                          constant int& black_level0 [[buffer(1)]],
@@ -439,7 +439,7 @@ kernel void reduce_artifacts_tile_border(texture2d<float, access::read_write> ou
             norm_cosine = (0.5f-0.5f*cos(-angle*(dx+0.5f)))*(0.5f-0.5f*cos(-angle*(dy+0.5f)));
             
             // extract RGBA pixel values
-            pixel_value = output_texture.read(uint2(x, y));
+            pixel_value = out_texture.read(uint2(x, y));
             // clamp values, which reduces potential artifacts (black lines) at tile borders by removing pixels with negative entries (negative when black level is subtracted)
             pixel_value = clamp(pixel_value, norm_cosine*min_values, max_values);
             
@@ -449,7 +449,7 @@ kernel void reduce_artifacts_tile_border(texture2d<float, access::read_write> ou
                 pixel_value = 0.5f*(norm_cosine*ref_texture.read(uint2(x, y)) + pixel_value);
             }
              
-            output_texture.write(pixel_value, uint2(x, y));
+            out_texture.write(pixel_value, uint2(x, y));
         }
     }
 }

@@ -18,7 +18,9 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
     alignment_descriptor.usage = [.shaderRead, .shaderWrite]
     alignment_descriptor.storageMode = .private
     var prev_alignment = device.makeTexture(descriptor: alignment_descriptor)!
+    
     var current_alignment = device.makeTexture(descriptor: alignment_descriptor)!
+    current_alignment.label = "\(comp_texture.label!.components(separatedBy: ":")[0]): Current alignment Start"
     var tile_info = TileInfo(tile_size: 0, tile_size_merge: 0, search_dist: 0, n_tiles_x: 0, n_tiles_y: 0, n_pos_1d: 0, n_pos_2d: 0)
     
     // build comparison pyramid
@@ -53,6 +55,7 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
         
         // upsample alignment vectors by a factor of 2
         prev_alignment = upsample(current_alignment, to_width: n_tiles_x, to_height: n_tiles_y, using: .NearestNeighbour)
+        prev_alignment.label = "\(comp_texture.label!.components(separatedBy: ":")[0]): Prev alignment \(i)"
         
         // compare three alignment vector candidates, which improves alignment at borders of moving object
         // see https://graphics.stanford.edu/papers/hdrp/hasinoff-hdrplus-sigasia16.pdf for more details
@@ -65,6 +68,7 @@ func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ do
         let tile_diff = compute_tile_diff(ref_layer, comp_layer, prev_alignment, downscale_factor, uniform_exposure, (i != 0), tile_info)
       
         current_alignment = texture_like(prev_alignment)
+        current_alignment.label = "\(comp_texture.label!.components(separatedBy: ":")[0]): Current alignment \(i)"
         
         // find best tile alignment based on tile differences
         find_best_tile_alignment(tile_diff, prev_alignment, current_alignment, downscale_factor, tile_info)
@@ -84,6 +88,7 @@ func avg_pool(_ input_texture: MTLTexture, _ scale: Int, _ black_level_mean: Dou
     output_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     output_texture_descriptor.storageMode = .private
     let output_texture = device.makeTexture(descriptor: output_texture_descriptor)!
+    output_texture.label = "\(input_texture.label!.components(separatedBy: ":")[0]): pool w/ scale \(scale)"
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Avg Pool"
@@ -139,7 +144,8 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     texture_descriptor.usage = [.shaderRead, .shaderWrite]
     texture_descriptor.storageMode = .private
     let tile_diff = device.makeTexture(descriptor: texture_descriptor)!
-
+    tile_diff.label = "\(comp_layer.label!.components(separatedBy: ":")[0]): Tile diff"
+    
     // compute tile differences
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Compute Tile Diff"
@@ -172,7 +178,8 @@ func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture,
     prev_alignment_corrected_descriptor.usage = [.shaderRead, .shaderWrite]
     prev_alignment_corrected_descriptor.storageMode = .private
     let prev_alignment_corrected = device.makeTexture(descriptor: prev_alignment_corrected_descriptor)!
-  
+    prev_alignment_corrected.label = "\(prev_alignment.label!.components(separatedBy: ":")[0]): Prev alignment upscaled corrected"
+        
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Correct Upsampling Error"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
@@ -224,6 +231,7 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile
     warped_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     warped_texture_descriptor.storageMode = .private
     let warped_texture = device.makeTexture(descriptor: warped_texture_descriptor)!
+    warped_texture.label = "\(texture_to_warp.label!.components(separatedBy: ":")[0]): warped"
     
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Warp Texture"

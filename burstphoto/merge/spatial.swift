@@ -108,6 +108,7 @@ func color_difference(between texture1: MTLTexture, and texture2: MTLTexture, mo
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     out_texture_descriptor.storageMode = .private
     let output_texture = device.makeTexture(descriptor: out_texture_descriptor)!
+    output_texture.label = "\(texture1.label!.components(separatedBy: ":")[0]): Color Difference"
     
     // compute pixel pairwise differences
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -154,6 +155,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     weight_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     weight_texture_descriptor.storageMode = .private
     let weight_texture = device.makeTexture(descriptor: weight_texture_descriptor)!
+    weight_texture.label = "\(comp_texture.label!.components(separatedBy: ":")[0]): Weight Texture"
     
     // compute merge weight
     let command_buffer = command_queue.makeCommandBuffer()!
@@ -175,8 +177,8 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     let weight_texture_upsampled = upsample(weight_texture, to_width: ref_texture.width, to_height: ref_texture.height, using: .Bilinear)
     
     // average the input textures based on the weight
-    let output_texture = add_texture_weighted(ref_texture, comp_texture, weight_texture_upsampled)
+    let merged_texture = add_texture_weighted(ref_texture, comp_texture, weight_texture_upsampled)
     
-    return output_texture
+    return merged_texture
 }
 
