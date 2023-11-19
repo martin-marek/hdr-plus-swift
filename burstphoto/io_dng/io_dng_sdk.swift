@@ -392,10 +392,9 @@ func size_of_and_chronological_contents_of(directory: URL) -> ([URL], [Double]) 
         dates.append(fileResourceValue.addedToDirectoryDate ?? Date(timeIntervalSince1970: 0)) // If it's missing default it to being the oldest file in the directory
         sizes.append(Double(fileResourceValue.fileSize ?? 0) / 1000 / 1000 / 1000)
     }
-    // Sort the dates and
+    // Sort the dates and sizes
     let sorted_indicies = dates.enumerated().sorted{$0.element < $1.element}.map{$0.offset}
     // Sort based on date and return only the sorted URLs.
-//    let sorted_data = zip(dates, contents, sizes).sorted{ $0.0 < $1.0 }
     return (
         sorted_indicies.map{contents[$0]},
         sorted_indicies.map{sizes[$0]}
