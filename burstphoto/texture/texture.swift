@@ -295,28 +295,30 @@ func calculate_weight_highlights(_ in_texture: MTLTexture, _ exposure_bias: Int,
 
 
 /// Convert a texture of floats into 16 bit uints for storing in a DNG file.
-func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ factor_16bit: Int) -> MTLTexture {
+func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ factor_16bit: Int, _ mosaic_pattern_width: Int) -> MTLTexture {
     
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Uint, width: in_texture.width, height: in_texture.height, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): UInt16"
     
+    let black_levels_buffer = device.makeBuffer(bytes: black_level.map{Int32($0)},
+                                                length: MemoryLayout<Int32>.size * black_level.count)!
+    
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Float to UInt"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_float_to_uint16_state
     command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: out_texture.width/2, height: out_texture.height/2, depth: 1)
+    let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(out_texture, index: 1)
     command_encoder.setBytes([Int32(white_level)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(black_level[0])], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.setBytes([Int32(black_level[1])], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([Int32(black_level[2])], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.setBytes([Int32(black_level[3])], length: MemoryLayout<Int32>.stride, index: 4)
-    command_encoder.setBytes([Int32(factor_16bit)], length: MemoryLayout<Int32>.stride, index: 5)
+    command_encoder.setBytes([Int32(factor_16bit)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBuffer(black_levels_buffer, offset: 0, index: 3)
+    
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()

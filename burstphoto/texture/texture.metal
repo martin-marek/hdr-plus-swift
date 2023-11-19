@@ -344,36 +344,22 @@ kernel void calculate_weight_highlights(texture2d<float, access::read> in_textur
 }
 
 
-kernel void convert_float_to_uint16(texture2d<float, access::read> in_texture [[texture(0)]],
-                                    texture2d<uint, access::write> out_texture [[texture(1)]],
-                                    constant int& white_level [[buffer(0)]],
-                                    constant int& black_level0 [[buffer(1)]],
-                                    constant int& black_level1 [[buffer(2)]],
-                                    constant int& black_level2 [[buffer(3)]],
-                                    constant int& black_level3 [[buffer(4)]],
-                                    constant int& factor_16bit [[buffer(5)]],
+kernel void convert_float_to_uint16(texture2d<float, access::read>  in_texture  [[texture(0)]],
+                                    texture2d<uint,  access::write> out_texture [[texture(1)]],
+                                    constant int& white_level           [[buffer(0)]],
+                                    constant int& factor_16bit          [[buffer(1)]],
+                                    constant int& mosaic_pattern_width  [[buffer(2)]],
+                                    constant int* black_levels          [[buffer(3)]],
                                     uint2 gid [[thread_position_in_grid]]) {
-    int const x = gid.x*2;
-    int const y = gid.y*2;
-    
     // load args
-    float4 const black_level = float4(black_level0, black_level1, black_level2, black_level3);
-    
-    // extract pixel values of 2x2 super pixel
-    float4 const pixel_value = float4(in_texture.read(uint2(x,   y)).r,
-                                      in_texture.read(uint2(x+1, y)).r,
-                                      in_texture.read(uint2(x,   y+1)).r,
-                                      in_texture.read(uint2(x+1, y+1)).r);
-    
+    float const black_level = black_levels[(gid.x % mosaic_pattern_width) + mosaic_pattern_width * (gid.y % mosaic_pattern_width)];
+
     // apply potential scaling to 16 bit and convert to integer
-    int4 out_value = int4(round((pixel_value - black_level)*factor_16bit + black_level));
-    out_value = clamp(out_value, 0, min(white_level, int(UINT16_MAX_VAL)));
+    int out_value = int(round(factor_16bit*(in_texture.read(gid).r - black_level) + black_level));
+    out_value     = clamp(out_value, 0, min(white_level, int(UINT16_MAX_VAL)));
     
     // write back into texture
-    out_texture.write(uint(out_value[0]), uint2(x,   y));
-    out_texture.write(uint(out_value[1]), uint2(x+1, y));
-    out_texture.write(uint(out_value[2]), uint2(x,   y+1));
-    out_texture.write(uint(out_value[3]), uint2(x+1, y+1));
+    out_texture.write(uint(out_value), gid);
 }
 
 
