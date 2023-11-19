@@ -154,7 +154,7 @@ kernel void merge_frequency_domain(texture2d<float, access::read> ref_texture_ft
             // noise_norm corresponds to the original approach described in [Hasinoff 2016] and [Monod 2021]
             // motion_norm corresponds to the additional factor proposed in [Liba 2019]
             // magnitude_norm is based on ideas from [Delbracio 2015]
-            
+            // highlights_norm helps prevent clipped highlights from introducing color casts
             weight4 = (refRe-alignedRe2)*(refRe-alignedRe2) + (refIm-alignedIm2)*(refIm-alignedIm2);
             weight4 = weight4/(weight4 + magnitude_norm*motion_norm*noise_norm*highlights_norm);
             
