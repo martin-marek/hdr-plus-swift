@@ -125,8 +125,8 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         let ref_texture = prepare_texture(textures[ref_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, 0, black_level, ref_idx)
         // convert reference texture into RGBA pixel format that SIMD instructions can be applied
         let ref_texture_rgba = convert_to_rgba(ref_texture, crop_merge_x, crop_merge_y)
-           
-        var black_level_mean = 0.25*Double(black_level[ref_idx][0] + black_level[ref_idx][1] + black_level[ref_idx][2] + black_level[ref_idx][3])
+        
+        var black_level_mean = Double(black_level[ref_idx].reduce(0, +)) / Double(black_level[ref_idx].count)
         
         // build reference pyramid
         let ref_pyramid = build_pyramid(ref_texture, downscale_factor_array, black_level_mean, color_factors[ref_idx])
@@ -153,7 +153,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             // prepare comparison texture by correcting hot pixels, equalizing exposure and extending the texture
             let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, (exposure_bias[ref_idx]-exposure_bias[comp_idx]), black_level, comp_idx)
             
-            black_level_mean = 0.25*Double(black_level[comp_idx][0] + black_level[comp_idx][1] + black_level[comp_idx][2] + black_level[comp_idx][3])
+            black_level_mean = Double(black_level[comp_idx].reduce(0, +)) / Double(black_level[comp_idx].count)
             
             // align comparison texture
             let aligned_texture_rgba = convert_to_rgba(

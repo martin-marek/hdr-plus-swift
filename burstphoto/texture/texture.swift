@@ -58,7 +58,7 @@ func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textur
 /// This function is intended for averaging of frames with uniform exposure or for adding the darkest frame in an exposure bracketed burst: add frame and apply extrapolation of green channels for very bright pixels. All pixels in the frame get the same global weight of 1. Therefore a scalar value for normalization storing the sum of accumulated frames is sufficient.
 func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double]) {
     
-    let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
+    let black_level_mean = Double(black_level.reduce(0, +)) / Double(black_level.count)
 
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Add Texture (Highlights)"
@@ -82,7 +82,7 @@ func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture,
 /// This function is intended for adding up all frames of a bracketed expsoure besides the darkest frame: add frame with exposure-weighting and exclude regions with clipped highlights. Due to the exposure weighting, frames typically have weights > 1. Inside the function, pixel weights are further adapted based on their brightness: in the shadows, weights are linear with exposure. In the midtones/highlights, this converges towards weights being linear with the square-root of exposure. For clipped highlight pixels, the weight becomes zero. As the weights are pixel-specific, a texture for normalization is employed storing the sum of pixel-specific weights.
 func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ norm_texture: MTLTexture, _ exposure_bias: Int, _ white_level: Int, _ black_level: [Int], _ color_factors: [Double]) {
     
-    let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
+    let black_level_mean = Double(black_level.reduce(0, +)) / Double(black_level.count)
     
     let color_factor_mean = 0.25*(color_factors[0]+2.0*color_factors[1]+color_factors[2])
     
