@@ -28,20 +28,23 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
             }
         }
         
-        var black_levels_mean = Array(black_level[exp_idx].map{Double($0)})
+        var black_levels_mean: [Double]
 
         // if exposure levels are uniform, calculate mean value of all exposures
         if uniform_exposure {
-            for i in 0..<black_level.count {
-                for j in 0..<black_levels_mean.count {
-                    black_levels_mean[j] += Double(black_level[i][j])
+            black_levels_mean = Array(repeating: 0.0, count: black_level[exp_idx].count)
+            for img_idx in 0..<black_level.count {
+                for channel_idx in 0..<black_levels_mean.count {
+                    black_levels_mean[channel_idx] += Double(black_level[channel_idx][img_idx])
                 }
             }
             
             let count = Double(black_level.count)
-            for i in 0..<black_levels_mean.count {
-                black_levels_mean[i] /= count
+            for channel_idx in 0..<black_levels_mean.count {
+                black_levels_mean[channel_idx] /= count
             }
+        } else {
+            black_levels_mean = Array(black_level[exp_idx].map{Double($0)})
         }
         
         let black_level_min = black_levels_mean.min()!
@@ -58,16 +61,20 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
             
             let black_level_mean = Double(black_levels_mean.reduce(0, +)) / Double(black_levels_mean.count)
             let color_factor_mean: Double
+            let kernel_size: Int
             if (mosaic_pattern_width == 6) {
                 color_factor_mean = (8.0*color_factors[ref_idx][0] + 20.0*color_factors[ref_idx][1] + 8.0*color_factors[ref_idx][2]) / 36.0
+                kernel_size       = 2
             } else if (mosaic_pattern_width == 2) {
                 color_factor_mean = (    color_factors[ref_idx][0] +  2.0*color_factors[ref_idx][1] +     color_factors[ref_idx][2]) /  4.0
+                kernel_size       = 1
             } else {
                 color_factor_mean = (    color_factors[ref_idx][0] +      color_factors[ref_idx][1] +     color_factors[ref_idx][2]) /  3.0
+                kernel_size       = 1
             }
             
             // the blurred texture serves as an approximation of local luminance
-            final_texture_blurred = blur(final_texture, with_pattern_width: 1, using_kernel_size: 1)
+            final_texture_blurred = blur(final_texture, with_pattern_width: 1, using_kernel_size: kernel_size)
             
             command_encoder.setTexture(final_texture_blurred, index: 0)
             command_encoder.setTexture(final_texture, index: 1)

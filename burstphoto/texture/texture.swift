@@ -85,16 +85,20 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     let black_level_mean = 0.25*Double(black_level[0] + black_level[1] + black_level[2] + black_level[3])
     
     let color_factor_mean: Double
+    let kernel_size: Int
     if (mosaic_pattern_width == 6) {
         color_factor_mean = (8.0*color_factors[0] + 20.0*color_factors[1] + 8.0*color_factors[2]) / 36.0
+        kernel_size       = 2
     } else if (mosaic_pattern_width == 2) {
         color_factor_mean = (    color_factors[0] +  2.0*color_factors[1] +     color_factors[2]) /  4.0
+        kernel_size       = 1
     } else {
         color_factor_mean = (    color_factors[0] +      color_factors[1] +     color_factors[2]) /  3.0
+        kernel_size       = 1
     }
     
     // the blurred texture serves as an approximation of local luminance
-    let in_texture_blurred = blur(in_texture, with_pattern_width: 1, using_kernel_size: 1)
+    let in_texture_blurred = blur(in_texture, with_pattern_width: 1, using_kernel_size: kernel_size)
     // blurring of the weight texture ensures a smooth blending of frames, especially at regions where clipped highlight pixels are excluded
     let weight_highlights_texture_blurred = calculate_weight_highlights(in_texture, exposure_bias, white_level, black_level_mean)
     
