@@ -15,7 +15,7 @@ let compute_merge_weight_state = try! device.makeComputePipelineState(function: 
 func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], black_level: [[Int]], color_factors: [[Double]], textures: [MTLTexture], hotpixel_weight_texture: MTLTexture, final_texture: MTLTexture) throws {
     print("Merging in the spatial domain...")
     
-    let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
+    let kernel_size = mosaic_pattern_width == 6 ? 8 : 16 // kernel size of binomial filtering used for blurring the image
     
     // derive normalized robustness value: four steps in noise_reduction (-4.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the sd of shot noise increases by a factor of sqrt(2) per iso level
     let robustness_rev = 0.5*(36.0-Double(Int(noise_reduction+0.5)))
@@ -27,11 +27,10 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
               
     // set alignment params
     let min_image_dim = min(texture_width_orig, texture_height_orig)
-    var downscale_factor_array = [mosaic_pattern_width]
+    var downscale_factor_array = [mosaic_pattern_width == 6 ? 3 : mosaic_pattern_width]
     var search_dist_array = [2]
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]
-    var div = mosaic_pattern_width
     
     // This loop generates lists, which include information on different parameters required for the alignment on different resolution levels. For each pyramid level, the downscale factor compared to the neighboring resolution, the search distance, tile size, resolution (only for lowest level) and total downscale factor compared to the original resolution (only for lowest level) are calculated.
     while (res > search_distance) {
@@ -39,12 +38,11 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         search_dist_array.append(2)
         tile_size_array.append(max(tile_size_array.last!/2, 8))
         res /= 2
-        div *= 2
     }
      
     // calculate padding for extension of the image frame with zeros
     // For the alignment, the frame may be extended further by pad_align due to the following reason: the alignment is performed on different resolution levels and alignment vectors are upscaled by a simple multiplication by 2. As a consequence, the frame at all resolution levels has to be a multiple of the tile sizes of these resolution levels.
-    let tile_factor = div*Int(tile_size_array.last!)
+    let tile_factor = Int(tile_size_array.last!) * downscale_factor_array.reduce(1, *)
     
     var pad_align_x = Int(ceil(Float(texture_width_orig)/Float(tile_factor)))
     pad_align_x = (pad_align_x*Int(tile_factor) - texture_width_orig)/2
