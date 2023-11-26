@@ -68,7 +68,6 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
     var search_dist_array = [2]
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]
-    var div = mosaic_pattern_width
     
     // This loop generates lists, which include information on different parameters required for the alignment on different resolution levels. For each pyramid level, the downscale factor compared to the neighboring resolution, the search distance, tile size, resolution (only for lowest level) and total downscale factor compared to the original resolution (only for lowest level) are calculated.
     while (res > search_distance) {
@@ -76,13 +75,12 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         search_dist_array.append(2)
         tile_size_array.append(max(tile_size_array.last!/2, 8))
         res /= 2
-        div *= 2
     }
     
     // calculate padding for extension of the image frame with zeros
     // The minimum size of the frame for the frequency merging has to be texture size + tile_size_merge as 4 frames shifted by tile_size_merge in x, y and x, y are processed in four consecutive runs.
     // For the alignment, the frame may be extended further by pad_align due to the following reason: the alignment is performed on different resolution levels and alignment vectors are upscaled by a simple multiplication by 2. As a consequence, the frame at all resolution levels has to be a multiple of the tile sizes of these resolution levels.
-    let tile_factor = div*Int(tile_size_array.last!)
+    let tile_factor = Int(tile_size_array.last!) * downscale_factor_array.reduce(1, *)
     
     var pad_align_x = Int(ceil(Float(texture_width_orig+tile_size_merge)/Float(tile_factor)))
     pad_align_x = (pad_align_x*Int(tile_factor) - texture_width_orig - tile_size_merge)/2
