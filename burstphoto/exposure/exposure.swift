@@ -35,7 +35,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
             black_levels_mean = Array(repeating: 0.0, count: black_level[exp_idx].count)
             for img_idx in 0..<black_level.count {
                 for channel_idx in 0..<black_levels_mean.count {
-                    black_levels_mean[channel_idx] += Double(black_level[channel_idx][img_idx])
+                    black_levels_mean[channel_idx] += Double(black_level[img_idx][channel_idx])
                 }
             }
             
