@@ -232,7 +232,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     }
     
     if (mosaic_pattern_width == 2 && exposure_control != "Off") {
-        correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, ref_idx)
+        correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, ref_idx, mosaic_pattern_width)
     }
     
     // apply scaling to 16 bit
@@ -352,7 +352,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
                 add_texture_highlights(comp_texture, final_texture, white_level, black_level[comp_idx], color_factors[comp_idx])
                 norm_scalar += 1
             } else {
-                add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], white_level, black_level[comp_idx], color_factors[comp_idx])
+                add_texture_exposure(comp_texture, final_texture, norm_texture, exposure_bias[comp_idx]-exposure_bias[exp_idx], white_level, black_level[comp_idx], color_factors[comp_idx], mosaic_pattern_width)
             }
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }
