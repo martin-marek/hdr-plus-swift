@@ -16,7 +16,8 @@ let convert_uint16_to_float_state = try! device.makeComputePipelineState(functio
 let convert_to_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_to_bayer")!)
 let convert_to_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_to_rgba")!)
 let copy_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "copy_texture")!)
-let correct_hotpixels_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_hotpixels")!)
+let correct_hotpixels_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_hotpixels_bayer")!)
+let correct_hotpixels_xtrans_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_hotpixels_xtrans")!)
 let crop_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "crop_texture")!)
 let extend_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "extend_texture")!)
 let fill_with_zeros_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros")!)
@@ -369,9 +370,8 @@ func copy_texture(_ in_texture: MTLTexture) -> MTLTexture {
     return out_texture
 }
 
-
-func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [[Int]], _ ISO_exposure_time: [Double], _ noise_reduction: Double) {
-    
+/// Hot pixel correction based on the idea that hot pixels appear at the same pixel location in all images.
+func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [[Int]], _ ISO_exposure_time: [Double], _ noise_reduction: Double, _ mosaic_pattern_width: Int) {
     var correction_strength = 1.0
     
     // calculate hot pixel correction strength based on ISO value, exposure time and number of frames in the burst
@@ -395,7 +395,6 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [[Int]], _ ISO_e
         
         // iterate over all images
         for comp_idx in 0..<textures.count {
-            
             add_texture(textures[comp_idx], average_texture, textures.count)
         }
         
@@ -403,37 +402,44 @@ func correct_hotpixels(_ textures: [MTLTexture], _ black_level: [[Int]], _ ISO_e
         let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), .rgba)
         
         // standard parameters if black level is not available / available
-        let hot_pixel_threshold     = (black_level[0][0] == -1) ? 1.0 : 2.0
         let hot_pixel_multiplicator = (black_level[0][0] == -1) ? 2.0 : 1.0
+        var hot_pixel_threshold     = (black_level[0][0] == -1) ? 1.0 : 2.0
+        // X-Trans sensor has more spacing between nearest pixels of same color, need a more relaxed threshold.
+        // TODO: Need images to specifically test this on.
+        if mosaic_pattern_width == 6 {
+            hot_pixel_threshold *= 1.4
+        }
         
-        // iterate over all images and correct hot pixels in each texture
         for comp_idx in 0..<textures.count {
-            
-            let black_level0 = (black_level[comp_idx][0] == -1) ? Int(0) : black_level[comp_idx][0]
-            let black_level1 = (black_level[comp_idx][0] == -1) ? Int(0) : black_level[comp_idx][1]
-            let black_level2 = (black_level[comp_idx][0] == -1) ? Int(0) : black_level[comp_idx][2]
-            let black_level3 = (black_level[comp_idx][0] == -1) ? Int(0) : black_level[comp_idx][3]
-            
+            let black_levels_comp = black_level[comp_idx].map({ $0 == -1 ? Int32(0) : Int32($0)})
+            let black_levels_buffer = device.makeBuffer(bytes: black_levels_comp, length: MemoryLayout<Int32>.size * black_levels_comp.count)!
             let tmp_texture = copy_texture(textures[comp_idx])
             
             let command_buffer = command_queue.makeCommandBuffer()!
             command_buffer.label = "Hotpixel Correction: \(comp_idx)"
             let command_encoder = command_buffer.makeComputeCommandEncoder()!
-            let state = correct_hotpixels_state
+            let state: MTLComputePipelineState
+            switch mosaic_pattern_width {
+                case 2:
+                    state = correct_hotpixels_bayer_state
+                case 6:
+                    state = correct_hotpixels_xtrans_state
+                default:
+                    return
+            }
             command_encoder.setComputePipelineState(state)
+            // The -4 is here so that the nearest neighbours for the edges of the images can be found without indexing out of the image
+            // TODO: This is a hardcoded number for Bayer sensors.
             let threads_per_grid = MTLSize(width: average_texture.width-4, height: average_texture.height-4, depth: 1)
             let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
             command_encoder.setTexture(average_texture, index: 0)
             command_encoder.setTexture(tmp_texture, index: 1)
             command_encoder.setTexture(textures[comp_idx], index: 2)
             command_encoder.setBuffer(mean_texture_buffer, offset: 0, index: 0)
-            command_encoder.setBytes([Int32(black_level0)], length: MemoryLayout<Int32>.stride, index: 1)
-            command_encoder.setBytes([Int32(black_level1)], length: MemoryLayout<Int32>.stride, index: 2)
-            command_encoder.setBytes([Int32(black_level2)], length: MemoryLayout<Int32>.stride, index: 3)
-            command_encoder.setBytes([Int32(black_level3)], length: MemoryLayout<Int32>.stride, index: 4)
-            command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 5)
-            command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 6)
-            command_encoder.setBytes([Float32(correction_strength)], length: MemoryLayout<Float32>.stride, index: 7)
+            command_encoder.setBuffer(black_levels_buffer, offset: 0, index: 1)
+            command_encoder.setBytes([Float32(hot_pixel_threshold)],     length: MemoryLayout<Float32>.stride, index: 2)
+            command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 3)
+            command_encoder.setBytes([Float32(correction_strength)],     length: MemoryLayout<Float32>.stride, index: 4)
             command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
             command_encoder.endEncoding()
             command_buffer.commit()
