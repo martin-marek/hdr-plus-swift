@@ -207,10 +207,8 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         let hotpixel_weight_texture = device.makeTexture(descriptor: hotpixel_weight_texture_descriptor)!
         hotpixel_weight_texture.label = "Hotpixel weight texture"
         fill_with_zeros(hotpixel_weight_texture)
-                
-        if mosaic_pattern_width == 2 {
-            find_hotpixels(textures, hotpixel_weight_texture, black_level, ISO_exposure_time, noise_reduction, mosaic_pattern_width)
-        }
+        
+        find_hotpixels(textures, hotpixel_weight_texture, black_level, ISO_exposure_time, noise_reduction, mosaic_pattern_width)
         
         if noise_reduction == 23.0 {
             try calculate_temporal_average(progress: progress, mosaic_pattern_width: mosaic_pattern_width, exposure_bias: exposure_bias, white_level: white_level[ref_idx], black_level: black_level, uniform_exposure: uniform_exposure, color_factors: color_factors, textures: textures, hotpixel_weight_texture: hotpixel_weight_texture, final_texture: final_texture)
