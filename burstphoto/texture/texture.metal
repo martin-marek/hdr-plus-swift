@@ -537,7 +537,10 @@ kernel void prepare_texture(texture2d<uint, access::read> in_texture [[texture(0
     out_texture.write(pixel_value, uint2(gid.x+pad_left, gid.y+pad_top));
 }
 
-
+/**
+ Divide value from in_buffer by divisor and set to out_buffer. Using an out_buffer instead of doing it in-place in order to keep usage consistent with sum_divide_buffer
+ Input and output buffer are the same size.
+ */
 kernel void divide_buffer(device   float  *in_buffer   [[buffer(0)]],
                           device   float  *out_buffer  [[buffer(1)]],
                           constant float& divisor      [[buffer(2)]],
@@ -546,6 +549,9 @@ kernel void divide_buffer(device   float  *in_buffer   [[buffer(0)]],
     out_buffer[gid.x] = in_buffer[gid.x] / divisor;
 }
 
+/**
+ Calculate the sum of in_buffer, divide by divisor, and set to out_buffer.
+ */
 kernel void sum_divide_buffer(device   float  *in_buffer   [[buffer(0)]],
                               device   float  *out_buffer  [[buffer(1)]],
                               constant float& divisor      [[buffer(2)]],
@@ -580,7 +586,9 @@ kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[
     in_texture.write(in_texture.read(gid).r/(norm_texture.read(gid).r + norm_scalar), gid);
 }
 
-
+/**
+ Used for calculating texture_mean. Can't use the UInt version since the images at this point are stored as floats.
+ */
 kernel void sum_rect_columns_float(texture2d<float, access::read> in_texture [[texture(0)]],
                                    texture2d<float, access::write> out_texture [[texture(1)]],
                                    constant int& top [[buffer(1)]],
@@ -599,7 +607,10 @@ kernel void sum_rect_columns_float(texture2d<float, access::read> in_texture [[t
     out_texture.write(total, gid);
 }
 
-
+/**
+ Used for calculating a black level from masked areas of the DNG.
+ DNG data is storred as UInt, thus need a seperate version from the float one above.
+ */
 kernel void sum_rect_columns_uint(texture2d<uint, access::read> in_texture [[texture(0)]],
                                   texture2d<float, access::write> out_texture [[texture(1)]],
                                   constant int& top [[buffer(1)]],
