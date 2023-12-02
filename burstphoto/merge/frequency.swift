@@ -120,7 +120,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         let pad_bottom = pad_align_y + shift_bottom
         
         // prepare reference texture by correcting hot pixels, equalizing exposure and extending the texture
-        let ref_texture = prepare_texture(textures[ref_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, 0, black_level, ref_idx)
+        let ref_texture = prepare_texture(textures[ref_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, 0, black_level[ref_idx], mosaic_pattern_width)
         // convert reference texture into RGBA pixel format that SIMD instructions can be applied
         let ref_texture_rgba = convert_to_rgba(ref_texture, crop_merge_x, crop_merge_y)
         
@@ -149,7 +149,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             }
             
             // prepare comparison texture by correcting hot pixels, equalizing exposure and extending the texture
-            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, (exposure_bias[ref_idx]-exposure_bias[comp_idx]), black_level, comp_idx)
+            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, (exposure_bias[ref_idx]-exposure_bias[comp_idx]), black_level[comp_idx], mosaic_pattern_width)
             
             black_level_mean = Double(black_level[comp_idx].reduce(0, +)) / Double(black_level[comp_idx].count)
             
