@@ -120,42 +120,34 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
     t = DispatchTime.now().uptimeNanoseconds
     DispatchQueue.main.async { progress.int += (convert_to_dng ? 10_000_000 : 20_000_000) }
     
-    // if images have a uniform exposure: use central image as reference
-    var ref_idx = image_urls.count / 2
-    var uniform_exposure = true
+    var uniform_exposure = !exposure_bias.contains{$0 != exposure_bias[0]}
     
-    for comp_idx in 0..<image_urls.count {
-        // if images have different exposures: use image with lowest exposure as reference to protect highlights
+    var ref_idx: Int
+    if !uniform_exposure {
+        // Use image with lowest exposure as reference to protect highlights
         // inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
-        if exposure_bias[comp_idx] < exposure_bias[ref_idx] {
-            ref_idx = comp_idx
-        }
-        // check if exposure is uniform or bracketed
-        if exposure_bias[comp_idx] != exposure_bias[0] {
-            uniform_exposure = false
-        }
-    }
-    
-    // repeat check of uniform exposure, but this time use product of ISO value and exposure time for evaluation
-    if uniform_exposure {
-        for comp_idx in 0..<image_urls.count {
-            // if images have different exposures: use image with lowest exposure as reference to protect highlights
-            if (ISO_exposure_time[ref_idx]-ISO_exposure_time[comp_idx] > 1e-12) {
-                ref_idx = comp_idx
-            }
-            // check if exposure is uniform or bracketed
-            if (abs(ISO_exposure_time[comp_idx]-ISO_exposure_time[0]) > 1e-12) {
-                uniform_exposure = false
-            }
-        }
-        // if exposure bracketing is detected, overwrite exposure bias vector and set darkest frame to exposure bias -2EV
-        if !uniform_exposure {
+        ref_idx = exposure_bias.firstIndex(of: exposure_bias.min()!)!
+    } else {
+        // If a uniform exposure was detected it could be for two reasons:
+        //  1. An actual uniform exposure burst
+        //  2. A burst where ISO or exposure time were changed manually and not through an exposure compensation adjustment
+        
+        // Checking for case 2
+        uniform_exposure = !ISO_exposure_time.contains{abs($0 - ISO_exposure_time[0]) > 1e-12} // 1e-12 is used as a small eps
+        
+        if uniform_exposure { // Case 1: Actually uniform exposure
+            // Use central image in the burst as reference
+            // This is based on the assumption that in a burst, the central image will be the most closest image to all other images.
+            ref_idx = image_urls.count / 2
+        } else { // Case 2: Non-uniform exposure, need to chance ref_idx and exposure_bias values
+            ref_idx = ISO_exposure_time.firstIndex(of: ISO_exposure_time.min()!)!
+            
+            // Overwrite exposure bias values and set darkest frame to an exposure bias of -2EV
             for comp_idx in 0..<image_urls.count {
                 exposure_bias[comp_idx] = Int(round((log2(ISO_exposure_time[comp_idx]/ISO_exposure_time[ref_idx])-2.0)*100))
             }
         }
     }
-    
     // check for non-Bayer sensors that the exposure of images is uniform
     if (!uniform_exposure && mosaic_pattern_width != 2) {throw AlignmentError.non_bayer_exposure_bracketing}
     
