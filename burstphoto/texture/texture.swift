@@ -693,7 +693,8 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
     let state       = per_sub_pixel ? divide_buffer_state                       : sum_divide_buffer_state
     let buffer_size = per_sub_pixel ? mosaic_pattern_width*mosaic_pattern_width : 1
     let avg_buffer  = device.makeBuffer(length: buffer_size*MemoryLayout<Float32>.size, options: .storageModeShared)!
-    let num_pixels_per_value = Float(in_texture.width * in_texture.height)
+    // If doing per-subpixel, the total number of pixels of each subpixel is 1/(mosaic_pattern_withh)^2 times the total
+    let num_pixels_per_value = Float(in_texture.width * in_texture.height) / (per_sub_pixel ? Float(mosaic_pattern_width*mosaic_pattern_width) : 1.0)
     let threads_per_grid_divisor = MTLSize(width: buffer_size, height: 1, depth: 1)
     let threads_per_thread_group_divisor = get_threads_per_thread_group(state, threads_per_grid_divisor)
     command_encoder.setComputePipelineState(state)
