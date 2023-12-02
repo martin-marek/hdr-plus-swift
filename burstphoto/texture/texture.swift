@@ -19,7 +19,7 @@ let sum_divide_buffer_state = try! device.makeComputePipelineState(function: mfl
 let fill_with_zeros_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros")!)
 let find_hotpixels_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "find_hotpixels")!)
 let normalize_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_texture")!)
-let prepare_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "prepare_texture")!)
+let prepare_texture_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "prepare_texture_bayer")!)
 let sum_rect_columns_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_rect_columns_float")!)
 let sum_rect_columns_uint_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_rect_columns_uint")!)
 let sum_row_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_row")!)
@@ -210,8 +210,6 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
         texture_descriptor.storageMode = .private
         let summed_y = device.makeTexture(descriptor: texture_descriptor)!
         summed_y.label = "\(texture.label!.components(separatedBy: ":")[0]): Summed in y for black level"
-        
-        
         
         // Sum along columns
         let command_buffer = command_queue.makeCommandBuffer()!
@@ -596,7 +594,7 @@ func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture, _ n
 /// For example, if the reference image is taken at 0 EV and has a pixel value of 45 and image 2 is taken at 2 EV and has a pixel value of 200, the two values represent vastly different things. The pixel value of image 2 must be decreased by 2^-2 (200 x 2^-2 = 50) in order for the pixel values to be comparable.
 ///
 /// Inspired by https://ai.googleblog.com/2021/04/hdr-with-bracketing-on-pixel-phones.html
-func prepare_texture(_ in_texture: MTLTexture, _ hotpixel_weight_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _ pad_top: Int, _ pad_bottom: Int, _ exposure_diff: Int, _ black_level: [[Int]], _ comp_idx: Int) -> MTLTexture {
+func prepare_texture(_ in_texture: MTLTexture, _ hotpixel_weight_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _ pad_top: Int, _ pad_bottom: Int, _ exposure_diff: Int, _ black_level: [Int], _ mosaic_pattern_width: Int) -> MTLTexture {
 
     // always use pixel format float32 with increased precision that merging is performed with best possible precision    
     let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: in_texture.width+pad_left+pad_right, height: in_texture.height+pad_top+pad_bottom, mipmapped: false)
@@ -606,24 +604,24 @@ func prepare_texture(_ in_texture: MTLTexture, _ hotpixel_weight_texture: MTLTex
     out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): Prepared"
     
     fill_with_zeros(out_texture)
+    
+    let black_levels_buffer = device.makeBuffer(bytes: black_level.map{ $0 == -1 ? Float32(0) : Float32($0)},
+                                                length: black_level.count * MemoryLayout<Float32>.size)!
         
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Prepare Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = prepare_texture_state
+    let state = prepare_texture_bayer_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(hotpixel_weight_texture, index: 1)
     command_encoder.setTexture(out_texture, index: 2)
-    command_encoder.setBytes([Int32(pad_left)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(pad_top)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([Int32(black_level[comp_idx][0])], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.setBytes([Int32(black_level[comp_idx][1])], length: MemoryLayout<Int32>.stride, index: 4)
-    command_encoder.setBytes([Int32(black_level[comp_idx][2])], length: MemoryLayout<Int32>.stride, index: 5)
-    command_encoder.setBytes([Int32(black_level[comp_idx][3])], length: MemoryLayout<Int32>.stride, index: 6)
+    command_encoder.setBuffer(black_levels_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(pad_left)], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(pad_top)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(exposure_diff)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()

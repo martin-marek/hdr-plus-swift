@@ -338,7 +338,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         
         // 1. add up all frames of the burst
         for comp_idx in 0..<textures.count {
-            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level, comp_idx)
+            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, exposure_bias[exp_idx]-exposure_bias[comp_idx], black_level[comp_idx], mosaic_pattern_width)
                        
             if exposure_bias[comp_idx] == exposure_bias[exp_idx] {
                 add_texture_highlights(comp_texture, final_texture, white_level, black_level[comp_idx], color_factors[comp_idx])
@@ -356,7 +356,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
         
         // simple temporal averaging
         for comp_idx in 0..<textures.count {
-            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, 0, black_level, comp_idx)
+            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, 0, 0, 0, 0, 0, black_level[comp_idx], mosaic_pattern_width)
             add_texture(comp_texture, final_texture, textures.count)
             DispatchQueue.main.async { progress.int += Int(80_000_000/Double(textures.count)) }
         }

@@ -51,7 +51,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
     pad_align_y = (pad_align_y*Int(tile_factor) - texture_height_orig)/2
     
     // prepare reference texture by correcting hot pixels, equalizing exposure and extending the texture
-    let ref_texture = prepare_texture(textures[ref_idx], hotpixel_weight_texture, pad_align_x, pad_align_x, pad_align_y, pad_align_y, 0, black_level, ref_idx)
+    let ref_texture = prepare_texture(textures[ref_idx], hotpixel_weight_texture, pad_align_x, pad_align_x, pad_align_y, pad_align_y, 0, black_level[ref_idx], mosaic_pattern_width)
     let ref_texture_cropped = crop_texture(ref_texture, pad_align_x, pad_align_x, pad_align_y, pad_align_y)
     
     var black_level_mean = Double(black_level[ref_idx].reduce(0, +)) / Double(black_level[ref_idx].count)
@@ -75,7 +75,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
         }
             
         // prepare comparison texture by correcting hot pixels, equalizing exposure and extending the texture
-        let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, pad_align_x, pad_align_x, pad_align_y, pad_align_y, (exposure_bias[ref_idx]-exposure_bias[comp_idx]), black_level, comp_idx)
+        let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, pad_align_x, pad_align_x, pad_align_y, pad_align_y, (exposure_bias[ref_idx]-exposure_bias[comp_idx]), black_level[comp_idx], mosaic_pattern_width)
          
         black_level_mean = Double(black_level[comp_idx].reduce(0, +)) / Double(black_level[comp_idx].count)
         

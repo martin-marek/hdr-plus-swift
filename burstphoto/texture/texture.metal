@@ -420,17 +420,14 @@ kernel void find_hotpixels(texture2d<float, access::read> average_texture [[text
 /**
  This function is intended to convert the source input texture from integer to 32 bit float while correcting hot pixels, equalizing exposure and extending the texture to the size needed for alignment
  */
-kernel void prepare_texture(texture2d<uint, access::read> in_texture [[texture(0)]],
-                            texture2d<float, access::read> hotpixel_weight_texture [[texture(1)]],
-                            texture2d<float, access::write> out_texture [[texture(2)]],
-                            constant int& pad_left [[buffer(0)]],
-                            constant int& pad_top [[buffer(1)]],
-                            constant int& exposure_diff [[buffer(2)]],
-                            constant int& black_level0 [[buffer(3)]],
-                            constant int& black_level1 [[buffer(4)]],
-                            constant int& black_level2 [[buffer(5)]],
-                            constant int& black_level3 [[buffer(6)]],
-                            uint2 gid [[thread_position_in_grid]]) {
+kernel void prepare_texture_bayer(texture2d<uint, access::read> in_texture                  [[texture(0)]],
+                                  texture2d<float, access::read> hotpixel_weight_texture    [[texture(1)]],
+                                  texture2d<float, access::write> out_texture               [[texture(2)]],
+                                  device   float *black_levels   [[buffer(0)]],
+                                  constant int&  pad_left        [[buffer(1)]],
+                                  constant int&  pad_top         [[buffer(2)]],
+                                  constant int&  exposure_diff   [[buffer(3)]],
+                                  uint2 gid [[thread_position_in_grid]]) {
         
     // load args
     int x = gid.x;
@@ -455,11 +452,9 @@ kernel void prepare_texture(texture2d<uint, access::read> in_texture [[texture(0
         pixel_value = hotpixel_weight*0.25f*sum + (1.0f-hotpixel_weight)*pixel_value;
     }
     
-    float4 const black_level4 = float4(black_level0, black_level1, black_level2, black_level3);
-    
     // calculate exposure correction factor from exposure difference
     float const corr_factor = pow(2.0f, float(exposure_diff/100.0f));        
-    float const black_level = black_level4[(gid.y%2)*2 + (gid.x%2)];
+    float const black_level = black_levels[(gid.y%2)*2 + (gid.x%2)];
     
     // correct exposure
     pixel_value = (pixel_value - black_level)*corr_factor + black_level;
