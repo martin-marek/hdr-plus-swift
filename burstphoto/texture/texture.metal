@@ -564,20 +564,6 @@ kernel void sum_divide_buffer(device   float  *in_buffer   [[buffer(0)]],
 }
 
 
-kernel void extend_texture(texture2d<float, access::read> in_texture [[texture(0)]],
-                           texture2d<float, access::write> out_texture [[texture(1)]],
-                           constant int& pad_left [[buffer(0)]],
-                           constant int& pad_top [[buffer(1)]],
-                           uint2 gid [[thread_position_in_grid]]) {
-        
-    int x = gid.x + pad_left;
-    int y = gid.y + pad_top;
- 
-    float color_value = in_texture.read(gid).r;
-    out_texture.write(color_value, uint2(x, y));
-}
-
-
 kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[texture(0)]],
                               texture2d<float, access::read> norm_texture [[texture(1)]],
                               constant float& norm_scalar [[buffer(0)]],

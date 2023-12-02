@@ -16,7 +16,6 @@ let copy_texture_state = try! device.makeComputePipelineState(function: mfl.make
 let crop_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "crop_texture")!)
 let divide_buffer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "divide_buffer")!)
 let sum_divide_buffer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_divide_buffer")!)
-let extend_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "extend_texture")!)
 let fill_with_zeros_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros")!)
 let find_hotpixels_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "find_hotpixels")!)
 let normalize_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_texture")!)
