@@ -546,7 +546,7 @@ kernel void find_hotpixels_xtrans(texture2d<float, access::read>  average_textur
     // extract color channel-dependent mean value of the average texture of all images and the black level
     int const ix = x % 6;
     int const iy = y % 6;
-    float const black_level  = float(black_levels[ix + 6*iy]);
+    float const black_level  = black_levels[ix + 6*iy];
     float const mean_texture = mean_texture_buffer[ix + 6*iy] - black_level;
     
     // Weighed average of the 4 nearest pixels of the same color based on the average texture
@@ -561,7 +561,7 @@ kernel void find_hotpixels_xtrans(texture2d<float, access::read>  average_textur
         weight = 1.0/sqrt(pow(float(dx), 2) + pow(float(dy), 2));
         
         total += weight;
-        float val = average_texture.read(uint2(x+dx, y+dy)).r; // TODO: This is reading in garbage
+        float val = average_texture.read(uint2(x+dx, y+dy)).r;
         sum   += weight * val;
     }
     sum /= total;
@@ -620,6 +620,113 @@ kernel void prepare_texture_bayer(texture2d<uint, access::read> in_texture      
     float const black_level = black_levels[(gid.y%2)*2 + (gid.x%2)];
     
     // correct exposure
+    pixel_value = (pixel_value - black_level)*corr_factor + black_level;
+    pixel_value = max(pixel_value, 0.0f);
+    
+    out_texture.write(pixel_value, uint2(gid.x+pad_left, gid.y+pad_top));
+}
+
+/**
+ Same as the Bayer version, but accounting for the peculiarities of the XTrans sensor
+ */
+kernel void prepare_texture_xtrans(texture2d<uint, access::read> in_texture                  [[texture(0)]],
+                                   texture2d<float, access::read> hotpixel_weight_texture    [[texture(1)]],
+                                   texture2d<float, access::write> out_texture               [[texture(2)]],
+                                   device   float *black_levels   [[buffer(0)]],
+                                   constant int&  pad_left        [[buffer(1)]],
+                                   constant int&  pad_top         [[buffer(2)]],
+                                   constant int&  exposure_diff   [[buffer(3)]],
+                                   uint2 gid [[thread_position_in_grid]]) {
+    // A more accurate approach for the R and B would be to average out the two knight positions that have 1 distance between them, but that seems more computationally expensive.
+    // Lookup table for the relative positions of the closest 4 sub-pixels of the same color (🐷 approach)
+    int offset[6][6][4][2] = {
+        { // Row 0
+            {{ 0, -1}, { 1, -1}, { 1,  0}, {-1,  1}}, // G
+            {{ 0, -1}, { 1,  1}, {-1,  0}, {-1, -1}}, // G
+            {{ 1, -2}, { 2,  1}, { 0,  2}, {-2,  1}}, // B
+            {{ 0, -1}, { 1, -1}, { 1,  0}, {-1,  1}}, // G
+            {{ 0, -1}, { 1,  1}, {-1,  0}, {-1, -1}}, // G
+            {{ 1, -2}, { 2,  1}, { 0,  2}, {-2,  1}}  // R
+        },
+        { // Row 1
+            {{-1,  2}, {-2,  0}, {-1, -2}, { 2, -1}}, // B
+            {{ 1, -2}, { 2,  0}, { 1,  2}, {-2,  1}}, // R
+            {{ 1, -1}, { 1,  1}, {-1,  1}, {-1, -1}}, // G
+            {{ 2, -1}, { 2,  1}, {-1,  2}, {-2,  0}}, // R
+            {{ 1, -2}, { 2,  0}, { 1,  2}, {-2,  1}}, // B
+            {{ 1, -1}, { 1,  1}, {-1,  1}, {-1, -1}}  // G
+        },
+        { // Row 2
+            {{ 1,  0}, { 1,  1}, { 0,  1}, {-1,  1}}, // G
+            {{ 1, -1}, { 0,  1}, {-1,  1}, {-1,  0}}, // G
+            {{-2, -1}, { 0, -2}, { 2, -1}, { 1, -2}}, // B
+            {{ 1,  0}, { 1,  1}, { 0,  1}, {-1,  1}}, // G
+            {{ 1, -1}, { 0,  1}, {-1,  1}, {-1,  0}}, // G
+            {{-2, -1}, { 0, -2}, { 2, -1}, { 1, -2}}  // R
+        },
+        { // Row 3
+            {{ 0, -1}, { 1, -1}, { 1,  0}, {-1,  1}}, // G
+            {{ 0, -1}, { 1,  1}, {-1,  0}, {-1, -1}}, // G
+            {{ 1, -2}, { 2,  1}, { 0,  2}, {-2,  1}}, // R
+            {{ 0, -1}, { 1, -1}, { 1,  0}, {-1,  1}}, // G
+            {{ 0, -1}, { 1,  1}, {-1,  0}, {-1, -1}}, // G
+            {{ 1, -2}, { 2,  1}, { 0,  2}, {-2,  1}}  // B
+        },
+        { // Row 4
+            {{-1,  2}, {-2,  0}, {-1, -2}, { 2, -1}}, // R
+            {{ 1, -2}, { 2,  0}, { 1,  2}, {-2,  1}}, // B
+            {{ 1, -1}, { 1,  1}, {-1,  1}, {-1, -1}}, // G
+            {{ 2, -1}, { 2,  1}, {-1,  2}, {-2,  0}}, // B
+            {{ 1, -2}, { 2,  0}, { 1,  2}, {-2,  1}}, // R
+            {{ 1, -1}, { 1,  1}, {-1,  1}, {-1, -1}}  // G
+        },
+        { // Row 5
+            {{ 1,  0}, { 1,  1}, { 0,  1}, {-1,  1}}, // G
+            {{ 1, -1}, { 0,  1}, {-1,  1}, {-1,  0}}, // G
+            {{-2, -1}, { 0, -2}, { 2, -1}, { 1, -2}}, // R
+            {{ 1,  0}, { 1,  1}, { 0,  1}, {-1,  1}}, // G
+            {{ 1, -1}, { 0,  1}, {-1,  1}, {-1,  0}}, // G
+            {{-2, -1}, { 0, -2}, { 2, -1}, { 1, -2}}  // B
+        }
+    };
+    
+    // load args
+    int x = gid.x;
+    int y = gid.y;
+    int const ix = x % 6;
+    int const iy = y % 6;
+    
+    int const texture_width = in_texture.get_width();
+    int const texture_height = in_texture.get_height();
+    
+    float pixel_value = float(in_texture.read(gid).r);
+    
+    float const hotpixel_weight = hotpixel_weight_texture.read(gid).r;
+    
+    if (hotpixel_weight > 0.001f && x>=2 && x<texture_width-2 && y>=2 && y<texture_height-2) {
+        float sum    = 0.0;
+        float total  = 0.0;
+        float weight = 0.0;
+        int dx       = 0;
+        int dy       = 0;
+        for (int off = 0; off < 4; off++) {
+            dx     = offset[iy][ix][off][0];
+            dy     = offset[iy][ix][off][1];
+            weight = 1.0/sqrt(pow(float(dx), 2) + pow(float(dy), 2));
+            
+            total += weight;
+            float val = in_texture.read(uint2(x+dx, y+dy)).r;
+            sum   += weight * val;
+        }
+        sum /= total;
+        
+        // blend values and replace hot pixel value
+        pixel_value = hotpixel_weight*0.25f*sum + (1.0f-hotpixel_weight)*pixel_value;
+    }
+    
+    float const corr_factor = pow(2.0f, float(exposure_diff/100.0f));
+    float const black_level = black_levels[ix + 6*iy];
+    
     pixel_value = (pixel_value - black_level)*corr_factor + black_level;
     pixel_value = max(pixel_value, 0.0f);
     
