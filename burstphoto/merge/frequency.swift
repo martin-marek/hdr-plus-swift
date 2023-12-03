@@ -120,7 +120,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         let pad_bottom = pad_align_y + shift_bottom
         
         // prepare reference texture by correcting hot pixels, equalizing exposure and extending the texture
-        let ref_texture = prepare_texture(textures[ref_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, 0, black_level, ref_idx)
+        let ref_texture = prepare_texture(textures[ref_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, 0, black_level[ref_idx], mosaic_pattern_width)
         // convert reference texture into RGBA pixel format that SIMD instructions can be applied
         let ref_texture_rgba = convert_to_rgba(ref_texture, crop_merge_x, crop_merge_y)
         
@@ -149,7 +149,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             }
             
             // prepare comparison texture by correcting hot pixels, equalizing exposure and extending the texture
-            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, (exposure_bias[ref_idx]-exposure_bias[comp_idx]), black_level, comp_idx)
+            let comp_texture = prepare_texture(textures[comp_idx], hotpixel_weight_texture, pad_left, pad_right, pad_top, pad_bottom, (exposure_bias[ref_idx]-exposure_bias[comp_idx]), black_level[comp_idx], mosaic_pattern_width)
             
             black_level_mean = Double(black_level[comp_idx].reduce(0, +)) / Double(black_level[comp_idx].count)
             
@@ -167,7 +167,13 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             let mismatch_texture = calculate_mismatch_rgba(aligned_texture_rgba, ref_texture_rgba, rms_texture, exposure_factor, tile_info_merge)
             
             // normalize mismatch texture
-            let mean_mismatch = texture_mean(crop_texture(mismatch_texture, shift_left/tile_size_merge, shift_right/tile_size_merge, shift_top/tile_size_merge, shift_bottom/tile_size_merge), .r)
+            let mean_mismatch = texture_mean(crop_texture(mismatch_texture,
+                                                          shift_left/tile_size_merge,
+                                                          shift_right/tile_size_merge,
+                                                          shift_top/tile_size_merge,
+                                                          shift_bottom/tile_size_merge),
+                                             per_sub_pixel: false,
+                                             mosaic_pattern_width: mosaic_pattern_width)
             normalize_mismatch(mismatch_texture, mean_mismatch)
             
             // add mismatch texture to the total, accumulated mismatch texture
