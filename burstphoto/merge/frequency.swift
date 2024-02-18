@@ -167,7 +167,13 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
             let mismatch_texture = calculate_mismatch_rgba(aligned_texture_rgba, ref_texture_rgba, rms_texture, exposure_factor, tile_info_merge)
             
             // normalize mismatch texture
-            let mean_mismatch = texture_mean(crop_texture(mismatch_texture, shift_left/tile_size_merge, shift_right/tile_size_merge, shift_top/tile_size_merge, shift_bottom/tile_size_merge), .r)
+            let mean_mismatch = texture_mean(crop_texture(mismatch_texture,
+                                                          shift_left/tile_size_merge,
+                                                          shift_right/tile_size_merge,
+                                                          shift_top/tile_size_merge,
+                                                          shift_bottom/tile_size_merge),
+                                             per_sub_pixel: false,
+                                             mosaic_pattern_width: mosaic_pattern_width)
             normalize_mismatch(mismatch_texture, mean_mismatch)
             
             // add mismatch texture to the total, accumulated mismatch texture
