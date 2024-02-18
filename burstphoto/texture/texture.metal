@@ -556,7 +556,7 @@ kernel void sum_row(texture2d<float, access::read> in_texture [[texture(0)]],
                     uint2 gid [[thread_position_in_grid]]) {
     float total = 0.0;
     
-    for (int x = 0; x < width; x+= mosaic_pattern_width) {
+    for (int x = gid.x; x < width; x+= mosaic_pattern_width) {
         total += in_texture.read(uint2(x, gid.y)).r;
     }
     
