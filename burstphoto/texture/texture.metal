@@ -510,10 +510,10 @@ kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[
  */
 kernel void sum_rect_columns_float(texture2d<float, access::read> in_texture [[texture(0)]],
                                    texture2d<float, access::write> out_texture [[texture(1)]],
-                                   constant int& top [[buffer(1)]],
-                                   constant int& left [[buffer(2)]],
-                                   constant int& bottom [[buffer(3)]],
-                                   constant int& mosaic_pattern_width [[buffer(4)]],
+                                   constant int& top [[buffer(0)]],
+                                   constant int& left [[buffer(1)]],
+                                   constant int& bottom [[buffer(2)]],
+                                   constant int& mosaic_pattern_width [[buffer(3)]],
                                    uint2 gid [[thread_position_in_grid]]) {
     uint x = left + gid.x;
     uint dy = gid.y;
@@ -532,10 +532,10 @@ kernel void sum_rect_columns_float(texture2d<float, access::read> in_texture [[t
  */
 kernel void sum_rect_columns_uint(texture2d<uint, access::read> in_texture [[texture(0)]],
                                   texture2d<float, access::write> out_texture [[texture(1)]],
-                                  constant int& top [[buffer(1)]],
-                                  constant int& left [[buffer(2)]],
-                                  constant int& bottom [[buffer(3)]],
-                                  constant int& mosaic_pattern_width [[buffer(4)]],
+                                  constant int& top [[buffer(0)]],
+                                  constant int& left [[buffer(1)]],
+                                  constant int& bottom [[buffer(2)]],
+                                  constant int& mosaic_pattern_width [[buffer(3)]],
                                   uint2 gid [[thread_position_in_grid]]) {
     uint x = left + gid.x;
     uint dy = gid.y;
