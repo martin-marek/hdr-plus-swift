@@ -516,10 +516,9 @@ kernel void sum_rect_columns_float(texture2d<float, access::read> in_texture [[t
                                    constant int& mosaic_pattern_width [[buffer(3)]],
                                    uint2 gid [[thread_position_in_grid]]) {
     uint x = left + gid.x;
-    uint dy = gid.y;
     
     float total = 0;
-    for (int y = top+dy; y < bottom; y += mosaic_pattern_width) {
+    for (int y = top + gid.y; y < bottom; y += mosaic_pattern_width) {
         total += in_texture.read(uint2(x, y)).r;
     }
 
@@ -538,10 +537,9 @@ kernel void sum_rect_columns_uint(texture2d<uint, access::read> in_texture [[tex
                                   constant int& mosaic_pattern_width [[buffer(3)]],
                                   uint2 gid [[thread_position_in_grid]]) {
     uint x = left + gid.x;
-    uint dy = gid.y;
     
     float total = 0;
-    for (int y = top+dy; y < bottom; y += mosaic_pattern_width) {
+    for (int y = top + gid.y; y < bottom; y += mosaic_pattern_width) {
         total += in_texture.read(uint2(x, y)).r;
     }
 
