@@ -670,10 +670,10 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
     
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(summed_y, index: 1)
+    command_encoder.setBytes([0], length: MemoryLayout<Int32>.stride, index: 0)
     command_encoder.setBytes([0], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.setBytes([0], length: MemoryLayout<Int32>.stride, index: 2)
-    command_encoder.setBytes([in_texture.height], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 4)
+    command_encoder.setBytes([in_texture.height], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 3)
     command_encoder.dispatchThreads(thread_groups_per_grid, threadsPerThreadgroup: threads_per_thread_group)
 
     // Sum along the row
