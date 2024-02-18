@@ -679,9 +679,10 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
     // Sum along the row
     let sum_buffer = device.makeBuffer(length: (mosaic_pattern_width*mosaic_pattern_width)*MemoryLayout<Float32>.size,
                                        options: .storageModeShared)!
+    command_encoder.setComputePipelineState(sum_row_state)
     let threads_per_grid_x = MTLSize(width: mosaic_pattern_width, height: mosaic_pattern_width, depth: 1)
     let threads_per_thread_group_x = get_threads_per_thread_group(sum_row_state, threads_per_grid_x)
-    command_encoder.setComputePipelineState(sum_row_state)
+    
     command_encoder.setTexture(summed_y, index: 0)
     command_encoder.setBuffer(sum_buffer, offset: 0, index: 0)
     command_encoder.setBytes([Int32(summed_y.width)],       length: MemoryLayout<Int32>.stride, index: 1)
@@ -693,11 +694,12 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
     let state       = per_sub_pixel ? divide_buffer_state                       : sum_divide_buffer_state
     let buffer_size = per_sub_pixel ? mosaic_pattern_width*mosaic_pattern_width : 1
     let avg_buffer  = device.makeBuffer(length: buffer_size*MemoryLayout<Float32>.size, options: .storageModeShared)!
+    command_encoder.setComputePipelineState(state)
     // If doing per-subpixel, the total number of pixels of each subpixel is 1/(mosaic_pattern_withh)^2 times the total
     let num_pixels_per_value = Float(in_texture.width * in_texture.height) / (per_sub_pixel ? Float(mosaic_pattern_width*mosaic_pattern_width) : 1.0)
     let threads_per_grid_divisor = MTLSize(width: buffer_size, height: 1, depth: 1)
     let threads_per_thread_group_divisor = get_threads_per_thread_group(state, threads_per_grid_divisor)
-    command_encoder.setComputePipelineState(state)
+    
     command_encoder.setBuffer(sum_buffer,                                   offset: 0,                            index: 0)
     command_encoder.setBuffer(avg_buffer,                                   offset: 0,                            index: 1)
     command_encoder.setBytes([num_pixels_per_value],                        length: MemoryLayout<Float32>.stride, index: 2)
