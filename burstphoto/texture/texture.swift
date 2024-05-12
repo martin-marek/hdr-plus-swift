@@ -660,7 +660,7 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
     texture_descriptor.storageMode = .private
     let summed_y = device.makeTexture(descriptor: texture_descriptor)!
 
-    // Sum along columns
+    // Sum each subpixel of the mosaic vertically along columns, creating a (width, mosaic_pattern_width) sized image
     let command_buffer = command_queue.makeCommandBuffer()!
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     command_buffer.label = "Mean for \(String(describing: in_texture.label))\(per_sub_pixel ? " per_sub_pixel" : "")"
@@ -677,6 +677,7 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
     command_encoder.dispatchThreads(thread_groups_per_grid, threadsPerThreadgroup: threads_per_thread_group)
 
     // Sum along the row
+    // If `per_sub_pixel` is true, then the result is per sub pixel, otherwise a single value is calculated
     let sum_buffer = device.makeBuffer(length: (mosaic_pattern_width*mosaic_pattern_width)*MemoryLayout<Float32>.size,
                                        options: .storageModeShared)!
     command_encoder.setComputePipelineState(sum_row_state)
