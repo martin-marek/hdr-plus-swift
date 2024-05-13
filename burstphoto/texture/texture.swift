@@ -665,8 +665,8 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     command_buffer.label = "Mean for \(String(describing: in_texture.label))\(per_sub_pixel ? " per_sub_pixel" : "")"
     command_encoder.setComputePipelineState(sum_rect_columns_float_state)
-    let thread_groups_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
-    let threads_per_thread_group = get_threads_per_thread_group(sum_rect_columns_float_state, thread_groups_per_grid)
+    let thread_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(sum_rect_columns_float_state, thread_per_grid)
     
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(summed_y, index: 1)
@@ -674,7 +674,7 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
     command_encoder.setBytes([0], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.setBytes([in_texture.height], length: MemoryLayout<Int32>.stride, index: 2)
     command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 3)
-    command_encoder.dispatchThreads(thread_groups_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.dispatchThreads(thread_per_grid, threadsPerThreadgroup: threads_per_thread_group)
 
     // Sum along the row
     // If `per_sub_pixel` is true, then the result is per sub pixel, otherwise a single value is calculated
@@ -688,7 +688,6 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
     command_encoder.setBuffer(sum_buffer, offset: 0, index: 0)
     command_encoder.setBytes([Int32(summed_y.width)],       length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 2)
-    // TODO: Should this have the same number of threads? I think it should only be 1 thread.
     command_encoder.dispatchThreads(threads_per_grid_x, threadsPerThreadgroup: threads_per_thread_group_x)
     
     // Calculate the average from the sum
