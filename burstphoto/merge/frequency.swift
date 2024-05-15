@@ -195,7 +195,7 @@ func align_merge_frequency_domain(progress: ProcessingProgress, ref_idx: Int, mo
         // reduce potential artifacts at tile borders
         reduce_artifacts_tile_border(output_texture, ref_texture_rgba, tile_info_merge, black_level[ref_idx])
         // convert back to the 2x2 pixel structure and crop to original size
-        output_texture = convert_to_bayer(output_texture, pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
+        output_texture = crop_texture(convert_to_bayer(output_texture), pad_left-crop_merge_x, pad_right-crop_merge_x, pad_top-crop_merge_y, pad_bottom-crop_merge_y)
         
         // add output texture to the final texture to collect all textures of the four iterations
         add_texture(output_texture, final_texture, 1)
