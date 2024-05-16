@@ -234,7 +234,7 @@ struct SettingsView: View {
                             Text($0)
                         }
                     }.pickerStyle(MenuPickerStyle()).frame(width: 216)
-                }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 12)
+                }.padding(.horizontal, 15).padding(.top, 20).padding(.bottom, 11)
                 
                 VStack(alignment: .leading) {
                     
@@ -243,7 +243,7 @@ struct SettingsView: View {
                       ? Text("max. ").foregroundColor(.accentColor) + Text("(simple average w/o alignment)")
                       : Text("\(Int(settings.noise_reduction))")
                      )).font(.system(size: 14, weight: .medium))
-                        .opacity(user_changing_nr ? 0.75 : 1.0).padding(.top, 12)
+                        .opacity(user_changing_nr ? 0.75 : 1.0).padding(.top, 15)
                     
                     // the slider/stepper should provide haptic feedback when value changes
                     // but there's one exception: we don't provide feedback on the first click of the stepper,
@@ -276,7 +276,7 @@ struct SettingsView: View {
                 }.padding(.horizontal, 15)
                 Spacer()
                     .navigationTitle("Preferences")
-            }.tabItem {Label("Exposure & Noise   ", image: "camera_icon")}
+            }.tabItem {Label("Exposure & Noise   ", image: "camera_icon").imageScale(.large)}
             
             VStack(alignment: .leading) {
                 
@@ -321,9 +321,9 @@ struct SettingsView: View {
                 }.padding(.horizontal, 15).padding(.vertical, 11)
                 Spacer()
                     .navigationTitle("Preferences")
-            }.tabItem {Label("Stacking & Output  ", image: "stack_icon")}
+            }.tabItem {Label("Stacking & Output  ", image: "stack_icon").imageScale(.large)}
         }
-        .frame(width: 390, height: 225)
+        .frame(width: 390, height: 222)
     }
 }
 

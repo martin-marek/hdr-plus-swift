@@ -15,7 +15,7 @@ The only *natively* supported image format is DNG. However, if you download and 
 
 ### Processing images
 
-To process a burst of images, please drag-and-drop them into the app. You can either drag-and-drop individual images or a folder containing the whole burst. The resulting image will be in the RAW-DNG format and its filename contains the most important settings selected. It can be further processed with the RAW converter of choice. 
+To process a burst of images, please drag-and-drop them into the app. You can either drag-and-drop individual images or a folder containing the whole burst. The resulting image will be either based on the middle frame of the burst (uniform exposure) or on the most central, darkest frame of the burst (bracketed exposure). The output file will be in the RAW-DNG format and its filename contains the most important settings selected. It can be further processed with the RAW converter of choice. 
 
 {% include figure image_path="/assets/images/help/drag-and-drop.jpg" %}
 
@@ -49,7 +49,7 @@ There are six settings in the preferences panel of the app. Their default values
 - To improve tonality in the shadows, you can experiment with the various `Exposure control` options. The setting "Linear (full bit range)" is recommended as the starting point. In addition, you can try setting the `Output bit depth` to 16 bit.
 - `Exposure control` only works if several exposure metadata information can be extracted correctly from the DNG. If you get any color casts for your files, you can try the setting „Off“, try to decrease `Noise reduction`, set `Output bit depth` to "Native" and/or use only bursts with uniform exposure. The setting "Off" should only be used as a fallback solution in case the setting "Linear (full bit range)" exhibits artifacts. 
 - When the exposure bias is derived from shutter speed, only a relative bias between the frames can be calculated. In that case, an absolute exposure bias of -2 EV is assumed for the darkest frame.
-- If you see any motion artifacts or ghosting in the output image, decrease`Noise reduction`.
+- If you see any motion artifacts, ghosting or color casts in the output image, decrease`Noise reduction`.
 - If you see too much noise in the output image, increase `Noise reduction`.
 - If you work on a tripod and capture a static scene, you may apply the "max." setting for `Noise reduction`, which applies simple averaging without alignment. This provides the best possible noise reduction at the expense of having no robustness against motion.
 

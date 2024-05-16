@@ -512,30 +512,27 @@ func find_hotpixels(_ textures: [MTLTexture], _ hotpixel_weight_texture: MTLText
             black_level3 += (black_level[comp_idx][3] == -1) ? 0.0 : Double(black_level[comp_idx][3])
         }
         
-        // iterate over all images and correct hot pixels in each texture
-        for comp_idx in 0..<textures.count {
-              
-            let command_buffer = command_queue.makeCommandBuffer()!
-            command_buffer.label = "Hotpixel Detection: \(comp_idx)"
-            let command_encoder = command_buffer.makeComputeCommandEncoder()!
-            let state = find_hotpixels_state
-            command_encoder.setComputePipelineState(state)
-            let threads_per_grid = MTLSize(width: average_texture.width-4, height: average_texture.height-4, depth: 1)
-            let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
-            command_encoder.setTexture(average_texture, index: 0)
-            command_encoder.setTexture(hotpixel_weight_texture, index: 1)
-            command_encoder.setBuffer(mean_texture_buffer, offset: 0, index: 0)
-            command_encoder.setBytes([Float32(black_level0/Double(textures.count))], length: MemoryLayout<Float32>.stride, index: 1)
-            command_encoder.setBytes([Float32(black_level1/Double(textures.count))], length: MemoryLayout<Float32>.stride, index: 2)
-            command_encoder.setBytes([Float32(black_level2/Double(textures.count))], length: MemoryLayout<Float32>.stride, index: 3)
-            command_encoder.setBytes([Float32(black_level3/Double(textures.count))], length: MemoryLayout<Float32>.stride, index: 4)
-            command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 5)
-            command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 6)
-            command_encoder.setBytes([Float32(correction_strength)], length: MemoryLayout<Float32>.stride, index: 7)
-            command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
-            command_encoder.endEncoding()
-            command_buffer.commit()
-        }
+        // determine hot pixel probability for each pixel in the average texture
+        let command_buffer = command_queue.makeCommandBuffer()!
+        command_buffer.label = "Hotpixel Detection"
+        let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        let state = find_hotpixels_state
+        command_encoder.setComputePipelineState(state)
+        let threads_per_grid = MTLSize(width: average_texture.width-4, height: average_texture.height-4, depth: 1)
+        let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
+        command_encoder.setTexture(average_texture, index: 0)
+        command_encoder.setTexture(hotpixel_weight_texture, index: 1)
+        command_encoder.setBuffer(mean_texture_buffer, offset: 0, index: 0)
+        command_encoder.setBytes([Float32(black_level0/Double(textures.count))], length: MemoryLayout<Float32>.stride, index: 1)
+        command_encoder.setBytes([Float32(black_level1/Double(textures.count))], length: MemoryLayout<Float32>.stride, index: 2)
+        command_encoder.setBytes([Float32(black_level2/Double(textures.count))], length: MemoryLayout<Float32>.stride, index: 3)
+        command_encoder.setBytes([Float32(black_level3/Double(textures.count))], length: MemoryLayout<Float32>.stride, index: 4)
+        command_encoder.setBytes([Float32(hot_pixel_threshold)], length: MemoryLayout<Float32>.stride, index: 5)
+        command_encoder.setBytes([Float32(hot_pixel_multiplicator)], length: MemoryLayout<Float32>.stride, index: 6)
+        command_encoder.setBytes([Float32(correction_strength)], length: MemoryLayout<Float32>.stride, index: 7)
+        command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+        command_encoder.endEncoding()
+        command_buffer.commit()
     }
 }
 
