@@ -365,14 +365,12 @@ kernel void convert_float_to_uint16(texture2d<float, access::read>  in_texture  
 
 kernel void convert_to_bayer(texture2d<float, access::read> in_texture [[texture(0)]],
                              texture2d<float, access::write> out_texture [[texture(1)]],
-                             constant int& pad_left [[buffer(0)]],
-                             constant int& pad_top [[buffer(1)]],
                              uint2 gid [[thread_position_in_grid]]) {
     
     int const x = gid.x*2;
     int const y = gid.y*2;
     
-    float4 const color_value = in_texture.read(uint2(gid.x+pad_left, gid.y+pad_top));
+    float4 const color_value = in_texture.read(uint2(gid.x, gid.y));
      
     out_texture.write(color_value[0], uint2(x,   y));
     out_texture.write(color_value[1], uint2(x+1, y));

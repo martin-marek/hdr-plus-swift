@@ -365,9 +365,9 @@ func convert_to_rgba(_ in_texture: MTLTexture, _ crop_x: Int, _ crop_y: Int) -> 
 }
 
 
-func convert_to_bayer(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _ pad_top: Int, _ pad_bottom: Int) -> MTLTexture {
+func convert_to_bayer(_ in_texture: MTLTexture) -> MTLTexture {
     
-    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: (in_texture.pixelFormat == .rgba16Float ? .r16Float : .r32Float), width: in_texture.width*2-pad_left-pad_right, height: in_texture.height*2-pad_top-pad_bottom, mipmapped: false)
+    let out_texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: (in_texture.pixelFormat == .rgba16Float ? .r16Float : .r32Float), width: in_texture.width*2, height: in_texture.height*2, mipmapped: false)
     out_texture_descriptor.usage = [.shaderRead, .shaderWrite]
     out_texture_descriptor.storageMode = .private
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
@@ -378,12 +378,10 @@ func convert_to_bayer(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: In
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     let state = convert_to_bayer_state
     command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: in_texture.width-(pad_left+pad_right)/2, height: in_texture.height-(pad_top+pad_bottom)/2, depth: 1)
+    let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
     command_encoder.setTexture(in_texture, index: 0)
     command_encoder.setTexture(out_texture, index: 1)
-    command_encoder.setBytes([Int32(pad_left/2)], length: MemoryLayout<Int32>.stride, index: 0)
-    command_encoder.setBytes([Int32(pad_top/2)], length: MemoryLayout<Int32>.stride, index: 1)
     command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
     command_encoder.endEncoding()
     command_buffer.commit()
