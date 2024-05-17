@@ -15,7 +15,7 @@ let compute_merge_weight_state = try! device.makeComputePipelineState(function: 
 func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosaic_pattern_width: Int, search_distance: Int, tile_size: Int, noise_reduction: Double, uniform_exposure: Bool, exposure_bias: [Int], black_level: [[Int]], color_factors: [[Double]], textures: [MTLTexture], hotpixel_weight_texture: MTLTexture, final_texture: MTLTexture) throws {
     print("Merging in the spatial domain...")
     
-    let kernel_size = mosaic_pattern_width == 6 ? 8 : 16 // kernel size of binomial filtering used for blurring the image
+    let kernel_size = Int(16) // kernel size of binomial filtering used for blurring the image
     
     // derive normalized robustness value: four steps in noise_reduction (-4.0 in this case) yield an increase by a factor of two in the robustness norm with the idea that the sd of shot noise increases by a factor of sqrt(2) per iso level
     let robustness_rev = 0.5*(36.0-Double(Int(noise_reduction+0.5)))
@@ -27,7 +27,7 @@ func align_merge_spatial_domain(progress: ProcessingProgress, ref_idx: Int, mosa
               
     // set alignment params
     let min_image_dim = min(texture_width_orig, texture_height_orig)
-    var downscale_factor_array = [mosaic_pattern_width == 6 ? 3 : mosaic_pattern_width]
+    var downscale_factor_array = [mosaic_pattern_width]
     var search_dist_array = [2]
     var tile_size_array = [tile_size]
     var res = min_image_dim / downscale_factor_array[0]
