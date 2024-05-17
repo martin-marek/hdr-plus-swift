@@ -134,7 +134,7 @@ func estimate_color_noise(_ texture: MTLTexture, _ texture_blurred: MTLTexture, 
     let texture_diff = color_difference(between: texture, and: texture_blurred, mosaic_pattern_width: mosaic_pattern_width)
     
     // compute the average of the difference between the original and the blurred texture
-    let mean_diff = texture_mean(texture_diff, .r)
+    let mean_diff = texture_mean(texture_diff, per_sub_pixel: false, mosaic_pattern_width: mosaic_pattern_width)
     
     return mean_diff
 }

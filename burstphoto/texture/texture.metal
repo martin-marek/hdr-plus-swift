@@ -186,73 +186,6 @@ kernel void add_texture_weighted(texture2d<float, access::read> texture1 [[textu
 }
 
 
-kernel void average_x(texture1d<float, access::read> in_texture [[texture(0)]],
-                      device float *out_buffer [[buffer(0)]],
-                      constant int& width [[buffer(1)]],
-                      uint gid [[thread_position_in_grid]]) {
-    float total = 0;
-    
-    for (int x = 0; x < width; x++) {
-        total += in_texture.read(uint(x)).r;
-    }
-    
-    float const avg = total / width;
-    out_buffer[0] = avg;
-}
-
-
-kernel void average_y(texture2d<float, access::read> in_texture [[texture(0)]],
-                      texture1d<float, access::write> out_texture [[texture(1)]],
-                      uint gid [[thread_position_in_grid]]) {
-    uint x = gid;
-    int texture_height = in_texture.get_height();
-    float total = 0;
-    
-    for (int y = 0; y < texture_height; y++) {
-        total += in_texture.read(uint2(x, y)).r;
-    }
-    
-    float const avg = total / texture_height;
-    out_texture.write(avg, x);
-}
-
-
-kernel void average_x_rgba(texture1d<float, access::read> in_texture [[texture(0)]],
-                           device float *out_buffer [[buffer(0)]],
-                           constant int& width [[buffer(1)]],
-                           uint gid [[thread_position_in_grid]]) {
-    
-    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    
-    for (int x = 0; x < width; x++) {
-        total += in_texture.read(uint(x));
-    }
-    
-    float4 const avg = total / width;
-    out_buffer[0] = avg[0];
-    out_buffer[1] = avg[1];
-    out_buffer[2] = avg[2];
-    out_buffer[3] = avg[3];
-}
-
-
-kernel void average_y_rgba(texture2d<float, access::read> in_texture [[texture(0)]],
-                           texture1d<float, access::write> out_texture [[texture(1)]],
-                           uint gid [[thread_position_in_grid]]) {
-    uint x = gid;
-    
-    int texture_height = in_texture.get_height();
-    float4 total = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    
-    for (int y = 0; y < texture_height; y++) {
-        total += in_texture.read(uint2(x, y));
-    }
-    
-    float4 const avg = total / texture_height;
-    out_texture.write(avg, x);
-}
-
-
 kernel void blur_mosaic_texture(texture2d<float, access::read> in_texture [[texture(0)]],
                                 texture2d<float, access::write> out_texture [[texture(1)]],
                                 constant int& kernel_size [[buffer(0)]],
@@ -535,6 +468,32 @@ kernel void prepare_texture(texture2d<uint, access::read> in_texture [[texture(0
     out_texture.write(pixel_value, uint2(gid.x+pad_left, gid.y+pad_top));
 }
 
+/**
+ Divide value from in_buffer by divisor and set to out_buffer. Using an out_buffer instead of doing it in-place in order to keep usage consistent with sum_divide_buffer
+ Input and output buffer are the same size.
+ */
+kernel void divide_buffer(device   float  *in_buffer   [[buffer(0)]],
+                          device   float  *out_buffer  [[buffer(1)]],
+                          constant float& divisor      [[buffer(2)]],
+                          constant int&   buffer_size  [[buffer(3)]],  // Unused. Here to keep signature consistent with sum_divide_buffer
+                          uint2 gid [[thread_position_in_grid]]) {
+    out_buffer[gid.x] = in_buffer[gid.x] / divisor;
+}
+
+/**
+ Calculate the sum of in_buffer, divide by divisor, and set to out_buffer.
+ */
+kernel void sum_divide_buffer(device   float  *in_buffer   [[buffer(0)]],
+                              device   float  *out_buffer  [[buffer(1)]],
+                              constant float& divisor      [[buffer(2)]],
+                              constant int&   buffer_size  [[buffer(3)]],
+                              uint2 gid [[thread_position_in_grid]]) {
+    for (int i = 0; i < buffer_size; i++) {
+        out_buffer[0] += in_buffer[i];
+    }
+    out_buffer[0] /= divisor;
+}
+
 
 kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[texture(0)]],
                               texture2d<float, access::read> norm_texture [[texture(1)]],
@@ -544,19 +503,41 @@ kernel void normalize_texture(texture2d<float, access::read_write> in_texture [[
     in_texture.write(in_texture.read(gid).r/(norm_texture.read(gid).r + norm_scalar), gid);
 }
 
-
-kernel void sum_rect_columns(texture2d<uint, access::read> in_texture [[texture(0)]],
-                             texture2d<float, access::write> out_texture [[texture(1)]],
-                             constant int& top [[buffer(1)]],
-                             constant int& left [[buffer(2)]],
-                             constant int& bottom [[buffer(3)]],
-                             constant int& mosaic_pattern_width [[buffer(4)]],
-                             uint2 gid [[thread_position_in_grid]]) {
+/**
+ Used for calculating texture_mean. Can't use the UInt version since the images at this point are stored as floats.
+ */
+kernel void sum_rect_columns_float(texture2d<float, access::read> in_texture [[texture(0)]],
+                                   texture2d<float, access::write> out_texture [[texture(1)]],
+                                   constant int& top [[buffer(0)]],
+                                   constant int& left [[buffer(1)]],
+                                   constant int& bottom [[buffer(2)]],
+                                   constant int& mosaic_pattern_width [[buffer(3)]],
+                                   uint2 gid [[thread_position_in_grid]]) {
     uint x = left + gid.x;
-    uint dy = gid.y;
     
     float total = 0;
-    for (int y = top+dy; y < bottom; y += mosaic_pattern_width) {
+    for (int y = top + gid.y; y < bottom; y += mosaic_pattern_width) {
+        total += in_texture.read(uint2(x, y)).r;
+    }
+
+    out_texture.write(total, gid);
+}
+
+/**
+ Used for calculating a black level from masked areas of the DNG.
+ DNG data is storred as UInt, thus need a seperate version from the float one above.
+ */
+kernel void sum_rect_columns_uint(texture2d<uint, access::read> in_texture [[texture(0)]],
+                                  texture2d<float, access::write> out_texture [[texture(1)]],
+                                  constant int& top [[buffer(0)]],
+                                  constant int& left [[buffer(1)]],
+                                  constant int& bottom [[buffer(2)]],
+                                  constant int& mosaic_pattern_width [[buffer(3)]],
+                                  uint2 gid [[thread_position_in_grid]]) {
+    uint x = left + gid.x;
+    
+    float total = 0;
+    for (int y = top + gid.y; y < bottom; y += mosaic_pattern_width) {
         total += in_texture.read(uint2(x, y)).r;
     }
 
@@ -571,7 +552,7 @@ kernel void sum_row(texture2d<float, access::read> in_texture [[texture(0)]],
                     uint2 gid [[thread_position_in_grid]]) {
     float total = 0.0;
     
-    for (int x = 0; x < width; x+= mosaic_pattern_width) {
+    for (int x = gid.x; x < width; x+= mosaic_pattern_width) {
         total += in_texture.read(uint2(x, gid.y)).r;
     }
     

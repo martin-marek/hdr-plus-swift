@@ -7,10 +7,6 @@ let add_texture_exposure_state = try! device.makeComputePipelineState(function: 
 let add_texture_highlights_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture_highlights")!)
 let add_texture_uint16_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture_uint16")!)
 let add_texture_weighted_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "add_texture_weighted")!)
-let average_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x")!)
-let average_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y")!)
-let average_x_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_x_rgba")!)
-let average_y_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "average_y_rgba")!)
 let blur_mosaic_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "blur_mosaic_texture")!)
 let calculate_weight_highlights_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_weight_highlights")!)
 let convert_float_to_uint16_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_float_to_uint16")!)
@@ -18,19 +14,17 @@ let convert_to_bayer_state = try! device.makeComputePipelineState(function: mfl.
 let convert_to_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "convert_to_rgba")!)
 let copy_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "copy_texture")!)
 let crop_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "crop_texture")!)
+let divide_buffer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "divide_buffer")!)
+let sum_divide_buffer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_divide_buffer")!)
 let fill_with_zeros_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "fill_with_zeros")!)
 let find_hotpixels_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "find_hotpixels")!)
 let normalize_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_texture")!)
 let prepare_texture_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "prepare_texture")!)
-let sum_rect_columns_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_rect_columns")!)
+let sum_rect_columns_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_rect_columns_float")!)
+let sum_rect_columns_uint_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_rect_columns_uint")!)
 let sum_row_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "sum_row")!)
 let upsample_bilinear_float_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_bilinear_float")!)
 let upsample_nearest_int_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "upsample_nearest_int")!)
-
-enum PixelFormat {
-    case rgba
-    case r
-}
 
 enum UpsampleType {
     case Bilinear
@@ -223,9 +217,9 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
         let command_buffer = command_queue.makeCommandBuffer()!
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
         command_buffer.label = "Black Levels \(i) for \(String(describing: texture.label))"
-        command_encoder.setComputePipelineState(sum_rect_columns_state)
+        command_encoder.setComputePipelineState(sum_rect_columns_uint_state)
         let thread_groups_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
-        let threads_per_thread_group = get_threads_per_thread_group(sum_rect_columns_state, thread_groups_per_grid)
+        let threads_per_thread_group = get_threads_per_thread_group(sum_rect_columns_uint_state, thread_groups_per_grid)
         
         command_encoder.setTexture(texture, index: 0)
         command_encoder.setTexture(summed_y, index: 1)
@@ -459,7 +453,7 @@ func fill_with_zeros(_ texture: MTLTexture) {
 }
 
 
-func find_hotpixels(_ textures: [MTLTexture], _ hotpixel_weight_texture: MTLTexture, _ black_level: [[Int]], _ ISO_exposure_time: [Double], _ noise_reduction: Double) {
+func find_hotpixels(_ textures: [MTLTexture], _ hotpixel_weight_texture: MTLTexture, _ black_level: [[Int]], _ ISO_exposure_time: [Double], _ noise_reduction: Double, _ mosaic_pattern_width: Int) {
     
     var correction_strength = 1.0
     
@@ -491,7 +485,9 @@ func find_hotpixels(_ textures: [MTLTexture], _ hotpixel_weight_texture: MTLText
         }
         
         // calculate mean value specific for each color channel
-        let mean_texture_buffer = texture_mean(convert_to_rgba(average_texture, 0, 0), .rgba)
+        let mean_texture_buffer = texture_mean(average_texture,
+                                               per_sub_pixel: true,
+                                               mosaic_pattern_width: mosaic_pattern_width)
         
         // standard parameters if black level is not available / available
         let hot_pixel_threshold     = (black_level[0][0] == -1) ? 1.0 : 2.0
@@ -648,38 +644,63 @@ func texture_like(_ in_texture: MTLTexture) -> MTLTexture {
 }
 
 
-/// Function to calculate the average pixel value over the whole of a texture. If `pixelformat` is `rgba` then each channel will have an independent average calculated. Otherwise, a single value will be returned for the whole texture.
-func texture_mean(_ in_texture: MTLTexture, _ pixelformat: PixelFormat) -> MTLBuffer {
-    // create a 1d texture that will contain the averages of the input texture along the x-axis
-    let texture_descriptor = MTLTextureDescriptor()
-    texture_descriptor.textureType = .type1D
-    texture_descriptor.pixelFormat = in_texture.pixelFormat
-    texture_descriptor.width = in_texture.width
+/// Function to calculate the average pixel value over the whole of a texture.
+/// If `per_sub_pixel` is `true`, then each subpixel in the mosaic pattern will have an independent average calculated, producing a `pattern_width * pattern_width` buffer.
+/// If it's `false`, then a single value will be calculated for the whole texture.
+func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_width: Int) -> MTLBuffer {
+    
+    // Create output texture from the y-axis blurring
+    let texture_descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: in_texture.width, height: mosaic_pattern_width, mipmapped: false)
     texture_descriptor.usage = [.shaderRead, .shaderWrite]
     texture_descriptor.storageMode = .private
-    let avg_y = device.makeTexture(descriptor: texture_descriptor)!
-    
-    // average the input texture along the y-axis
+    let summed_y = device.makeTexture(descriptor: texture_descriptor)!
+
+    // Sum each subpixel of the mosaic vertically along columns, creating a (width, mosaic_pattern_width) sized image
     let command_buffer = command_queue.makeCommandBuffer()!
-    command_buffer.label = "Mean"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    let state = (pixelformat == .rgba ? average_y_rgba_state : average_y_state)
-    command_encoder.setComputePipelineState(state)
-    let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
-    let max_threads_per_thread_group = state.threadExecutionWidth
-    let threads_per_thread_group = MTLSize(width: max_threads_per_thread_group, height: 1, depth: 1)
-    command_encoder.setTexture(in_texture, index: 0)
-    command_encoder.setTexture(avg_y, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_buffer.label = "Mean for \(String(describing: in_texture.label))\(per_sub_pixel ? " per_sub_pixel" : "")"
+    command_encoder.setComputePipelineState(sum_rect_columns_float_state)
+    let thread_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
+    let threads_per_thread_group = get_threads_per_thread_group(sum_rect_columns_float_state, thread_per_grid)
     
-    // average the generated 1D texture along the x-axis
-    let state2 = (pixelformat == .rgba ? average_x_rgba_state : average_x_state)
-    command_encoder.setComputePipelineState(state2)
-    let avg_buffer = device.makeBuffer(length: (pixelformat == .rgba ? 4 : 1)*MemoryLayout<Float32>.size, options: .storageModeShared)!
-    command_encoder.setTexture(avg_y, index: 0)
-    command_encoder.setBuffer(avg_buffer, offset: 0, index: 0)
-    command_encoder.setBytes([Int32(in_texture.width)], length: MemoryLayout<Int32>.stride, index: 1)
-    command_encoder.dispatchThreads(threads_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+    command_encoder.setTexture(in_texture, index: 0)
+    command_encoder.setTexture(summed_y, index: 1)
+    command_encoder.setBytes([0], length: MemoryLayout<Int32>.stride, index: 0)
+    command_encoder.setBytes([0], length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([in_texture.height], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 3)
+    command_encoder.dispatchThreads(thread_per_grid, threadsPerThreadgroup: threads_per_thread_group)
+
+    // Sum along the row
+    // If `per_sub_pixel` is true, then the result is per sub pixel, otherwise a single value is calculated
+    let sum_buffer = device.makeBuffer(length: (mosaic_pattern_width*mosaic_pattern_width)*MemoryLayout<Float32>.size,
+                                       options: .storageModeShared)!
+    command_encoder.setComputePipelineState(sum_row_state)
+    let threads_per_grid_x = MTLSize(width: mosaic_pattern_width, height: mosaic_pattern_width, depth: 1)
+    let threads_per_thread_group_x = get_threads_per_thread_group(sum_row_state, threads_per_grid_x)
+    
+    command_encoder.setTexture(summed_y, index: 0)
+    command_encoder.setBuffer(sum_buffer, offset: 0, index: 0)
+    command_encoder.setBytes([Int32(summed_y.width)],       length: MemoryLayout<Int32>.stride, index: 1)
+    command_encoder.setBytes([Int32(mosaic_pattern_width)], length: MemoryLayout<Int32>.stride, index: 2)
+    command_encoder.dispatchThreads(threads_per_grid_x, threadsPerThreadgroup: threads_per_thread_group_x)
+    
+    // Calculate the average from the sum
+    let state       = per_sub_pixel ? divide_buffer_state                       : sum_divide_buffer_state
+    let buffer_size = per_sub_pixel ? mosaic_pattern_width*mosaic_pattern_width : 1
+    let avg_buffer  = device.makeBuffer(length: buffer_size*MemoryLayout<Float32>.size, options: .storageModeShared)!
+    command_encoder.setComputePipelineState(state)
+    // If doing per-subpixel, the total number of pixels of each subpixel is 1/(mosaic_pattern_withh)^2 times the total
+    let num_pixels_per_value = Float(in_texture.width * in_texture.height) / (per_sub_pixel ? Float(mosaic_pattern_width*mosaic_pattern_width) : 1.0)
+    let threads_per_grid_divisor = MTLSize(width: buffer_size, height: 1, depth: 1)
+    let threads_per_thread_group_divisor = get_threads_per_thread_group(state, threads_per_grid_divisor)
+    
+    command_encoder.setBuffer(sum_buffer,                                   offset: 0,                            index: 0)
+    command_encoder.setBuffer(avg_buffer,                                   offset: 0,                            index: 1)
+    command_encoder.setBytes([num_pixels_per_value],                        length: MemoryLayout<Float32>.stride, index: 2)
+    command_encoder.setBytes([mosaic_pattern_width*mosaic_pattern_width],   length: MemoryLayout<Int>.stride,     index: 3)
+    command_encoder.dispatchThreads(threads_per_grid_divisor, threadsPerThreadgroup: threads_per_thread_group_divisor)
+    
     command_encoder.endEncoding()
     command_buffer.commit()
     
