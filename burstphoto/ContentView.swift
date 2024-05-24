@@ -57,24 +57,6 @@ struct ContentView: View {
                 settings.merging_algorithm = "Fast"
             }
         })
-        .onReceive(progress.$show_nonbayer_exposure_alert, perform: { val in
-            if val {
-                my_alert.title = "Exposure control not supported"
-                my_alert.message = "You have selected exposure control other than \"Off\" in Preferences, which is not supported for your camera. Press OK to disable exposure control."
-                my_alert.dismiss_button = .default(Text("OK"))
-                my_alert.show = true
-                settings.exposure_control = " Off"
-            }
-        })
-        .onReceive(progress.$show_nonbayer_bit_depth_alert, perform: { val in
-            if val {
-                my_alert.title = "16 bit output bit depth not supported"
-                my_alert.message = "You have selected \"Scale to 16 bit\" as output bit depth in Preferences but your camera only supports the \"Native\" output bit depth. Press OK to use the \"Native\" output bit depth."
-                my_alert.dismiss_button = .default(Text("OK"))
-                my_alert.show = true
-                settings.output_bit_depth = "Native"
-            }
-        })
         .onReceive(progress.$show_exposure_bit_depth_alert, perform: { val in
             if val {
                 my_alert.title = "16 bit output bit depth not supported"
