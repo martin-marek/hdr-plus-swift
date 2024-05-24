@@ -454,7 +454,7 @@ func fill_with_zeros(_ texture: MTLTexture) {
 /// Find hotpixels based on the idea that they will be the same pixels in all frames of the burst.
 func find_hotpixels(_ textures: [MTLTexture], _ hotpixel_weight_texture: MTLTexture, _ black_level: [[Int]], _ ISO_exposure_time: [Double], _ noise_reduction: Double, _ mosaic_pattern_width: Int) {
     
-    if mosaic_pattern_width != 2 || mosaic_pattern_width != 6 {
+    if mosaic_pattern_width != 2 && mosaic_pattern_width != 6 {
         return
     }
     
