@@ -21,6 +21,7 @@ let find_hotpixels_bayer_state          = create_pipeline(with_function_name: "f
 let find_hotpixels_xtrans_state         = create_pipeline(with_function_name: "find_hotpixels_xtrans",          and_label: "Find Hotpixels (XTrans)")
 let normalize_texture_state             = create_pipeline(with_function_name: "normalize_texture",              and_label: "Normalize Texture")
 let prepare_texture_bayer_state         = create_pipeline(with_function_name: "prepare_texture_bayer",          and_label: "Prepare Texture (Bayer)")
+let prepare_texture_xtrans_state        = create_pipeline(with_function_name: "prepare_texture_xtrans",          and_label: "Prepare Texture (XTrans)")
 let sum_rect_columns_float_state        = create_pipeline(with_function_name: "sum_rect_columns_float",         and_label: "Sum Along Columns Inside A Rect (Float)")
 let sum_rect_columns_uint_state         = create_pipeline(with_function_name: "sum_rect_columns_uint",          and_label: "Sum Along Columns Inside A Rect (UInt)")
 let sum_row_state                       = create_pipeline(with_function_name: "sum_row",                        and_label: "Sum Along Rows")
@@ -644,7 +645,7 @@ func prepare_texture(_ in_texture: MTLTexture, _ hotpixel_weight_texture: MTLTex
     command_buffer.label = "Prepare Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
     command_encoder.label = command_buffer.label
-    let state = prepare_texture_bayer_state
+    let state = mosaic_pattern_width == 2 ? prepare_texture_bayer_state : prepare_texture_xtrans_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(state, threads_per_grid)
