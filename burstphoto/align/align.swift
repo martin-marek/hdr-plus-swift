@@ -93,6 +93,7 @@ func avg_pool(_ input_texture: MTLTexture, _ scale: Int, _ black_level_mean: Dou
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Avg Pool"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = normalization ? "Average Pool Normalized" : "Average Pool"
     let state = (normalization ? avg_pool_normalization_state : avg_pool_state)
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)
@@ -150,6 +151,7 @@ func compute_tile_diff(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture, _ prev
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Compute Tile Diff"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     // either use generic function or highly-optimized function for testing a +/- 2 displacement in both image directions (in total 25 combinations)
     let state = (tile_info.n_pos_2d==25 ? (uniform_exposure ? compute_tile_differences25_state : compute_tile_differences_exposure25_state) : compute_tile_differences_state)
     command_encoder.setComputePipelineState(state)
@@ -183,6 +185,7 @@ func correct_upsampling_error(_ ref_layer: MTLTexture, _ comp_layer: MTLTexture,
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Correct Upsampling Error"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = correct_upsampling_error_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
@@ -210,6 +213,7 @@ func find_best_tile_alignment(_ tile_diff: MTLTexture, _ prev_alignment: MTLText
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Find Best Tile Alignment"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = find_best_tile_alignment_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
@@ -236,6 +240,7 @@ func warp_texture(_ texture_to_warp: MTLTexture, _ alignment: MTLTexture, _ tile
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Warp Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = downscale_factor==2 ? "Warp Texture Bayer" : "Warp Texture XTrans"
     // The function warp_texture_xtrans corresponds to an old version of the warp function and would also work with images with Bayer pattern
     let state = (downscale_factor==2 ? warp_texture_bayer_state : warp_texture_xtrans_state)
     command_encoder.setComputePipelineState(state)

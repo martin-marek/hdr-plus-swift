@@ -112,6 +112,7 @@ func color_difference(between texture1: MTLTexture, and texture2: MTLTexture, mo
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Color Difference"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = color_difference_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: texture1.width/2, height: texture1.height/2, depth: 1)
@@ -159,6 +160,7 @@ func robust_merge(_ ref_texture: MTLTexture, _ ref_texture_blurred: MTLTexture, 
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Spatial Merge"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = compute_merge_weight_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: texture_diff.width, height: texture_diff.height, depth: 1)

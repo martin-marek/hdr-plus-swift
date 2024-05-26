@@ -37,6 +37,7 @@ func add_texture(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _ n_textur
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Add Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = (in_texture.pixelFormat == .r16Uint ? add_texture_uint16_state : add_texture_state)
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
@@ -58,6 +59,7 @@ func add_texture_highlights(_ in_texture: MTLTexture, _ out_texture: MTLTexture,
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Add Texture (Highlights)"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = add_texture_highlights_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width/2, height: in_texture.height/2, depth: 1)
@@ -100,6 +102,7 @@ func add_texture_exposure(_ in_texture: MTLTexture, _ out_texture: MTLTexture, _
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Add Texture (Exposure)"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = add_texture_exposure_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
@@ -133,6 +136,7 @@ func add_texture_weighted(_ texture1: MTLTexture, _ texture2: MTLTexture, _ weig
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Add Texture (Weighted)"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = add_texture_weighted_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: texture1.width, height: texture1.height, depth: 1)
@@ -161,6 +165,7 @@ func blur(_ in_texture: MTLTexture, with_pattern_width mosaic_pattern_width: Int
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Blur"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = blur_mosaic_texture_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
@@ -214,8 +219,9 @@ func calculate_black_levels(for texture: MTLTexture, from_masked_areas masked_ar
         
         // Sum along columns
         let command_buffer = command_queue.makeCommandBuffer()!
+        command_buffer.label = "Black Levels \(i) for \(String(describing: texture.label!))"
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
-        command_buffer.label = "Black Levels \(i) for \(String(describing: texture.label))"
+        command_encoder.label = command_buffer.label
         command_encoder.setComputePipelineState(sum_rect_columns_uint_state)
         let thread_groups_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
         let threads_per_thread_group = get_threads_per_thread_group(sum_rect_columns_uint_state, thread_groups_per_grid)
@@ -277,6 +283,7 @@ func calculate_weight_highlights(_ in_texture: MTLTexture, _ exposure_bias: Int,
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Calculate highlights weight"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = calculate_weight_highlights_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
@@ -311,6 +318,7 @@ func convert_float_to_uint16(_ in_texture: MTLTexture, _ white_level: Int, _ bla
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Float to UInt"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = convert_float_to_uint16_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
@@ -339,8 +347,9 @@ func convert_to_rgba(_ in_texture: MTLTexture, _ crop_x: Int, _ crop_y: Int) -> 
     out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): Bayer to RGBA"
         
     let command_buffer = command_queue.makeCommandBuffer()!
-    command_buffer.label = "To RGBA"
+    command_buffer.label = "Bayer To RGBA"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = convert_to_rgba_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
@@ -366,8 +375,9 @@ func convert_to_bayer(_ in_texture: MTLTexture) -> MTLTexture {
     out_texture.label = "\(in_texture.label!.components(separatedBy: ":")[0]): RGBA to Bayer"
         
     let command_buffer = command_queue.makeCommandBuffer()!
-    command_buffer.label = "To Bayer"
+    command_buffer.label = "RGBA To Bayer"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = convert_to_bayer_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
@@ -394,6 +404,7 @@ func copy_texture(_ in_texture: MTLTexture) -> MTLTexture {
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Copy Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = copy_texture_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
@@ -419,6 +430,7 @@ func crop_texture(_ in_texture: MTLTexture, _ pad_left: Int, _ pad_right: Int, _
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Crop Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = crop_texture_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: out_texture.width, height: out_texture.height, depth: 1)
@@ -440,6 +452,7 @@ func fill_with_zeros(_ texture: MTLTexture) {
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Fill with Zeros"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = fill_with_zeros_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: texture.width, height: texture.height, depth: 1)
@@ -518,6 +531,7 @@ func find_hotpixels(_ textures: [MTLTexture], _ hotpixel_weight_texture: MTLText
         let command_buffer = command_queue.makeCommandBuffer()!
         command_buffer.label = "Finding hotpixels"
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        command_encoder.label = command_buffer.label
         let state: MTLComputePipelineState
         switch mosaic_pattern_width {
             case 2:
@@ -593,6 +607,7 @@ func normalize_texture(_ in_texture: MTLTexture, _ norm_texture: MTLTexture, _ n
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Normalize Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = normalize_texture_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
@@ -628,6 +643,7 @@ func prepare_texture(_ in_texture: MTLTexture, _ hotpixel_weight_texture: MTLTex
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Prepare Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = prepare_texture_bayer_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: in_texture.height, depth: 1)
@@ -672,8 +688,9 @@ func texture_mean(_ in_texture: MTLTexture, per_sub_pixel: Bool, mosaic_pattern_
 
     // Sum each subpixel of the mosaic vertically along columns, creating a (width, mosaic_pattern_width) sized image
     let command_buffer = command_queue.makeCommandBuffer()!
+    command_buffer.label = "Mean for \(String(describing: in_texture.label!))\(per_sub_pixel ? " per_sub_pixel" : "")"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
-    command_buffer.label = "Mean for \(String(describing: in_texture.label))\(per_sub_pixel ? " per_sub_pixel" : "")"
+    command_encoder.label = command_buffer.label
     command_encoder.setComputePipelineState(sum_rect_columns_float_state)
     let thread_per_grid = MTLSize(width: summed_y.width, height: summed_y.height, depth: 1)
     let threads_per_thread_group = get_threads_per_thread_group(sum_rect_columns_float_state, thread_per_grid)
@@ -738,6 +755,7 @@ func upsample(_ input_texture: MTLTexture, to_width width: Int, to_height height
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Upsample"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = (mode == .Bilinear ? upsample_bilinear_float_state : upsample_nearest_int_state)
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: output_texture.width, height: output_texture.height, depth: 1)

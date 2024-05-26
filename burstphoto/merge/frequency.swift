@@ -219,8 +219,9 @@ func calculate_abs_diff_rgba(_ texture1: MTLTexture, _ texture2: MTLTexture) -> 
     let out_texture = device.makeTexture(descriptor: out_texture_descriptor)!
     
     let command_buffer = command_queue.makeCommandBuffer()!
-    command_buffer.label = "Calculate Abs Diff RGBA"
+    command_buffer.label = "Abs Diff RGBA"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = calculate_abs_diff_rgba_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: texture1.width, height: texture1.height, depth: 1)
@@ -246,8 +247,9 @@ func calculate_highlights_norm_rgba(_ aligned_texture: MTLTexture, _ exposure_fa
     highlights_norm_texture.label = "\(aligned_texture.label!.components(separatedBy: ":")[0]): Highlight Norm"
     
     let command_buffer = command_queue.makeCommandBuffer()!
-    command_buffer.label = "Highlights Norm"
+    command_buffer.label = "Highlights Norm RGBA"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = calculate_highlights_norm_rgba_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
@@ -280,6 +282,7 @@ func calculate_mismatch_rgba(_ aligned_texture: MTLTexture, _ ref_texture: MTLTe
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Mismatch RGBA"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = calculate_mismatch_rgba_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
@@ -308,6 +311,7 @@ func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLT
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "RMS RGBA"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = calculate_rms_rgba_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: rms_texture.width, height: rms_texture.height, depth: 1)
@@ -326,8 +330,9 @@ func calculate_rms_rgba(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLT
 func deconvolute_frequency_domain(_ final_texture_ft: MTLTexture, _ total_mismatch_texture: MTLTexture, _ tile_info: TileInfo) {
         
     let command_buffer = command_queue.makeCommandBuffer()!
-    command_buffer.label = "Deconvolute"
+    command_buffer.label = "Deconvolute Texture"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = deconvolute_frequency_domain_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
@@ -352,6 +357,7 @@ func backward_ft(_ in_texture_ft: MTLTexture, _ tile_info: TileInfo, _ n_texture
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Backward FT"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     // either use discrete Fourier transform or highly-optimized fast Fourier transform (only possible if tile_size <= 8)
     let state = (tile_info.tile_size_merge <= 8 ? backward_fft_state : backward_dft_state)
     command_encoder.setComputePipelineState(state)
@@ -380,6 +386,7 @@ func forward_ft(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLTexture {
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Forward FT"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     // either use discrete Fourier transform or highly-optimized fast Fourier transform (only possible if tile_size <= 8)
     let state = (tile_info.tile_size_merge <= 8 ? forward_fft_state : forward_dft_state)
     command_encoder.setComputePipelineState(state)
@@ -399,8 +406,9 @@ func forward_ft(_ in_texture: MTLTexture, _ tile_info: TileInfo) -> MTLTexture {
 func merge_frequency_domain(_ ref_texture_ft: MTLTexture, _ aligned_texture_ft: MTLTexture, _ out_texture_ft: MTLTexture, _ rms_texture: MTLTexture, _ mismatch_texture: MTLTexture, _ highlights_norm_texture: MTLTexture, _ robustness_norm: Double, _ read_noise: Double, _ max_motion_norm: Double, _ uniform_exposure: Bool, _ tile_info: TileInfo) {
         
     let command_buffer = command_queue.makeCommandBuffer()!
-    command_buffer.label = "Merge Frequency"
+    command_buffer.label = "Frequency Merge"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = merge_frequency_domain_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)
@@ -426,6 +434,7 @@ func normalize_mismatch(_ mismatch_texture: MTLTexture, _ mean_mismatch_buffer: 
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Normalize Mismatch"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = normalize_mismatch_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: mismatch_texture.width, height: mismatch_texture.height, depth: 1)
@@ -444,6 +453,7 @@ func reduce_artifacts_tile_border(_ out_texture: MTLTexture, _ ref_texture: MTLT
         let command_buffer = command_queue.makeCommandBuffer()!
         command_buffer.label = "Reduce Artifacts at Tile Border"
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        command_encoder.label = command_buffer.label
         let state = reduce_artifacts_tile_border_state
         command_encoder.setComputePipelineState(state)
         let threads_per_grid = MTLSize(width: tile_info.n_tiles_x, height: tile_info.n_tiles_y, depth: 1)

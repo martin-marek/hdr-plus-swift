@@ -54,6 +54,7 @@ func correct_exposure(_ final_texture: MTLTexture, _ white_level: Int, _ black_l
         let command_buffer = command_queue.makeCommandBuffer()!
         command_buffer.label = "Correct Exposure"
         let command_encoder = command_buffer.makeComputeCommandEncoder()!
+        command_encoder.label = command_buffer.label
         let state: MTLComputePipelineState
        
         if (exposure_control=="Curve0EV" || exposure_control=="Curve1EV") {
@@ -131,6 +132,7 @@ func texture_max(_ in_texture: MTLTexture) -> MTLBuffer {
     let command_buffer = command_queue.makeCommandBuffer()!
     command_buffer.label = "Texture Max"
     let command_encoder = command_buffer.makeComputeCommandEncoder()!
+    command_encoder.label = command_buffer.label
     let state = max_y_state
     command_encoder.setComputePipelineState(state)
     let threads_per_grid = MTLSize(width: in_texture.width, height: 1, depth: 1)
