@@ -2,10 +2,10 @@
 import Foundation
 import MetalPerformanceShaders
 
-let correct_exposure_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure")!)
-let correct_exposure_linear_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_exposure_linear")!)
-let max_x_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_x")!)
-let max_y_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "max_y")!)
+let correct_exposure_state          = create_pipeline(with_function_name: "correct_exposure",           and_label: "Correct Exposure (Non-linear)")
+let correct_exposure_linear_state   = create_pipeline(with_function_name: "correct_exposure_linear",    and_label: "Correct Exposure (Linear)")
+let max_x_state                     = create_pipeline(with_function_name: "max_x",                      and_label: "Maximum (X-Direction)")
+let max_y_state                     = create_pipeline(with_function_name: "max_y",                      and_label: "Maximum (Y-Direction)")
 
 /// Apply tone mapping if the reference image is underexposed.
 /// A curve is applied to lift the shadows and protect the highlights from burning.

@@ -5,20 +5,20 @@
 import Foundation
 import MetalPerformanceShaders
 
-let merge_frequency_domain_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "merge_frequency_domain")!)
+let merge_frequency_domain_state = create_pipeline(with_function_name: "merge_frequency_domain", and_label: "Frequency Domain Merge")
 
-let calculate_abs_diff_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_abs_diff_rgba")!)
-let calculate_highlights_norm_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_highlights_norm_rgba")!)
-let calculate_mismatch_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_mismatch_rgba")!)
-let calculate_rms_rgba_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "calculate_rms_rgba")!)
-let deconvolute_frequency_domain_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "deconvolute_frequency_domain")!)
-let normalize_mismatch_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "normalize_mismatch")!)
-let reduce_artifacts_tile_border_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "reduce_artifacts_tile_border")!)
+let calculate_abs_diff_rgba_state           = create_pipeline(with_function_name: "calculate_abs_diff_rgba",         and_label: "Calculate Abs Diff RGBA")
+let calculate_highlights_norm_rgba_state    = create_pipeline(with_function_name: "calculate_highlights_norm_rgba",  and_label: "Calculate Highlights Norm RGBA")
+let calculate_mismatch_rgba_state           = create_pipeline(with_function_name: "calculate_mismatch_rgba",         and_label: "Calculate Mismatch RGBA")
+let calculate_rms_rgba_state                = create_pipeline(with_function_name: "calculate_rms_rgba",              and_label: "Calculate RMS RGBA")
+let deconvolute_frequency_domain_state      = create_pipeline(with_function_name: "deconvolute_frequency_domain",    and_label: "Deconvolute Frequency Domain")
+let normalize_mismatch_state                = create_pipeline(with_function_name: "normalize_mismatch",              and_label: "Normalize Mismatch")
+let reduce_artifacts_tile_border_state      = create_pipeline(with_function_name: "reduce_artifacts_tile_border",    and_label: "Reduce Artifacts at Tile Borders")
 
-let backward_dft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "backward_dft")!)
-let backward_fft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "backward_fft")!)
-let forward_dft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "forward_dft")!)
-let forward_fft_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "forward_fft")!)
+let backward_dft_state  = create_pipeline(with_function_name: "backward_dft",   and_label: "Backwards Optimized Fast Fourier Transform")
+let backward_fft_state  = create_pipeline(with_function_name: "backward_fft",   and_label: "Backwards Discrete Fourier Transform")
+let forward_dft_state   = create_pipeline(with_function_name: "forward_dft",    and_label: "Forwards Optimized Fast Fourier Transform")
+let forward_fft_state   = create_pipeline(with_function_name: "forward_fft",    and_label: "Forwards Discrete Fourier Transform")
 
 
 /// Convenience function for the frequency-based merging approach.

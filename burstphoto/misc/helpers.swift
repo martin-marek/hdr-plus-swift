@@ -1,4 +1,5 @@
 import Foundation
+import MetalPerformanceShaders
 
 /// Returns the amount of free disk space left on the system.
 /// 
@@ -18,4 +19,11 @@ func systemFreeDiskSpace() -> Double {
     } else {
         return 0.0
     }
+}
+
+func create_pipeline(with_function_name function_name: String, and_label label: String) -> MTLComputePipelineState {
+    let _descriptor = MTLComputePipelineDescriptor()
+    _descriptor.computeFunction = mfl.makeFunction(name: function_name)
+    _descriptor.label = label
+    return try! device.makeComputePipelineState(descriptor: _descriptor, options: []).0
 }

@@ -5,8 +5,8 @@ import Foundation
 import MetalPerformanceShaders
 
 
-let color_difference_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "color_difference")!)
-let compute_merge_weight_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_merge_weight")!)
+let color_difference_state      = create_pipeline(with_function_name: "color_difference",       and_label: "Color Difference")
+let compute_merge_weight_state  = create_pipeline(with_function_name: "compute_merge_weight",   and_label: "Compute Merging Weight")
 
 
 /// Convenience function for the spatial merging approach

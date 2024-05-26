@@ -1,15 +1,15 @@
 import Foundation
 import MetalPerformanceShaders
 
-let avg_pool_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "avg_pool")!)
-let avg_pool_normalization_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "avg_pool_normalization")!)
-let compute_tile_differences_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences")!)
-let compute_tile_differences25_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences25")!)
-let compute_tile_differences_exposure25_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "compute_tile_differences_exposure25")!)
-let correct_upsampling_error_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "correct_upsampling_error")!)
-let find_best_tile_alignment_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "find_best_tile_alignment")!)
-let warp_texture_bayer_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture_bayer")!)
-let warp_texture_xtrans_state = try! device.makeComputePipelineState(function: mfl.makeFunction(name: "warp_texture_xtrans")!)
+let avg_pool_state                              = create_pipeline(with_function_name: "avg_pool",                               and_label: "Avg Pool")
+let avg_pool_normalization_state                = create_pipeline(with_function_name: "avg_pool_normalization",                 and_label: "Avg Pool (Normalized)")
+let compute_tile_differences_state              = create_pipeline(with_function_name: "compute_tile_differences",               and_label: "Compute Tile Difference")
+let compute_tile_differences25_state            = create_pipeline(with_function_name: "compute_tile_differences25",             and_label: "Compute Tile Difference (N=25)")
+let compute_tile_differences_exposure25_state   = create_pipeline(with_function_name: "compute_tile_differences_exposure25",    and_label: "Compute Tile Difference (N=25) (Exposure)")
+let correct_upsampling_error_state              = create_pipeline(with_function_name: "correct_upsampling_error",               and_label: "Correct Upsampling Error")
+let find_best_tile_alignment_state              = create_pipeline(with_function_name: "find_best_tile_alignment",               and_label: "Find Best Tile Alignment")
+let warp_texture_bayer_state                    = create_pipeline(with_function_name: "warp_texture_bayer",                     and_label: "Warp Texture (Bayer)")
+let warp_texture_xtrans_state                   = create_pipeline(with_function_name: "warp_texture_xtrans",                    and_label: "Warp Texture (XTrans)")
 
 func align_texture(_ ref_pyramid: [MTLTexture], _ comp_texture: MTLTexture, _ downscale_factor_array: Array<Int>, _ tile_size_array: Array<Int>, _ search_dist_array: Array<Int>, _ uniform_exposure: Bool, _ black_level_mean: Double, _ color_factors3: Array<Double>) -> MTLTexture {
         
