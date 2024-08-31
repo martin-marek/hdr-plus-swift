@@ -29,8 +29,6 @@ class ProcessingProgress: ObservableObject {
     @Published var int = 0
     @Published var includes_conversion = false
     @Published var show_nonbayer_hq_alert = false
-    @Published var show_nonbayer_exposure_alert = false
-    @Published var show_nonbayer_bit_depth_alert = false
     @Published var show_exposure_bit_depth_alert = false
 }
 
@@ -148,16 +146,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
             }
         }
     }
-    // check for non-Bayer sensors that the exposure of images is uniform
-    if (!uniform_exposure && mosaic_pattern_width != 2) {throw AlignmentError.non_bayer_exposure_bracketing}
-    
-    // if user has selected a value different than "Off" for exposure control but has a non-Bayer sensor, warn them that exposure control = "Off" will be used instead
-    var exposure_control = exposure_control
-    if uniform_exposure && exposure_control != "Off" && mosaic_pattern_width != 2 {
-        DispatchQueue.main.async { progress.show_nonbayer_exposure_alert = true }
-        exposure_control = "Off"
-    }
-    
+
     // if exposure control = "Off" and uniform exposure, set black level and white level to -1
     if exposure_control == "Off" && uniform_exposure {
         white_level         = Array(repeating: -1, count: white_level.count)
@@ -173,12 +162,7 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         merging_algorithm = "Fast"
     }
 
-    // if user has selected the "16Bit" output bit depth but has a non-Bayer sensor, warn them the "Native" output bit depth will be used instead
     var output_bit_depth = output_bit_depth
-    if output_bit_depth == "16Bit" && mosaic_pattern_width != 2 {
-     DispatchQueue.main.async { progress.show_nonbayer_bit_depth_alert = true }
-     output_bit_depth = "Native"
-    }
 
     // if user has selected the "16Bit" output bit depth but exposure control set to "Off", warn them the "Native" output bit depth will be used instead
     if output_bit_depth == "16Bit" && exposure_control == "Off" {
@@ -221,12 +205,12 @@ func perform_denoising(image_urls: [URL], progress: ProcessingProgress, merging_
         last_settings = current_settings
     }
     
-    if (mosaic_pattern_width == 2 && exposure_control != "Off") {
+    if (exposure_control != "Off") {
         correct_exposure(final_texture, white_level[ref_idx], black_level, exposure_control, exposure_bias, uniform_exposure, color_factors, ref_idx, mosaic_pattern_width)
     }
     
     // apply scaling to 16 bit
-    let scale_to_16bit = (output_bit_depth=="16Bit" && mosaic_pattern_width == 2 && exposure_control != "Off")
+    let scale_to_16bit = (output_bit_depth=="16Bit" && exposure_control != "Off")
     let factor_16bit = (scale_to_16bit ? Int(pow(2.0, 16.0-ceil(log2(Double(white_level[ref_idx]))))+0.5) : 1)
     let white_level_scaled = min(65535, factor_16bit*white_level[ref_idx])
 
@@ -312,7 +296,7 @@ func calculate_temporal_average(progress: ProcessingProgress, mosaic_pattern_wid
     }
     
     // if color_factor is NOT available, it is set to a negative value earlier in the pipeline
-    if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0 && mosaic_pattern_width == 2) {
+    if (white_level != -1 && black_level[0][0] != -1 && color_factors[0][0] > 0) {
         
         // Temporal averaging with extrapolation of highlights or exposure weighting
         
